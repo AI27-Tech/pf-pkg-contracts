@@ -53,9 +53,22 @@ jobs:
         run: buf lint
 
       - name: Breaking check de eventos contra la rama principal
+        # Sólo tiene sentido cuando pf-contracts-m ya contiene contratos
+        # publicados. En el primer release aún no hay línea base, así que se
+        # omite. Se compara contra el ref LOCAL (no por clone HTTPS, que
+        # requeriría credenciales y falla con 'could not read Username').
         if: github.ref != 'refs/heads/pf-contracts-m'
-        run: buf breaking --against 'https://github.com/AI27-Tech/pf-pkg-contracts.git#branch=pf-contracts-m'
-        continue-on-error: false
+        run: |
+          if ! git fetch --no-tags origin pf-contracts-m 2>/dev/null; then
+            echo "No existe la rama pf-contracts-m todavía; se omite el breaking check."
+            exit 0
+          fi
+          if git cat-file -e FETCH_HEAD:buf.yaml 2>/dev/null; then
+            echo "Comparando eventos contra pf-contracts-m"
+            buf breaking --against '.git#ref=FETCH_HEAD'
+          else
+            echo "pf-contracts-m aún no tiene contratos publicados; se omite el breaking check (primer release)."
+          fi
 
       - name: Lint de OpenAPI (redocly)
         run: make lint-openapi
