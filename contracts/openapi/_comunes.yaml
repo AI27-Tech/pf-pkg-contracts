@@ -30,7 +30,7 @@ components:
           description: >-
             Código de máquina, estable y en snake_case. Los consumidores
             ramifican sobre este valor, no sobre `mensaje`.
-          examples: [no_encontrado, no_autorizado, conflicto_de_estado]
+          example: no_encontrado
         mensaje:
           type: string
           description: Descripción legible para diagnóstico. No es contrato de UI.
@@ -62,9 +62,11 @@ components:
       required: [items, cursor_siguiente]
       properties:
         cursor_siguiente:
-          allOf:
-            - $ref: "#/components/schemas/Cursor"
+          type: string
           nullable: true
+          description: >-
+            Cursor opaco de la siguiente página, o null si no hay más. Mismo
+            formato que `Cursor`.
         items:
           type: array
           items: {}

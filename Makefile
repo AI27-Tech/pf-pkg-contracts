@@ -36,11 +36,14 @@ lint-events: ## buf lint sobre contracts/events
 	buf lint
 
 .PHONY: lint-openapi
-lint-openapi: ## Valida cada spec de OpenAPI (lint + resolución de $ref)
-	@for s in identidad catalogos operacion bff reportes; do \
-	  echo "redocly lint $$s"; \
-	  $(REDOCLY) lint contracts/openapi/$$s.yaml || exit 1; \
-	done
+lint-openapi: ## Valida cada spec de OpenAPI (bundle + lint con $ref resueltos)
+	@tmp="$$(mktemp -d)"; \
+	for s in identidad catalogos operacion bff reportes; do \
+	  echo "bundle + redocly lint $$s"; \
+	  $(REDOCLY) bundle contracts/openapi/$$s.yaml -o "$$tmp/$$s.bundle.yaml" >/dev/null || { rm -rf "$$tmp"; exit 1; }; \
+	  $(REDOCLY) lint "$$tmp/$$s.bundle.yaml" || { rm -rf "$$tmp"; exit 1; }; \
+	done; \
+	rm -rf "$$tmp"
 
 .PHONY: breaking
 breaking: ## buf breaking contra la última release publicada (rama principal)
