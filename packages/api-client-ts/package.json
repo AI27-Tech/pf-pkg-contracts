@@ -1,0 +1,26 @@
+{
+  "name": "@ai27-tech/contracts",
+  "version": "0.1.0-tracer.1",
+  "description": "Tipos y clientes TypeScript generados desde pf-pkg-contracts (tracer v0.1.0-tracer.1). Generado, no editado a mano.",
+  "license": "UNLICENSED",
+  "private": false,
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./estados": "./src/estados/viajeEstados.gen.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AI27-Tech/pf-pkg-contracts"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  }
+}

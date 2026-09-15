@@ -1,0 +1,291 @@
+# =============================================================================
+# contracts/openapi/bff.yaml
+# -----------------------------------------------------------------------------
+# ÚNICA superficie HTTP para el frontend. `bff` no tiene estado y no valida
+# credenciales: delega en `identidad` y compone lecturas desde `operacion`.
+#
+# Superficie de sesión en SINGULAR (`/api/v1/sesion`): representa la sesión
+# propia del llamante (login / refresh / logout del usuario actual). Contrasta
+# con la superficie interna de `identidad` en plural (`/api/v1/sesiones`), que
+# es la colección administrable. Las dos coexisten a propósito (ver README).
+#
+# E2 (hitos + ETA + incidencia curada) viaja por POLLING HTTP como transporte
+# normal, no por SSE (ADR 27). La cadencia es configuración del cliente, no
+# contrato. `/api/v1/viajes/{id}/tracking` es V2 y NO aparece en el tracer.
+# =============================================================================
+openapi: 3.0.3
+info:
+  title: AI27 — bff
+  version: 0.1.0-tracer.1
+  description: >-
+    Superficie pública del tracer: sesión propia del llamante y lectura
+    compuesta de viajes/hitos para los dos portales.
+  x-ai27-servicio: bff
+  x-ai27-capa: borde
+  x-ai27-tracer: true
+
+servers:
+  - url: /
+    description: Ruta base montada por el despliegue.
+
+security:
+  - bearerCognito: []
+
+tags:
+  - name: sesion
+    description: Sesión propia del llamante (singular).
+  - name: viajes
+
+paths:
+  /api/v1/sesion:
+    post:
+      operationId: iniciarSesion
+      tags: [sesion]
+      summary: Iniciar sesión (login).
+      description: Delega en `identidad`; `bff` no valida credenciales.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CredencialesEntrada" }
+      responses:
+        "201":
+          description: Sesión iniciada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sesion" }
+        "400": { $ref: "_comunes.yaml#/components/responses/SolicitudInvalida" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+    delete:
+      operationId: cerrarSesion
+      tags: [sesion]
+      summary: Cerrar sesión (logout).
+      description: Delega la revocación en `identidad`, que publica `sesion.revocada`.
+      responses:
+        "204": { description: Sesión cerrada. }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+
+  /api/v1/sesion/refresh:
+    post:
+      operationId: refrescarSesion
+      tags: [sesion]
+      summary: Refrescar la sesión propia.
+      description: >-
+        Punto donde los claims se reevalúan (fija la exposición máxima ante un
+        cambio de permisos, ADR 26). Delega en `identidad`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefrescoEntrada" }
+      responses:
+        "200":
+          description: Sesión refrescada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sesion" }
+        "400": { $ref: "_comunes.yaml#/components/responses/SolicitudInvalida" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+
+  /api/v1/viajes:
+    post:
+      operationId: crearViaje
+      tags: [viajes]
+      summary: Crear un viaje (cliente o Operación dentro de alcance).
+      description: >-
+        El cliente crea en `SOLICITADO`; Operación en `APROBADO` y puede asignar
+        atómicamente para dejarlo `ASIGNADO` (DEC-026). El estado inicial lo fija
+        el rol del token. `bff` reenvía a `operacion`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CrearViajeEntrada" }
+      responses:
+        "201":
+          description: Viaje creado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ViajeResumen" }
+        "400": { $ref: "_comunes.yaml#/components/responses/SolicitudInvalida" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "403": { $ref: "_comunes.yaml#/components/responses/Prohibido" }
+        "409": { $ref: "_comunes.yaml#/components/responses/Conflicto" }
+    get:
+      operationId: listarViajes
+      tags: [viajes]
+      summary: Listar viajes con filtros, por alcance.
+      description: Alcance de flota para interno; alcance de tenant para cliente (P9, P10).
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          schema: { type: string }
+        - name: cursor
+          in: query
+          required: false
+          schema: { $ref: "_comunes.yaml#/components/schemas/Cursor" }
+      responses:
+        "200":
+          description: Página de viajes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginaViajesResumen" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+
+  /api/v1/viajes/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    get:
+      operationId: seguirViaje
+      tags: [viajes]
+      summary: Detalle/seguimiento compuesto del viaje (lectura de hitos V1).
+      description: >-
+        Lectura inicial y periódica de hitos V1 por POLLING HTTP (ADR 27). `bff`
+        compone: hito de estado, ETA manual con marca `stale` e incidencia
+        curada desde `operacion`. Para el cliente, la incidencia es la vista
+        curada (categoría + estado), nunca el tipo interno (DEC-006).
+      responses:
+        "200":
+          description: Vista compuesta del viaje.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ViajeSeguimiento" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+
+components:
+  schemas:
+    CredencialesEntrada:
+      type: object
+      additionalProperties: false
+      required: [usuario, contrasena]
+      properties:
+        usuario: { type: string }
+        contrasena:
+          type: string
+          format: password
+
+    RefrescoEntrada:
+      type: object
+      additionalProperties: false
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+
+    Sesion:
+      type: object
+      additionalProperties: false
+      required: [sesion_id, access_token, expira_en]
+      properties:
+        sesion_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expira_en: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+
+    CrearViajeEntrada:
+      type: object
+      additionalProperties: false
+      required: [origen, destinos]
+      properties:
+        origen: { type: string }
+        destinos:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [nombre]
+            properties:
+              nombre: { type: string }
+              numero_envio: { type: string }
+        cliente_id:
+          allOf:
+            - $ref: "_comunes.yaml#/components/schemas/Id"
+          nullable: true
+        fecha_hora_servicio:
+          allOf:
+            - $ref: "_comunes.yaml#/components/schemas/MarcaTiempo"
+          nullable: true
+        tipo_servicio: { type: string }
+
+    ViajeResumen:
+      type: object
+      additionalProperties: false
+      required: [id, estado, origen]
+      properties:
+        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        estado:
+          type: string
+          description: Token de estado tal como lo publica `operacion` (ADR 19).
+        origen: { type: string }
+
+    PaginaViajesResumen:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ViajeResumen" }
+        cursor_siguiente:
+          allOf:
+            - $ref: "_comunes.yaml#/components/schemas/Cursor"
+          nullable: true
+    HitoCliente:
+      type: object
+      additionalProperties: false
+      required: [estado]
+      description: >-
+        Hito de progreso presentado al cliente. `bff` colapsa el bucle
+        multi-parada en un hito legible (mapeo estado→hito, E2-T2); no expone el
+        enum completo de estados.
+      properties:
+        estado:
+          type: string
+          description: Token de estado subyacente (referencia técnica).
+        etiqueta:
+          type: string
+          description: Etiqueta de hito para el cliente.
+
+    IncidenciaCurada:
+      type: object
+      additionalProperties: false
+      required: [categoria, estado, marca_tiempo]
+      description: >-
+        Vista curada de la incidencia para el cliente (DEC-006): categoría
+        mapeada, estado y marca de tiempo. Nunca el tipo interno.
+      properties:
+        categoria:
+          type: string
+          description: Categoría curada (p. ej. "Incidencia de seguridad").
+        estado:
+          type: string
+          enum: [en_atencion, resuelta]
+        marca_tiempo: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+        impacto_eta:
+          type: string
+          nullable: true
+    ViajeSeguimiento:
+      type: object
+      additionalProperties: false
+      required: [id, hito, incidencias]
+      properties:
+        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        hito: { $ref: "#/components/schemas/HitoCliente" }
+        eta:
+          description: ETA estimado, no en vivo; con marca de obsolescencia (stale).
+          type: object
+          additionalProperties: false
+          required: [valor, obsoleto]
+          properties:
+            valor: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+            obsoleto: { type: boolean }
+          nullable: true
+        incidencias:
+          type: array
+          items: { $ref: "#/components/schemas/IncidenciaCurada" }

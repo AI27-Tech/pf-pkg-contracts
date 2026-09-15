@@ -1,0 +1,122 @@
+# =============================================================================
+# contracts/openapi/_comunes.yaml
+# -----------------------------------------------------------------------------
+# Componentes OpenAPI compartidos por los specs del tracer. No es un spec de
+# servicio: no declara `paths`. Se referencia desde los otros specs con
+# $ref relativo (p. ej. `_comunes.yaml#/components/schemas/Error`).
+#
+# Convención de idioma (ADR 22 / DEC-024): sustantivos de dominio en español;
+# términos técnicos genéricos en inglés.
+# =============================================================================
+openapi: 3.0.3
+info:
+  title: AI27 — Componentes comunes
+  version: 0.1.0-tracer.1
+  description: >-
+    Esquemas y respuestas reutilizables del paquete contractual del tracer.
+    Alcance congelado por ADR 25.
+
+paths: {}
+
+components:
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [codigo, mensaje]
+      properties:
+        codigo:
+          type: string
+          description: >-
+            Código de máquina, estable y en snake_case. Los consumidores
+            ramifican sobre este valor, no sobre `mensaje`.
+          examples: [no_encontrado, no_autorizado, conflicto_de_estado]
+        mensaje:
+          type: string
+          description: Descripción legible para diagnóstico. No es contrato de UI.
+        detalles:
+          type: array
+          description: Detalles opcionales por campo, cuando aplique.
+          items:
+            type: object
+            additionalProperties: false
+            required: [campo, motivo]
+            properties:
+              campo: { type: string }
+              motivo: { type: string }
+
+    Id:
+      type: string
+      format: uuid
+      description: Identificador único (UUID). Nunca un correlativo expuesto.
+
+    Cursor:
+      type: string
+      description: >-
+        Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal
+        cual; su forma interna no es contrato.
+
+    Pagina:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        cursor_siguiente:
+          allOf:
+            - $ref: "#/components/schemas/Cursor"
+          nullable: true
+        items:
+          type: array
+          items: {}
+
+    MarcaTiempo:
+      type: string
+      format: date-time
+      description: Instante en UTC, RFC 3339.
+
+    Rol:
+      type: string
+      description: >-
+        Rol interno de AI27. `reaccion` existe en el modelo pero queda fuera del
+        tracer (E7). El tracer ejercita cliente, operator, supervisor y
+        administrator.
+      enum: [cliente, operator, supervisor, administrator, reaccion]
+
+  responses:
+    NoAutorizado:
+      description: Token ausente, inválido, expirado o con sesión revocada (fallo cerrado).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Prohibido:
+      description: Autenticado pero fuera de alcance/rol para la acción o el recurso.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NoEncontrado:
+      description: El recurso no existe o no es visible dentro del alcance del llamante.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    SolicitudInvalida:
+      description: La petición no cumple el contrato (validación de cuerpo o parámetros).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflicto:
+      description: >-
+        La acción choca con el estado actual del recurso (p. ej. una transición
+        de estado no permitida por `contracts/estados/`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  securitySchemes:
+    bearerCognito:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        JWT emitido vía Cognito, verificado localmente por cada servicio contra
+        el JWKS del user pool (E0-T3). Rol, tenant/alcance, `Audiencia` y
+        `sesion_id` se derivan del token, nunca de parámetros de la petición.

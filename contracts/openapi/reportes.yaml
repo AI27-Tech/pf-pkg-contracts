@@ -1,0 +1,123 @@
+# =============================================================================
+# contracts/openapi/reportes.yaml
+# -----------------------------------------------------------------------------
+# Superficie HTTP de `reportes` para el tracer. Solo lectura. `reportes` es una
+# proyección alimentada por eventos (DEC-033 / ADR 18): tiene su propio schema y
+# rol, sin GRANT sobre ningún otro schema.
+#
+# El tracer ejercita la proyección `viajes` consumida a partir de los eventos de
+# `operacion`. Las exportaciones masivas están FUERA de V1 (DEC-023/036) y no
+# aparecen aquí.
+# =============================================================================
+openapi: 3.0.3
+info:
+  title: AI27 — reportes
+  version: 0.1.0-tracer.1
+  description: Proyección de lectura por eventos. Reportes operativos del tracer.
+  x-ai27-servicio: reportes
+  x-ai27-capa: soporte
+  x-ai27-tracer: true
+
+servers:
+  - url: /
+    description: Ruta base montada por el despliegue.
+
+security:
+  - bearerCognito: []
+
+tags:
+  - name: reportes
+
+paths:
+  /api/v1/reportes/viajes:
+    get:
+      operationId: reporteViajes
+      tags: [reportes]
+      summary: Reporte operativo de viajes por periodo y alcance.
+      parameters:
+        - name: desde
+          in: query
+          required: true
+          schema: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+        - name: hasta
+          in: query
+          required: true
+          schema: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+      responses:
+        "200":
+          description: Filas del reporte de viajes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReporteViajes" }
+        "400": { $ref: "_comunes.yaml#/components/responses/SolicitudInvalida" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "403": { $ref: "_comunes.yaml#/components/responses/Prohibido" }
+
+  /api/v1/reportes/estados:
+    get:
+      operationId: reporteEstados
+      tags: [reportes]
+      summary: Distribución y tiempos de permanencia por estado.
+      parameters:
+        - name: desde
+          in: query
+          required: true
+          schema: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+        - name: hasta
+          in: query
+          required: true
+          schema: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+      responses:
+        "200":
+          description: Distribución por estado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReporteEstados" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "403": { $ref: "_comunes.yaml#/components/responses/Prohibido" }
+
+components:
+  schemas:
+    FilaViaje:
+      type: object
+      additionalProperties: false
+      required: [viaje_id, estado]
+      properties:
+        viaje_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        cliente_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        estado:
+          type: string
+          description: Token de estado (ADR 19), tal como lo proyecta el evento.
+        creado_en: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+        cerrado_en:
+          allOf:
+            - $ref: "_comunes.yaml#/components/schemas/MarcaTiempo"
+          nullable: true
+    ReporteViajes:
+      type: object
+      additionalProperties: false
+      required: [filas, total]
+      properties:
+        filas:
+          type: array
+          items: { $ref: "#/components/schemas/FilaViaje" }
+        total: { type: integer }
+
+    ConteoEstado:
+      type: object
+      additionalProperties: false
+      required: [estado, conteo]
+      properties:
+        estado: { type: string }
+        conteo: { type: integer }
+        permanencia_promedio_seg:
+          type: integer
+          nullable: true
+    ReporteEstados:
+      type: object
+      additionalProperties: false
+      required: [conteos]
+      properties:
+        conteos:
+          type: array
+          items: { $ref: "#/components/schemas/ConteoEstado" }

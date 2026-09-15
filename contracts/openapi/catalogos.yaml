@@ -1,0 +1,339 @@
+# =============================================================================
+# contracts/openapi/catalogos.yaml
+# -----------------------------------------------------------------------------
+# Superficie HTTP interna de `catalogos` para el tracer. `catalogos` es el
+# registro maestro (hoja del grafo: no llama a nadie). En el tracer expone
+# lectura de clientes, contratos/SLA, unidades y custodios, y la AFIRMACIÓN de
+# aptitud administrativa que `operacion` consulta antes de reservar.
+#
+# La aptitud es una afirmación, NO una reserva: la reserva vive en
+# `operacion.asignacion` (ADR 24 / operacion.md (a)).
+#
+# Fuera del tracer / V2: rutas y zonas de riesgo (telemetría), escritura de
+# catálogos (E5).
+# =============================================================================
+openapi: 3.0.3
+info:
+  title: AI27 — catalogos
+  version: 0.1.0-tracer.1
+  description: Registro maestro. Lectura para el tracer y afirmación de aptitud.
+  x-ai27-servicio: catalogos
+  x-ai27-capa: catalogo
+  x-ai27-tracer: true
+
+servers:
+  - url: /
+    description: Ruta base montada por el despliegue.
+
+security:
+  - bearerCognito: []
+
+tags:
+  - name: clientes
+  - name: contratos
+  - name: recursos
+    description: Unidades y custodios — los recursos de AI27 (ADR 24).
+
+paths:
+  /api/v1/clientes:
+    get:
+      operationId: listarClientes
+      tags: [clientes]
+      summary: Listar clientes (expediente comercial), por alcance interno.
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema: { $ref: "_comunes.yaml#/components/schemas/Cursor" }
+      responses:
+        "200":
+          description: Página de clientes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginaClientes" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "403": { $ref: "_comunes.yaml#/components/responses/Prohibido" }
+
+  /api/v1/clientes/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    get:
+      operationId: obtenerCliente
+      tags: [clientes]
+      summary: Expediente del cliente y su contrato vigente.
+      responses:
+        "200":
+          description: Cliente.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cliente" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+
+  /api/v1/contratos/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    get:
+      operationId: obtenerContrato
+      tags: [contratos]
+      summary: Contrato, vigente o vigente a una fecha.
+      description: >-
+        La lectura vigente-a-una-fecha es la que la exportación probatoria
+        necesita. En V1 el contrato/SLA es informativo (DEC-022 #4).
+      parameters:
+        - name: a_fecha
+          in: query
+          required: false
+          description: Devuelve la versión vigente a esa fecha (probatorio).
+          schema: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+      responses:
+        "200":
+          description: Contrato.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contrato" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+
+  /api/v1/sla/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    get:
+      operationId: obtenerSla
+      tags: [contratos]
+      summary: SLA de un contrato, vigente o vigente a una fecha.
+      parameters:
+        - name: a_fecha
+          in: query
+          required: false
+          schema: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+      responses:
+        "200":
+          description: SLA.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sla" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+
+  /api/v1/unidades:
+    get:
+      operationId: listarUnidades
+      tags: [recursos]
+      summary: Listar unidades (vehículos de flota de AI27).
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema: { $ref: "_comunes.yaml#/components/schemas/Cursor" }
+      responses:
+        "200":
+          description: Página de unidades.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginaUnidades" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "403": { $ref: "_comunes.yaml#/components/responses/Prohibido" }
+
+  /api/v1/unidades/{id}/aptitud:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    get:
+      operationId: aptitudUnidad
+      tags: [recursos]
+      summary: Afirmación de aptitud administrativa de una unidad.
+      description: >-
+        Responde si la unidad está activa, con documentos vigentes y apta para
+        el contrato/SLA de un cliente. Es una AFIRMACIÓN, no una reserva: no
+        garantiza asignación (operacion.md (a)).
+      parameters:
+        - name: cliente_id
+          in: query
+          required: true
+          description: Cliente para cuyo contrato/SLA se evalúa la aptitud.
+          schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+      responses:
+        "200":
+          description: Afirmación de aptitud.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Aptitud" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+
+  /api/v1/custodios:
+    get:
+      operationId: listarCustodios
+      tags: [recursos]
+      summary: Listar custodios (personas de AI27 que viajan en la unidad).
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema: { $ref: "_comunes.yaml#/components/schemas/Cursor" }
+      responses:
+        "200":
+          description: Página de custodios.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginaCustodios" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "403": { $ref: "_comunes.yaml#/components/responses/Prohibido" }
+
+  /api/v1/custodios/{id}/aptitud:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    get:
+      operationId: aptitudCustodio
+      tags: [recursos]
+      summary: Afirmación de aptitud administrativa de un custodio.
+      parameters:
+        - name: cliente_id
+          in: query
+          required: true
+          schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+      responses:
+        "200":
+          description: Afirmación de aptitud.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Aptitud" }
+        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+
+components:
+  schemas:
+    Cliente:
+      type: object
+      additionalProperties: false
+      required: [id, nombre, estado]
+      properties:
+        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        nombre: { type: string }
+        estado:
+          type: string
+          enum: [activo, inactivo]
+        contrato_vigente_id:
+          allOf:
+            - $ref: "_comunes.yaml#/components/schemas/Id"
+          nullable: true
+    PaginaClientes:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Cliente" }
+        cursor_siguiente:
+          allOf:
+            - $ref: "_comunes.yaml#/components/schemas/Cursor"
+          nullable: true
+    Contrato:
+      type: object
+      additionalProperties: false
+      required: [id, cliente_id, vigencia_desde]
+      properties:
+        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        cliente_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        vigencia_desde:
+          { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+        vigencia_hasta:
+          allOf:
+            - $ref: "_comunes.yaml#/components/schemas/MarcaTiempo"
+          nullable: true
+    Sla:
+      type: object
+      additionalProperties: false
+      required: [id, contrato_id]
+      properties:
+        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        contrato_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        descripcion:
+          type: string
+          description: Compromiso informativo en V1 (DEC-022 #4).
+
+    Unidad:
+      type: object
+      additionalProperties: false
+      required: [id, tipo, estado]
+      properties:
+        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        tipo:
+          type: string
+          description: >-
+            Tipo de unidad; `patrulla` es un tipo de unidad (ADR 24 / DEC-035),
+            no un recurso aparte.
+        economico:
+          type: string
+          description: Número económico de la unidad.
+        placas: { type: string }
+        estado:
+          type: string
+          enum: [activa, inactiva]
+
+    PaginaUnidades:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Unidad" }
+        cursor_siguiente:
+          allOf:
+            - $ref: "_comunes.yaml#/components/schemas/Cursor"
+          nullable: true
+    Custodio:
+      type: object
+      additionalProperties: false
+      required: [id, nombre, estado]
+      properties:
+        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        nombre: { type: string }
+        telefono: { type: string }
+        estado:
+          type: string
+          enum: [activo, inactivo]
+
+    PaginaCustodios:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Custodio" }
+        cursor_siguiente:
+          allOf:
+            - $ref: "_comunes.yaml#/components/schemas/Cursor"
+          nullable: true
+    Aptitud:
+      type: object
+      additionalProperties: false
+      required: [recurso_id, apto]
+      description: >-
+        Afirmación de aptitud administrativa. `apto=false` no reserva ni bloquea;
+        informa a `operacion`, que decide dentro de su transacción de asignación.
+      properties:
+        recurso_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        apto: { type: boolean }
+        motivos:
+          type: array
+          description: Motivos de no aptitud, cuando `apto=false`.
+          items: { type: string }

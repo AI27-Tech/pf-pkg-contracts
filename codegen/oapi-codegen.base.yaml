@@ -1,0 +1,16 @@
+# Configuración base de oapi-codegen (Go) para los specs de OpenAPI del tracer.
+# Cada servicio se genera con esta base, cambiando `package` y `output` (ver
+# scripts/generar.sh). Se fija la versión del generador en tools/tools.go y
+# go.mod del repo raíz para que el codegen sea reproducible (ADR 25).
+#
+# Generamos tipos + cliente HTTP. NO generamos servidor: los servicios
+# implementan su propio handler; el contrato del cliente es lo que consumen los
+# demás módulos (ningún cliente HTTP escrito a mano, criterio E0-T2).
+package: PLACEHOLDER
+generate:
+  models: true
+  client: true
+output-options:
+  # Los $ref externos a _comunes.yaml se resuelven al empaquetar el spec
+  # (bundle) antes de generar; ver scripts/generar.sh.
+  skip-prune: false

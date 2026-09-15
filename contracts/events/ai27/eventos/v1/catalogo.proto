@@ -1,0 +1,23 @@
+// Evento `catalogo.actualizado`, publicado por `catalogos`. Superficie AMPLIA.
+// Orden por agregado = entidad + entidad_id.
+//
+// `operacion` lo consume para invalidar su caché en proceso de la entrada
+// correspondiente (operacion.md (g)). Idempotente por naturaleza del efecto:
+// reentregar sólo vuelve a invalidar.
+syntax = "proto3";
+
+package ai27.eventos.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1;eventosv1";
+
+// catalogo.actualizado — una entrada de catálogo cambió y debe invalidarse.
+message CatalogoActualizado {
+  // Tipo de entidad de catálogo, p. ej. "cliente", "unidad", "custodio",
+  // "contrato", "sla".
+  string entidad = 1;
+  // Identificador de la entrada afectada.
+  string entidad_id = 2;
+  google.protobuf.Timestamp actualizado_en = 3;
+}
