@@ -1,0 +1,274 @@
+# =============================================================================
+# contracts/estados/viaje.estados.yaml
+# -----------------------------------------------------------------------------
+# Máquina de estados del `viaje` como DATO. Fuente única desde la que se generan
+# los tipos de Go y TypeScript (E0-T2). Nadie copia este enum: `operacion` es su
+# dueño (docs/arquitectura/services/operacion.md (e), P14), y `bff`,
+# `procesamiento`, `realtime`, `reportes` y los dos frontends reconocen los
+# mismos tokens generados desde aquí.
+#
+# Autoridad del contenido: ADR 19 (enum reconciliado con el backbone de negocio,
+# DEC-005/DEC-013/DEC-032). El enum se define COMPLETO desde el arranque: incluye
+# los estados exclusivos de V2 declarados pero INALCANZABLES en V1, para que V2
+# no sea una migración de máquina de estados con filas en estados retirados.
+#
+# `INCIDENCIA` y `SIN_SEÑAL` NO son estados: son condiciones ortogonales
+# (`condicion_viaje`), declaradas al final de este archivo (§C.2, P15).
+#
+# Convención de idioma: sustantivos de dominio en español (ADR 22 / DEC-024).
+# =============================================================================
+
+version: 1
+aggregate: viaje
+canonical_source: contracts/estados/viaje.estados.yaml
+authority:
+  - ADR-0019  # enum canónico reconciliado
+  - DEC-005   # backbone de progreso confirmado
+  - DEC-013   # modelo multi-parada
+  - DEC-032   # reconciliación técnica -> negocio
+
+# -----------------------------------------------------------------------------
+# Estados de progreso. Una sola dimensión con transiciones controladas.
+# `availability`: v1 | v2  — un estado v2 se declara pero no tiene transición que
+#                            lo alcance en V1 (queda inalcanzable por construcción).
+# `terminal`: true          — estado final, sin transiciones de salida.
+# -----------------------------------------------------------------------------
+estados:
+  - token: SOLICITADO
+    nombre_negocio: Solicitado
+    availability: v1
+    descripcion: >-
+      Enviada y en espera de revisión. No existe un estado de revisión separado
+      (DEC-005 #8): el paso de aprobación es la acción del operador sobre la
+      solicitud. Estado inicial cuando la crea el cliente.
+    inicial_para: [cliente]
+
+  - token: APROBADO
+    nombre_negocio: Aprobado
+    availability: v1
+    descripcion: >-
+      La solicitud fue aprobada por un operador. Renombrado desde `ACEPTADO`
+      (DEC-032). Estado inicial cuando el viaje lo crea Operación (DEC-026):
+      nace en `APROBADO` en el mismo acto de creación.
+    inicial_para: [operacion]
+
+  - token: RECHAZADO_POR_AI27
+    nombre_negocio: Rechazada por AI27
+    availability: v1
+    terminal: true
+    descripcion: >-
+      AI27 no acepta prestar el servicio solicitado, en la etapa de aprobación.
+      Renombrado desde `RECHAZADO` (DEC-032). Motivo obligatorio (DEC-020 #2).
+
+  - token: RECHAZADO_POR_CLIENTE
+    nombre_negocio: Rechazada por el cliente
+    availability: v1
+    terminal: true
+    descripcion: >-
+      El cliente no acepta el servicio asignado, en `ASIGNADO`/`APTO_PARA_SALIDA`.
+      Nuevo (DEC-032): antes indistinguible de otros rechazos.
+
+  - token: ASIGNADO
+    nombre_negocio: Asignado
+    availability: v1
+    descripcion: >-
+      Unidad + custodios asignados con disponibilidad verificada (ADR 24: dos
+      recursos de AI27; la `patrulla` es la `unidad` en su rol de escolta).
+
+  - token: APTO_PARA_SALIDA
+    nombre_negocio: Apto para salida
+    availability: v1
+    descripcion: >-
+      Nuevo (DEC-005 #2). Guarda de entrada: ningún recurso "no apto".
+      `No apto para salida` es una guarda, no un estado.
+
+  - token: EN_EMBARQUE
+    nombre_negocio: En embarque
+    availability: v1
+    descripcion: >-
+      Nuevo (DEC-005 #3). Opcional: puede saltarse directo a `EN_TRANSITO`
+      cuando el convoy escolta una unidad ya cargada.
+    alias_historico: [EN_BASE_CLIENTE, EN_ORIGEN]
+    nota_alias: >-
+      `EN_BASE_CLIENTE` (alias histórico `EN_ORIGEN`) es el mismo concepto que
+      "En embarque" en el origen (ADR 19). El alias se conserva solo para leer
+      filas del sistema legado sin migración; no es un estado nuevo.
+
+  - token: PATRULLA_EN_CAMINO
+    nombre_negocio: Patrulla en camino
+    availability: v2
+    reachable_v1: false
+    descripcion: >-
+      Declarado en V1 pero INALCANZABLE: ninguna transición lo alcanza en V1.
+      Llegará en V2 (seguimiento en vivo). Se declara ahora para que V2 no sea
+      una migración de máquina de estados.
+
+  - token: EN_TRANSITO
+    nombre_negocio: En recorrido
+    availability: v1
+    descripcion: >-
+      Token sin cambio; el nombre de negocio es "En recorrido". Las estadías
+      (retenes, descansos, combustible, alimentos) son la condición `Estadía`
+      sobre este estado, no estados ni destinos (DEC-013 #3).
+
+  - token: EN_DESTINO
+    nombre_negocio: Arribo a destino
+    availability: v1
+    descripcion: >-
+      Token sin cambio; el nombre de negocio es "Arribo a destino". Parte del
+      bucle multi-parada (DEC-013).
+
+  - token: EN_DESCARGA
+    nombre_negocio: En descarga
+    availability: v1
+    descripcion: >-
+      Nuevo (DEC-013). La descarga es opcional por destino: un destino puede no
+      tener descarga.
+
+  - token: CERRADO
+    nombre_negocio: Cerrado
+    availability: v1
+    terminal: true
+    descripcion: >-
+      Cierre del servicio. Solo ocurre tras la ÚLTIMA parada (DEC-013).
+
+  - token: CANCELADO
+    nombre_negocio: Cancelado
+    availability: v1
+    terminal: true
+    descripcion: >-
+      El cliente ya no quiere el viaje. Ventana de cancelación: hasta antes de
+      la salida — `SOLICITADO`, `APROBADO`, `ASIGNADO`, `APTO_PARA_SALIDA`
+      (DEC-005 #5).
+
+# -----------------------------------------------------------------------------
+# `EN_REVISION` fue ELIMINADO (ADR 19 / DEC-005 #8). No es renombre ni fusión:
+# el estado desaparece. `SOLICITADO` ya significa "enviada y en espera de
+# revisión". Se documenta aquí para que nadie lo reintroduzca.
+# -----------------------------------------------------------------------------
+removed:
+  - token: EN_REVISION
+    motivo: >-
+      El negocio decidió que no existe un estado de revisión separado. Declararlo
+      inalcanzable (como PATRULLA_EN_CAMINO) sería invitar a que alguien lo use.
+  - token: RECHAZADO
+    motivo: >-
+      Se dividió en RECHAZADO_POR_AI27 y RECHAZADO_POR_CLIENTE (DEC-032).
+  - token: ACEPTADO
+    motivo: Renombrado a APROBADO (DEC-032).
+
+# -----------------------------------------------------------------------------
+# Transiciones permitidas (de -> a) con su disparador. El backbone NO es lineal:
+# `EN_DESTINO` es un bucle multi-parada con descarga opcional (DEC-013).
+# `operacion` es la única autoridad de transición; no existe escritura directa
+# de `estado` (solo transición validada contra este contrato).
+# `disparador`: quién/qué la origina. `guarda`: condición previa obligatoria.
+# -----------------------------------------------------------------------------
+transiciones:
+  # --- Alta y aprobación ---
+  - de: SOLICITADO
+    a: APROBADO
+    disparador: operador
+    guarda: fecha_hora_servicio_definida   # DEC-010 #2: obligatoria antes de aprobar
+  - de: SOLICITADO
+    a: RECHAZADO_POR_AI27
+    disparador: operador
+    guarda: motivo_obligatorio             # DEC-020 #2
+  - de: SOLICITADO
+    a: CANCELADO
+    disparador: cliente
+
+  # --- Asignación ---
+  - de: APROBADO
+    a: ASIGNADO
+    disparador: operador
+    guarda: unidad_y_custodios_aptos_y_reservados   # escritura atómica, ADR 24
+  - de: APROBADO
+    a: CANCELADO
+    disparador: cliente
+
+  # --- Preparación de salida ---
+  - de: ASIGNADO
+    a: APTO_PARA_SALIDA
+    disparador: operador
+    guarda: ningun_recurso_no_apto          # DEC-005 #2
+  - de: ASIGNADO
+    a: RECHAZADO_POR_CLIENTE
+    disparador: cliente                     # DEC-005 #7
+  - de: ASIGNADO
+    a: CANCELADO
+    disparador: cliente
+
+  - de: APTO_PARA_SALIDA
+    a: EN_EMBARQUE
+    disparador: operador
+  - de: APTO_PARA_SALIDA
+    a: EN_TRANSITO
+    disparador: operador
+    nota: embarque_opcional                 # DEC-005 #3: unidad ya cargada
+  - de: APTO_PARA_SALIDA
+    a: RECHAZADO_POR_CLIENTE
+    disparador: cliente
+  - de: APTO_PARA_SALIDA
+    a: CANCELADO
+    disparador: cliente
+
+  # --- Embarque -> recorrido ---
+  - de: EN_EMBARQUE
+    a: EN_TRANSITO
+    disparador: operador
+
+  # --- Bucle multi-parada (DEC-013) ---
+  - de: EN_TRANSITO
+    a: EN_DESTINO
+    disparador: operador
+  - de: EN_DESTINO
+    a: EN_DESCARGA
+    disparador: operador
+    nota: descarga_opcional_por_destino
+  - de: EN_DESTINO
+    a: EN_TRANSITO
+    disparador: operador
+    nota: siguiente_parada_sin_descarga
+  - de: EN_DESTINO
+    a: CERRADO
+    disparador: operador
+    guarda: ultima_parada
+  - de: EN_DESCARGA
+    a: EN_TRANSITO
+    disparador: operador
+    nota: siguiente_parada
+  - de: EN_DESCARGA
+    a: CERRADO
+    disparador: operador
+    guarda: ultima_parada
+
+  # --- Cierre anticipado por incidencia (DEC-020 #6): solo por operador y solo
+  #     con una condición INCIDENCIA abierta. La guarda vive en operacion; aquí
+  #     se declara la arista para que el grafo la reconozca. ---
+  - de: EN_TRANSITO
+    a: CERRADO
+    disparador: operador
+    guarda: cierre_anticipado_por_incidencia
+
+# -----------------------------------------------------------------------------
+# §C.2 — Condiciones ortogonales al progreso. NO son valores de `viaje.estado`.
+# Un viaje puede estar `EN_TRANSITO` *y* con una condición `INCIDENCIA` abierta.
+# Índice único parcial: una sola condición abierta por (viaje_id, tipo)
+# mientras `cerrada_en IS NULL` (E0-T8).
+# -----------------------------------------------------------------------------
+condicion_viaje:
+  descripcion: >-
+    Enum ortogonal de condiciones del viaje. Nunca entra a la columna de estado
+    de progreso. Se genera como enum separado para Go y TypeScript.
+  tipos:
+    - token: INCIDENCIA
+      availability: v1
+      descripcion: Incidencia operativa/de seguridad abierta sobre el viaje (E1-HU-007).
+    - token: SIN_SENAL
+      nombre_negocio: Sin señal
+      availability: v2
+      descripcion: >-
+        Pérdida de señal/GPS. V2 (telemetría): se abre/cierra por evento
+        `sin_senal.detectado`/`sin_senal.recuperado` que `operacion` consume.
+        Declarado ahora, inalcanzable en V1.

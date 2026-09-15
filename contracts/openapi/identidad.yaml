@@ -1,0 +1,225 @@
+# =============================================================================
+# contracts/openapi/identidad.yaml
+# -----------------------------------------------------------------------------
+# Superficie HTTP interna del servicio `identidad` para el tracer vertical.
+# `identidad` es dueño del modelo de autorización y la fuente de verdad de la
+# revocación de sesiones. La emisión de token delega la verificación de
+# credencial en Cognito (addendum de identidad / DEC-031).
+#
+# OTP/MFA NO tiene endpoints propios: ADR 13 cerrado a favor de Cognito
+# (DEC-031). El desafío de segundo factor lo genera y despacha el proveedor.
+#
+# Superficie de sesiones en PLURAL (`/api/v1/sesiones`): es la colección
+# administrable de sesiones desde el servicio dueño. La superficie pública de
+# `bff` usa `/api/v1/sesion` (singular) para la sesión propia del llamante.
+# Ambas coexisten a propósito; ver README §"Sesión: dos superficies".
+# =============================================================================
+openapi: 3.0.3
+info:
+  title: AI27 — identidad
+  version: 0.1.0-tracer.1
+  description: >-
+    Autenticación, sesión y alcance del tracer. Fuente de verdad de la
+    revocación (evento `sesion.revocada`, ADR 26).
+  x-ai27-servicio: identidad
+  x-ai27-capa: catalogo
+  x-ai27-tracer: true
+
+servers:
+- url: /
+  description: Ruta base montada por el despliegue; los paths incluyen /api/v1.
+
+security:
+- bearerCognito: []
+
+tags:
+- name: sesiones
+  description: Emisión, refresco, revocación y snapshot de revocación.
+
+paths:
+  /api/v1/sesiones:
+    post:
+      operationId: emitirSesion
+      tags: [sesiones]
+      summary: Emitir una sesión (login).
+      description: >-
+        Delega la verificación de credencial en Cognito y devuelve el token con
+        los claims compuestos (rol, tenant/alcance, Audiencia, sesion_id).
+      security: [] # pública: aún no hay token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CredencialesEntrada"}
+      responses:
+        "201":
+          description: Sesión emitida.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SesionEmitida"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+
+  /api/v1/sesiones/refresh:
+    post:
+      operationId: refrescarSesion
+      tags: [sesiones]
+      summary: Refrescar una sesión.
+      description: >-
+        Punto donde los claims se REEVALÚAN desde el modelo vigente (ADR 16
+        cerrado, DEC-031). `sesion_id` permanece estable durante todos los
+        refresh de la misma sesión (ADR 26).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RefrescoEntrada"}
+      responses:
+        "200":
+          description: Sesión refrescada con claims recompuestos.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SesionEmitida"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+
+  /api/v1/sesiones/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sesion_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    delete:
+      operationId: revocarSesion
+      tags: [sesiones]
+      summary: Revocar una sesión (logout o revocación administrativa).
+      description: >-
+        Operación de dos pasos: revoca en Cognito y compromete la revocación
+        local con su evento `sesion.revocada` en la misma transacción.
+      responses:
+        "204": {description: Sesión revocada.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    get:
+      operationId: obtenerSesion
+      tags: [sesiones]
+      summary: Estado durable de una sesión.
+      description: >-
+        Fuente durable de un sesion_id desde Postgres. Sólo se usa como fallback
+        cuando la proyección local de revocación está obsoleta; no es ruta normal.
+      responses:
+        "200":
+          description: Estado durable de la sesión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EstadoSesion"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/sesiones/revocadas:
+    get:
+      operationId: listarSesionesRevocadas
+      tags: [sesiones]
+      summary: Snapshot de tombstones de revocación + cursor.
+      description: >-
+        Snapshot de tombstones no expirados más un cursor consistente para que
+        cada consumidor reconstruya su proyección y haga catch-up sin ventana
+        (ADR 26). Consumido por los servicios protegidos, no por el navegador.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        description: Cursor de continuación; ausente para el snapshot inicial.
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de tombstones y cursor.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaRevocaciones"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+
+components:
+  schemas:
+    CredencialesEntrada:
+      type: object
+      additionalProperties: false
+      required: [usuario, contrasena]
+      properties:
+        usuario:
+          type: string
+          description: Identificador de acceso del sujeto (según Cognito).
+        contrasena:
+          type: string
+          format: password
+          description: >-
+            Credencial. AI27 no la custodia: se delega a Cognito. No se registra
+            ni se refleja en logs (E0-T3).
+
+    RefrescoEntrada:
+      type: object
+      additionalProperties: false
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          description: Token de refresco emitido por el proveedor.
+
+    SesionEmitida:
+      type: object
+      additionalProperties: false
+      required: [sesion_id, access_token, expira_en]
+      properties:
+        sesion_id:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
+          description: Identificador de sesión propio de AI27, estable entre refrescos.
+        access_token:
+          type: string
+          description: JWT verificado localmente por cada servicio contra el JWKS.
+        refresh_token:
+          type: string
+          description: Token de refresco, cuando el flujo lo entrega.
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    EstadoSesion:
+      type: object
+      additionalProperties: false
+      required: [sesion_id, revocada, expira_en]
+      properties:
+        sesion_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        revocada:
+          type: boolean
+          description: true si la sesión está revocada de forma durable.
+        revocada_en:
+          type: string
+          format: date-time
+          nullable: true
+          description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    Revocacion:
+      type: object
+      additionalProperties: false
+      required: [sesion_id, revocada_en, expira_en]
+      description: >-
+        Tombstone de revocación. Coincide en forma con el payload del evento
+        `sesion.revocada` (contracts/events).
+      properties:
+        sesion_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        revocada_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    PaginaRevocaciones:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Revocacion"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.

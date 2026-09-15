@@ -1,0 +1,97 @@
+// Eventos de dominio de la familia `viaje.*`, publicados por `operacion`
+// (operacion.md (g)). Todos usan el `Sobre` común y la superficie AMPLIA.
+// Orden por agregado = viaje_id.
+//
+// El tracer ejercita: viaje.creado, viaje.estado_cambiado, viaje.asignado,
+// viaje.cerrado y viaje.acceso_revocado (revocación de acceso del tenant).
+// El resto se declara para congelar la familia completa del tracer.
+syntax = "proto3";
+
+package ai27.eventos.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1;eventosv1";
+
+// viaje.creado — al comprometer la creación del viaje.
+message ViajeCreado {
+  string viaje_id = 1;
+  string cliente_id = 2;
+  // Token de estado inicial (SOLICITADO si lo crea el cliente, APROBADO si
+  // Operación). Coincide con contracts/estados/ (ADR 19).
+  string estado = 3;
+  string origen = 4;
+  google.protobuf.Timestamp creado_en = 5;
+}
+
+// viaje.estado_cambiado — al comprometer una transición validada. Es el
+// disparador de la proyección de reportes y de las reglas de push en V2.
+message ViajeEstadoCambiado {
+  string viaje_id = 1;
+  string de_estado = 2;
+  string a_estado = 3;
+  string causa = 4;
+  google.protobuf.Timestamp cambiado_en = 5;
+}
+
+// viaje.asignado — al comprometer la escritura atómica de asignación.
+message ViajeAsignado {
+  string viaje_id = 1;
+  string unidad_id = 2;
+  repeated string custodios_ids = 3;
+  google.protobuf.Timestamp asignado_en = 4;
+}
+
+// viaje.reasignado — al comprometer una reasignación con motivo.
+message ViajeReasignado {
+  string viaje_id = 1;
+  string unidad_id = 2;
+  repeated string custodios_ids = 3;
+  string motivo = 4;
+  google.protobuf.Timestamp reasignado_en = 5;
+}
+
+// viaje.condicion_abierta — al abrir una condición ortogonal (INCIDENCIA en V1;
+// SIN_SENAL sólo en V2).
+message ViajeCondicionAbierta {
+  string viaje_id = 1;
+  string tipo = 2; // INCIDENCIA | SIN_SENAL (condicion_viaje, no estado)
+  google.protobuf.Timestamp abierta_en = 3;
+}
+
+// viaje.condicion_cerrada — al cerrar una condición ortogonal.
+message ViajeCondicionCerrada {
+  string viaje_id = 1;
+  string tipo = 2;
+  google.protobuf.Timestamp cerrada_en = 3;
+}
+
+// viaje.mensajeria_habilitada — cuando el viaje alcanza el estado en que la
+// conversación debe existir. `mensajeria` crea/reutiliza idempotentemente.
+message ViajeMensajeriaHabilitada {
+  string viaje_id = 1;
+  string cliente_id = 2;
+  google.protobuf.Timestamp habilitada_en = 3;
+}
+
+// viaje.cliente_actualizado — cambian los usuarios/alcance cliente autorizados
+// para el viaje. `mensajeria` actualiza su proyección de acceso cliente.
+message ViajeClienteActualizado {
+  string viaje_id = 1;
+  string cliente_id = 2;
+  google.protobuf.Timestamp actualizado_en = 3;
+}
+
+// viaje.cerrado — al cerrar el viaje.
+message ViajeCerrado {
+  string viaje_id = 1;
+  google.protobuf.Timestamp cerrado_en = 2;
+}
+
+// viaje.acceso_revocado — cuando el tenant deja de ser dueño del viaje.
+// Consumido por `mensajeria` y `realtime` en V1.
+message ViajeAccesoRevocado {
+  string viaje_id = 1;
+  string cliente_id = 2;
+  google.protobuf.Timestamp revocado_en = 3;
+}
