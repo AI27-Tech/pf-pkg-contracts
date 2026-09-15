@@ -140,7 +140,8 @@ flowchart TB
    cualquier diff (señal de que alguien editó a mano o no regeneró).
 4. **CI publica una versión exacta.** Al empujar el tag `v*-tracer.*`, una sola
    ejecución genera los artefactos, escribe el manifiesto (tag/SHA/checksums) y
-   publica el módulo Go (por el tag) y el paquete npm.
+   publica el módulo Go (por su tag prefijado `packages/api-client-go/vX.Y.Z`) y
+   el paquete npm.
 5. **Los consumidores fijan esa versión exacta** — nunca `latest` ni una ruta
    local —, de modo que todos hablan el mismo contrato congelado.
 
@@ -224,6 +225,13 @@ local, no es un release.
 go get github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go@v0.1.0-tracer.1
 ```
 
+> **Dos tags por release.** El módulo Go vive en el subdirectorio
+> `packages/api-client-go/`, así que Go exige que su versión se etiquete con el
+> prefijo de la ruta: `packages/api-client-go/v0.1.0-tracer.1`. El release usa
+> además el tag limpio `v0.1.0-tracer.1` (npm, GitHub Release, manifiesto). CI
+> crea el tag prefijado automáticamente al publicar; en el comando `go get` se
+> escribe la versión sin prefijo — Go lo traduce al tag prefijado por sí solo.
+
 **TypeScript** — paquete `@ai27-tech/contracts` publicado en GitHub Packages,
 fijado a la versión exacta en `package.json`. `@ai27-tech/ui` permanece
 independiente de los contratos de dominio.
@@ -249,8 +257,8 @@ CI (`.github/workflows/contracts.yml`):
 - **verificar** (push/PR): `buf lint`, `buf breaking`, lint de OpenAPI,
   equivalencia estados↔OpenAPI, codegen reproducible, build de Go, typecheck TS.
 - **publicar** (tag `v*-tracer.*`): una sola ejecución genera, escribe el
-  manifiesto (tag, SHA, checksums), publica el paquete npm y crea el release.
-  El módulo Go se publica por el propio tag Git.
+  manifiesto (tag, SHA, checksums), publica el paquete npm, crea el tag
+  prefijado del módulo Go (`packages/api-client-go/vX.Y.Z`) y crea el release.
 
 ---
 

@@ -135,6 +135,24 @@ jobs:
       - name: Escribir manifiesto (tag, SHA, checksums)
         run: make manifest
 
+      - name: Publicar el módulo Go (tag prefijado por subdirectorio)
+        # El módulo Go vive en packages/api-client-go/, un subdirectorio. Go exige
+        # que la versión de un módulo anidado se etiquete con el prefijo de su
+        # ruta: `packages/api-client-go/vX.Y.Z`. El tag de release `vX.Y.Z` que
+        # dispara este job resuelve el módulo RAÍZ (que no existe), no el anidado.
+        # Se crea aquí el tag prefijado, apuntando al mismo commit del release,
+        # para que `go get .../packages/api-client-go@vX.Y.Z` resuelva.
+        run: |
+          version="${GITHUB_REF_NAME}"
+          gotag="packages/api-client-go/${version}"
+          if git rev-parse -q --verify "refs/tags/${gotag}" >/dev/null; then
+            echo "El tag ${gotag} ya existe; no se recrea (prerelease inmutable)."
+          else
+            git tag -a "${gotag}" "${GITHUB_SHA}" -m "Módulo Go de ${version}"
+            git push origin "${gotag}"
+            echo "Publicado el módulo Go como ${gotag}."
+          fi
+
       - name: Publicar paquete npm (@ai27-tech/contracts)
         working-directory: packages/api-client-ts
         run: |
@@ -155,8 +173,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # El módulo Go se publica por el propio tag Git (go get lo resuelve por
-      # tag/SHA). No hay registry adicional: el tag ES la publicación.
+      # El módulo Go se publica por su tag prefijado `packages/api-client-go/vX.Y.Z`
+      # (paso anterior); go get lo resuelve por tag/SHA. No hay registry adicional.
       - name: Crear GitHub Release con fuentes y manifiesto
         uses: softprops/action-gh-release@v2
         with:
