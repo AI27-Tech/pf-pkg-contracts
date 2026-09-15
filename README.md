@@ -61,6 +61,96 @@ scripts/
 
 ---
 
+## Cómo funciona
+
+La idea central: **el contrato se escribe una vez, y el código se _genera_ desde
+él** — para Go (backend) y TypeScript (frontends). Nadie escribe a mano un
+cliente HTTP, un enum de dominio ni un tipo de evento; todos salen de la misma
+fuente. Así un desarrollador de backend y uno de frontend usan tipos generados
+del **mismo archivo** y no pueden discrepar sobre qué es un `viaje` o qué campos
+lleva un endpoint.
+
+```mermaid
+flowchart TB
+    subgraph FUENTES["Fuentes contractuales (se escriben a mano)"]
+        E["contracts/estados/viaje.estados.yaml<br/><i>máquina de estados como dato</i>"]
+        O["contracts/openapi/*.yaml<br/><i>API HTTP por servicio (3.0.3)</i>"]
+        V["contracts/events/**.proto<br/><i>eventos de dominio</i>"]
+    end
+
+    subgraph GEN["Generación reproducible · scripts/generar.sh (make · CI)"]
+        direction TB
+        GE["tools/gen-estados"]
+        BND["redocly bundle<br/><i>resuelve $ref, inline _comunes</i>"]
+        OAPI["oapi-codegen (Go)<br/>openapi-typescript (TS)"]
+        BUF["buf generate"]
+        BND --> OAPI
+    end
+
+    subgraph ART["Artefactos generados (versión exacta)"]
+        GO["packages/api-client-go<br/><i>módulo Go</i>"]
+        TS["@ai27-tech/contracts<br/><i>paquete npm</i>"]
+    end
+
+    subgraph CHECK["Verificación (make verify · CI)"]
+        CE["check-estados<br/><i>enum OpenAPI == estados</i>"]
+        LINT["buf lint + redocly lint<br/><i>sobre el bundle</i>"]
+        BRK["buf breaking<br/><i>vs pf-contracts-m</i>"]
+        REPRO["check-reproducible<br/><i>regenerar sin diffs</i>"]
+    end
+
+    E --> GE --> GO & TS
+    O --> BND
+    OAPI --> GO & TS
+    V --> BUF --> GO & TS
+
+    E -.-> CE
+    O -.-> CE & LINT
+    V -.-> LINT & BRK
+    GO -.-> REPRO
+    TS -.-> REPRO
+
+    ART ==>|"go get / npm @ v0.1.0-tracer.1"| CONS["Servicios y frontends<br/><i>consumen por versión exacta</i>"]
+
+    classDef fuente fill:#14532d,color:#fff
+    classDef art fill:#1e3a8a,color:#fff
+    classDef chk fill:#7c2d12,color:#fff
+    class E,O,V fuente
+    class GO,TS art
+    class CE,LINT,BRK,REPRO chk
+```
+
+**El flujo, paso a paso:**
+
+1. **Escribes o cambias una fuente** en `contracts/` (un estado, un endpoint, un
+   evento). Nunca editas el código generado.
+2. **`scripts/generar.sh` regenera todo** por un único camino, con versiones de
+   generador fijadas para que el resultado sea reproducible (mismo commit +
+   toolchain → mismos bytes):
+   - los estados van directo a Go y TS con `tools/gen-estados`;
+   - cada spec de OpenAPI se **empaqueta** (`redocly bundle`, que inlina
+     `_comunes.yaml`) y de ahí salen el cliente Go (`oapi-codegen`) y los tipos
+     TS (`openapi-typescript`);
+   - los eventos Protobuf se generan con `buf generate`.
+3. **La verificación protege el contrato** (en `make verify` y en CI):
+   `check-estados` confirma que el enum del spec de `operacion` no se desvíe de
+   la fuente de estados; `redocly lint` valida los specs empaquetados y
+   `buf lint` los eventos; `buf breaking` impide quitar o renumerar un campo que
+   un consumidor todavía lee; y `check-reproducible` regenera y falla si queda
+   cualquier diff (señal de que alguien editó a mano o no regeneró).
+4. **CI publica una versión exacta.** Al empujar el tag `v*-tracer.*`, una sola
+   ejecución genera los artefactos, escribe el manifiesto (tag/SHA/checksums) y
+   publica el módulo Go (por el tag) y el paquete npm.
+5. **Los consumidores fijan esa versión exacta** — nunca `latest` ni una ruta
+   local —, de modo que todos hablan el mismo contrato congelado.
+
+Qué se versiona y qué no: las **fuentes** y la **rebanada de estados generada**
+sí se commitean; los clientes de OpenAPI y los tipos de evento generados **no**
+(los ignora `.gitignore` y los regenera CI), para que la fuente y su artefacto
+no puedan divergir en el árbol.
+
+---
+
 ## La máquina de estados es un DATO, con una sola fuente
 
 `contracts/estados/viaje.estados.yaml` es la fuente canónica del enum del

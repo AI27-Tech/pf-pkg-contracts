@@ -7,6 +7,40 @@ publicación están definidos en `.kiro/steering/registro-de-cambios.md`.
 
 ## [Sin publicar]
 
+### 2026-09-15 12:54:02 (America/Mexico_City)
+
+- **Tipo:** Añadido
+- **Alcance:** documentación
+- **Resumen:** se agregó al `README.md` la sección «Cómo funciona» con un
+  diagrama Mermaid del flujo del repositorio: de las fuentes contractuales
+  (estados, OpenAPI, eventos) a la generación reproducible (gen-estados, redocly
+  bundle + oapi-codegen/openapi-typescript, buf generate), la verificación
+  (check-estados, lint, breaking, reproducibilidad) y el consumo por versión
+  exacta. Explica qué se versiona y qué se regenera.
+- **Archivos afectados:**
+  - `README.md` — nueva sección «Cómo funciona» con diagrama y flujo paso a paso.
+
+### 2026-09-15 12:53:00 (America/Mexico_City)
+
+- **Tipo:** Corregido
+- **Alcance:** contratos, openapi, CI
+- **Resumen:** se corrigieron los errores de `redocly lint` que hacían fallar la
+  canalización. (1) `examples` (palabra de OpenAPI 3.1) se cambió por `example`
+  en `_comunes.yaml`. (2) El patrón `allOf: [$ref] + nullable: true`, inválido en
+  3.0.x, se reescribió: los `$ref` a tipos string (`Id`, `Cursor`,
+  `MarcaTiempo`) pasan a `type: string` + `nullable: true` (con su `format`), y
+  los `$ref` a objetos (`AsignacionEntrada`, `Eta`) se referencian directamente
+  al ser campos opcionales (ausente = sin valor). (3) `make lint-openapi` ahora
+  hace `redocly bundle` y lintea el bundle, de modo que el `securityScheme`
+  `bearerCognito` de `_comunes.yaml` queda resuelto y la regla `security-defined`
+  no falla. (4) Se agregó `redocly.yaml` que apaga `info-license` (la licencia
+  vive en `package.json`, no por documento).
+- **Archivos afectados:**
+  - `contracts/openapi/_comunes.yaml` — `examples`→`example`; `Pagina.cursor_siguiente` nullable inline.
+  - `contracts/openapi/{identidad,catalogos,operacion,bff,reportes}.yaml` — patrón nullable corregido.
+  - `redocly.yaml` — configuración de lint (nuevo).
+  - `Makefile` — `lint-openapi` ahora empaqueta con `redocly bundle` antes de lintear.
+
 ### 2026-09-15 12:34:43 (America/Mexico_City)
 
 - **Tipo:** Corregido

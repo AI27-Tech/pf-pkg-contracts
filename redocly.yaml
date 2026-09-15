@@ -1,0 +1,14 @@
+# Configuración de redocly para el lint de los specs de OpenAPI del tracer.
+# El lint corre sobre los BUNDLES (specs con sus $ref resueltos, incluido el
+# securityScheme bearerCognito de _comunes.yaml), no sobre los archivos fuente
+# sueltos: la regla `security-defined` exige que el esquema esté en el mismo
+# documento, cosa que sólo es cierta tras el bundle.
+rules:
+  # Un paquete de contratos no declara licencia por documento; la licencia del
+  # artefacto vive en package.json (npm) y en el repositorio.
+  info-license: off
+  # Reglas recomendadas para el resto.
+  no-unused-components: warn
+  operation-4xx-response: warn
+  operation-operationId: error
+  no-server-example.com: off

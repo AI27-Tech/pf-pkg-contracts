@@ -25,16 +25,16 @@ info:
   x-ai27-tracer: true
 
 servers:
-  - url: /
-    description: Ruta base montada por el despliegue.
+- url: /
+  description: Ruta base montada por el despliegue.
 
 security:
-  - bearerCognito: []
+- bearerCognito: []
 
 tags:
-  - name: sesion
-    description: Sesión propia del llamante (singular).
-  - name: viajes
+- name: sesion
+  description: Sesión propia del llamante (singular).
+- name: viajes
 
 paths:
   /api/v1/sesion:
@@ -48,23 +48,23 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/CredencialesEntrada" }
+            schema: {$ref: "#/components/schemas/CredencialesEntrada"}
       responses:
         "201":
           description: Sesión iniciada.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Sesion" }
-        "400": { $ref: "_comunes.yaml#/components/responses/SolicitudInvalida" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+              schema: {$ref: "#/components/schemas/Sesion"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
     delete:
       operationId: cerrarSesion
       tags: [sesion]
       summary: Cerrar sesión (logout).
       description: Delega la revocación en `identidad`, que publica `sesion.revocada`.
       responses:
-        "204": { description: Sesión cerrada. }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+        "204": {description: Sesión cerrada.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
 
   /api/v1/sesion/refresh:
     post:
@@ -78,15 +78,15 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/RefrescoEntrada" }
+            schema: {$ref: "#/components/schemas/RefrescoEntrada"}
       responses:
         "200":
           description: Sesión refrescada.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Sesion" }
-        "400": { $ref: "_comunes.yaml#/components/responses/SolicitudInvalida" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+              schema: {$ref: "#/components/schemas/Sesion"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
 
   /api/v1/viajes:
     post:
@@ -101,45 +101,45 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/CrearViajeEntrada" }
+            schema: {$ref: "#/components/schemas/CrearViajeEntrada"}
       responses:
         "201":
           description: Viaje creado.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ViajeResumen" }
-        "400": { $ref: "_comunes.yaml#/components/responses/SolicitudInvalida" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "403": { $ref: "_comunes.yaml#/components/responses/Prohibido" }
-        "409": { $ref: "_comunes.yaml#/components/responses/Conflicto" }
+              schema: {$ref: "#/components/schemas/ViajeResumen"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
     get:
       operationId: listarViajes
       tags: [viajes]
       summary: Listar viajes con filtros, por alcance.
       description: Alcance de flota para interno; alcance de tenant para cliente (P9, P10).
       parameters:
-        - name: estado
-          in: query
-          required: false
-          schema: { type: string }
-        - name: cursor
-          in: query
-          required: false
-          schema: { $ref: "_comunes.yaml#/components/schemas/Cursor" }
+      - name: estado
+        in: query
+        required: false
+        schema: {type: string}
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
       responses:
         "200":
           description: Página de viajes.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PaginaViajesResumen" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+              schema: {$ref: "#/components/schemas/PaginaViajesResumen"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
 
   /api/v1/viajes/{id}:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
     get:
       operationId: seguirViaje
       tags: [viajes]
@@ -154,9 +154,9 @@ paths:
           description: Vista compuesta del viaje.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ViajeSeguimiento" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+              schema: {$ref: "#/components/schemas/ViajeSeguimiento"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
 components:
   schemas:
@@ -165,7 +165,7 @@ components:
       additionalProperties: false
       required: [usuario, contrasena]
       properties:
-        usuario: { type: string }
+        usuario: {type: string}
         contrasena:
           type: string
           format: password
@@ -175,24 +175,24 @@ components:
       additionalProperties: false
       required: [refresh_token]
       properties:
-        refresh_token: { type: string }
+        refresh_token: {type: string}
 
     Sesion:
       type: object
       additionalProperties: false
       required: [sesion_id, access_token, expira_en]
       properties:
-        sesion_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
-        access_token: { type: string }
-        refresh_token: { type: string }
-        expira_en: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+        sesion_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        access_token: {type: string}
+        refresh_token: {type: string}
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
 
     CrearViajeEntrada:
       type: object
       additionalProperties: false
       required: [origen, destinos]
       properties:
-        origen: { type: string }
+        origen: {type: string}
         destinos:
           type: array
           minItems: 1
@@ -201,28 +201,30 @@ components:
             additionalProperties: false
             required: [nombre]
             properties:
-              nombre: { type: string }
-              numero_envio: { type: string }
+              nombre: {type: string}
+              numero_envio: {type: string}
         cliente_id:
-          allOf:
-            - $ref: "_comunes.yaml#/components/schemas/Id"
+          type: string
+          format: uuid
           nullable: true
+          description: Opcional; mismo formato que `Id`. null si no aplica.
         fecha_hora_servicio:
-          allOf:
-            - $ref: "_comunes.yaml#/components/schemas/MarcaTiempo"
+          type: string
+          format: date-time
           nullable: true
-        tipo_servicio: { type: string }
+          description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+        tipo_servicio: {type: string}
 
     ViajeResumen:
       type: object
       additionalProperties: false
       required: [id, estado, origen]
       properties:
-        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         estado:
           type: string
           description: Token de estado tal como lo publica `operacion` (ADR 19).
-        origen: { type: string }
+        origen: {type: string}
 
     PaginaViajesResumen:
       type: object
@@ -231,11 +233,11 @@ components:
       properties:
         items:
           type: array
-          items: { $ref: "#/components/schemas/ViajeResumen" }
+          items: {$ref: "#/components/schemas/ViajeResumen"}
         cursor_siguiente:
-          allOf:
-            - $ref: "_comunes.yaml#/components/schemas/Cursor"
+          type: string
           nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
     HitoCliente:
       type: object
       additionalProperties: false
@@ -266,7 +268,7 @@ components:
         estado:
           type: string
           enum: [en_atencion, resuelta]
-        marca_tiempo: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+        marca_tiempo: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
         impacto_eta:
           type: string
           nullable: true
@@ -275,17 +277,17 @@ components:
       additionalProperties: false
       required: [id, hito, incidencias]
       properties:
-        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
-        hito: { $ref: "#/components/schemas/HitoCliente" }
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        hito: {$ref: "#/components/schemas/HitoCliente"}
         eta:
           description: ETA estimado, no en vivo; con marca de obsolescencia (stale).
           type: object
           additionalProperties: false
           required: [valor, obsoleto]
           properties:
-            valor: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
-            obsoleto: { type: boolean }
+            valor: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+            obsoleto: {type: boolean}
           nullable: true
         incidencias:
           type: array
-          items: { $ref: "#/components/schemas/IncidenciaCurada" }
+          items: {$ref: "#/components/schemas/IncidenciaCurada"}

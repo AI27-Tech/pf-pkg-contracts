@@ -26,15 +26,15 @@ info:
   x-ai27-tracer: true
 
 servers:
-  - url: /
-    description: Ruta base montada por el despliegue; los paths incluyen /api/v1.
+- url: /
+  description: Ruta base montada por el despliegue; los paths incluyen /api/v1.
 
 security:
-  - bearerCognito: []
+- bearerCognito: []
 
 tags:
-  - name: sesiones
-    description: Emisión, refresco, revocación y snapshot de revocación.
+- name: sesiones
+  description: Emisión, refresco, revocación y snapshot de revocación.
 
 paths:
   /api/v1/sesiones:
@@ -50,15 +50,15 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/CredencialesEntrada" }
+            schema: {$ref: "#/components/schemas/CredencialesEntrada"}
       responses:
         "201":
           description: Sesión emitida.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SesionEmitida" }
-        "400": { $ref: "_comunes.yaml#/components/responses/SolicitudInvalida" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+              schema: {$ref: "#/components/schemas/SesionEmitida"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
 
   /api/v1/sesiones/refresh:
     post:
@@ -73,23 +73,23 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/RefrescoEntrada" }
+            schema: {$ref: "#/components/schemas/RefrescoEntrada"}
       responses:
         "200":
           description: Sesión refrescada con claims recompuestos.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SesionEmitida" }
-        "400": { $ref: "_comunes.yaml#/components/responses/SolicitudInvalida" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+              schema: {$ref: "#/components/schemas/SesionEmitida"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
 
   /api/v1/sesiones/{id}:
     parameters:
-      - name: id
-        in: path
-        required: true
-        description: sesion_id propio de AI27.
-        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    - name: id
+      in: path
+      required: true
+      description: sesion_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
     delete:
       operationId: revocarSesion
       tags: [sesiones]
@@ -98,10 +98,10 @@ paths:
         Operación de dos pasos: revoca en Cognito y compromete la revocación
         local con su evento `sesion.revocada` en la misma transacción.
       responses:
-        "204": { description: Sesión revocada. }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "403": { $ref: "_comunes.yaml#/components/responses/Prohibido" }
-        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+        "204": {description: Sesión revocada.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
     get:
       operationId: obtenerSesion
       tags: [sesiones]
@@ -114,9 +114,9 @@ paths:
           description: Estado durable de la sesión.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/EstadoSesion" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+              schema: {$ref: "#/components/schemas/EstadoSesion"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/sesiones/revocadas:
     get:
@@ -128,18 +128,18 @@ paths:
         cada consumidor reconstruya su proyección y haga catch-up sin ventana
         (ADR 26). Consumido por los servicios protegidos, no por el navegador.
       parameters:
-        - name: cursor
-          in: query
-          required: false
-          description: Cursor de continuación; ausente para el snapshot inicial.
-          schema: { $ref: "_comunes.yaml#/components/schemas/Cursor" }
+      - name: cursor
+        in: query
+        required: false
+        description: Cursor de continuación; ausente para el snapshot inicial.
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
       responses:
         "200":
           description: Página de tombstones y cursor.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PaginaRevocaciones" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
+              schema: {$ref: "#/components/schemas/PaginaRevocaciones"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
 
 components:
   schemas:
@@ -181,22 +181,23 @@ components:
         refresh_token:
           type: string
           description: Token de refresco, cuando el flujo lo entrega.
-        expira_en: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
 
     EstadoSesion:
       type: object
       additionalProperties: false
       required: [sesion_id, revocada, expira_en]
       properties:
-        sesion_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        sesion_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         revocada:
           type: boolean
           description: true si la sesión está revocada de forma durable.
         revocada_en:
-          allOf:
-            - $ref: "_comunes.yaml#/components/schemas/MarcaTiempo"
+          type: string
+          format: date-time
           nullable: true
-        expira_en: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+          description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
 
     Revocacion:
       type: object
@@ -206,9 +207,9 @@ components:
         Tombstone de revocación. Coincide en forma con el payload del evento
         `sesion.revocada` (contracts/events).
       properties:
-        sesion_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
-        revocada_en: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
-        expira_en: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+        sesion_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        revocada_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
 
     PaginaRevocaciones:
       type: object
@@ -217,8 +218,8 @@ components:
       properties:
         items:
           type: array
-          items: { $ref: "#/components/schemas/Revocacion" }
+          items: {$ref: "#/components/schemas/Revocacion"}
         cursor_siguiente:
-          allOf:
-            - $ref: "_comunes.yaml#/components/schemas/Cursor"
+          type: string
           nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.

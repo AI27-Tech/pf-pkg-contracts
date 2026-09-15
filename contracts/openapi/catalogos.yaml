@@ -22,17 +22,17 @@ info:
   x-ai27-tracer: true
 
 servers:
-  - url: /
-    description: Ruta base montada por el despliegue.
+- url: /
+  description: Ruta base montada por el despliegue.
 
 security:
-  - bearerCognito: []
+- bearerCognito: []
 
 tags:
-  - name: clientes
-  - name: contratos
-  - name: recursos
-    description: Unidades y custodios — los recursos de AI27 (ADR 24).
+- name: clientes
+- name: contratos
+- name: recursos
+  description: Unidades y custodios — los recursos de AI27 (ADR 24).
 
 paths:
   /api/v1/clientes:
@@ -41,25 +41,25 @@ paths:
       tags: [clientes]
       summary: Listar clientes (expediente comercial), por alcance interno.
       parameters:
-        - name: cursor
-          in: query
-          required: false
-          schema: { $ref: "_comunes.yaml#/components/schemas/Cursor" }
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
       responses:
         "200":
           description: Página de clientes.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PaginaClientes" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "403": { $ref: "_comunes.yaml#/components/responses/Prohibido" }
+              schema: {$ref: "#/components/schemas/PaginaClientes"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
   /api/v1/clientes/{id}:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
     get:
       operationId: obtenerCliente
       tags: [clientes]
@@ -69,16 +69,16 @@ paths:
           description: Cliente.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Cliente" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+              schema: {$ref: "#/components/schemas/Cliente"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/contratos/{id}:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
     get:
       operationId: obtenerContrato
       tags: [contratos]
@@ -87,43 +87,43 @@ paths:
         La lectura vigente-a-una-fecha es la que la exportación probatoria
         necesita. En V1 el contrato/SLA es informativo (DEC-022 #4).
       parameters:
-        - name: a_fecha
-          in: query
-          required: false
-          description: Devuelve la versión vigente a esa fecha (probatorio).
-          schema: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+      - name: a_fecha
+        in: query
+        required: false
+        description: Devuelve la versión vigente a esa fecha (probatorio).
+        schema: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
       responses:
         "200":
           description: Contrato.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Contrato" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+              schema: {$ref: "#/components/schemas/Contrato"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/sla/{id}:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
     get:
       operationId: obtenerSla
       tags: [contratos]
       summary: SLA de un contrato, vigente o vigente a una fecha.
       parameters:
-        - name: a_fecha
-          in: query
-          required: false
-          schema: { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+      - name: a_fecha
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
       responses:
         "200":
           description: SLA.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Sla" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+              schema: {$ref: "#/components/schemas/Sla"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/unidades:
     get:
@@ -131,25 +131,25 @@ paths:
       tags: [recursos]
       summary: Listar unidades (vehículos de flota de AI27).
       parameters:
-        - name: cursor
-          in: query
-          required: false
-          schema: { $ref: "_comunes.yaml#/components/schemas/Cursor" }
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
       responses:
         "200":
           description: Página de unidades.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PaginaUnidades" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "403": { $ref: "_comunes.yaml#/components/responses/Prohibido" }
+              schema: {$ref: "#/components/schemas/PaginaUnidades"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
   /api/v1/unidades/{id}/aptitud:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
     get:
       operationId: aptitudUnidad
       tags: [recursos]
@@ -159,19 +159,19 @@ paths:
         el contrato/SLA de un cliente. Es una AFIRMACIÓN, no una reserva: no
         garantiza asignación (operacion.md (a)).
       parameters:
-        - name: cliente_id
-          in: query
-          required: true
-          description: Cliente para cuyo contrato/SLA se evalúa la aptitud.
-          schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+      - name: cliente_id
+        in: query
+        required: true
+        description: Cliente para cuyo contrato/SLA se evalúa la aptitud.
+        schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
       responses:
         "200":
           description: Afirmación de aptitud.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Aptitud" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+              schema: {$ref: "#/components/schemas/Aptitud"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/custodios:
     get:
@@ -179,42 +179,42 @@ paths:
       tags: [recursos]
       summary: Listar custodios (personas de AI27 que viajan en la unidad).
       parameters:
-        - name: cursor
-          in: query
-          required: false
-          schema: { $ref: "_comunes.yaml#/components/schemas/Cursor" }
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
       responses:
         "200":
           description: Página de custodios.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PaginaCustodios" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "403": { $ref: "_comunes.yaml#/components/responses/Prohibido" }
+              schema: {$ref: "#/components/schemas/PaginaCustodios"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
   /api/v1/custodios/{id}/aptitud:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
     get:
       operationId: aptitudCustodio
       tags: [recursos]
       summary: Afirmación de aptitud administrativa de un custodio.
       parameters:
-        - name: cliente_id
-          in: query
-          required: true
-          schema: { $ref: "_comunes.yaml#/components/schemas/Id" }
+      - name: cliente_id
+        in: query
+        required: true
+        schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
       responses:
         "200":
           description: Afirmación de aptitud.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Aptitud" }
-        "401": { $ref: "_comunes.yaml#/components/responses/NoAutorizado" }
-        "404": { $ref: "_comunes.yaml#/components/responses/NoEncontrado" }
+              schema: {$ref: "#/components/schemas/Aptitud"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
 components:
   schemas:
@@ -223,15 +223,16 @@ components:
       additionalProperties: false
       required: [id, nombre, estado]
       properties:
-        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
-        nombre: { type: string }
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        nombre: {type: string}
         estado:
           type: string
           enum: [activo, inactivo]
         contrato_vigente_id:
-          allOf:
-            - $ref: "_comunes.yaml#/components/schemas/Id"
+          type: string
+          format: uuid
           nullable: true
+          description: Opcional; mismo formato que `Id`. null si no aplica.
     PaginaClientes:
       type: object
       additionalProperties: false
@@ -239,31 +240,31 @@ components:
       properties:
         items:
           type: array
-          items: { $ref: "#/components/schemas/Cliente" }
+          items: {$ref: "#/components/schemas/Cliente"}
         cursor_siguiente:
-          allOf:
-            - $ref: "_comunes.yaml#/components/schemas/Cursor"
+          type: string
           nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
     Contrato:
       type: object
       additionalProperties: false
       required: [id, cliente_id, vigencia_desde]
       properties:
-        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
-        cliente_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
-        vigencia_desde:
-          { $ref: "_comunes.yaml#/components/schemas/MarcaTiempo" }
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        vigencia_desde: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
         vigencia_hasta:
-          allOf:
-            - $ref: "_comunes.yaml#/components/schemas/MarcaTiempo"
+          type: string
+          format: date-time
           nullable: true
+          description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
     Sla:
       type: object
       additionalProperties: false
       required: [id, contrato_id]
       properties:
-        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
-        contrato_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        contrato_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         descripcion:
           type: string
           description: Compromiso informativo en V1 (DEC-022 #4).
@@ -273,7 +274,7 @@ components:
       additionalProperties: false
       required: [id, tipo, estado]
       properties:
-        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         tipo:
           type: string
           description: >-
@@ -282,7 +283,7 @@ components:
         economico:
           type: string
           description: Número económico de la unidad.
-        placas: { type: string }
+        placas: {type: string}
         estado:
           type: string
           enum: [activa, inactiva]
@@ -294,19 +295,19 @@ components:
       properties:
         items:
           type: array
-          items: { $ref: "#/components/schemas/Unidad" }
+          items: {$ref: "#/components/schemas/Unidad"}
         cursor_siguiente:
-          allOf:
-            - $ref: "_comunes.yaml#/components/schemas/Cursor"
+          type: string
           nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
     Custodio:
       type: object
       additionalProperties: false
       required: [id, nombre, estado]
       properties:
-        id: { $ref: "_comunes.yaml#/components/schemas/Id" }
-        nombre: { type: string }
-        telefono: { type: string }
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        nombre: {type: string}
+        telefono: {type: string}
         estado:
           type: string
           enum: [activo, inactivo]
@@ -318,11 +319,11 @@ components:
       properties:
         items:
           type: array
-          items: { $ref: "#/components/schemas/Custodio" }
+          items: {$ref: "#/components/schemas/Custodio"}
         cursor_siguiente:
-          allOf:
-            - $ref: "_comunes.yaml#/components/schemas/Cursor"
+          type: string
           nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
     Aptitud:
       type: object
       additionalProperties: false
@@ -331,9 +332,9 @@ components:
         Afirmación de aptitud administrativa. `apto=false` no reserva ni bloquea;
         informa a `operacion`, que decide dentro de su transacción de asignación.
       properties:
-        recurso_id: { $ref: "_comunes.yaml#/components/schemas/Id" }
-        apto: { type: boolean }
+        recurso_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        apto: {type: boolean}
         motivos:
           type: array
           description: Motivos de no aptitud, cuando `apto=false`.
-          items: { type: string }
+          items: {type: string}
