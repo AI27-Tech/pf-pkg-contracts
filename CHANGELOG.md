@@ -23,6 +23,23 @@ publicación están definidos en `.kiro/steering/registro-de-cambios.md`.
     reemplaza el clone HTTPS por fetch + ref local y agrega la guarda de
     ausencia de línea base.
 
+### 2026-09-15 12:33:11 (America/Mexico_City)
+
+- **Tipo:** Añadido
+- **Alcance:** documentación
+- **Resumen:** se incorporó la regla obligatoria de registro de cambios e idioma
+  de la documentación como archivo de steering siempre activo, adaptada a este
+  repositorio (Go + TypeScript, rutas de `contracts/`, `packages/`, `tools/` y
+  `.github/workflows/`; sin validador `pytest` todavía). Alinea la disciplina de
+  `CHANGELOG.md` y la política de español con la del resto de los repositorios
+  de la plataforma. Como parte del mismo cambio, se reescribió `CHANGELOG.md` al
+  formato de entradas fechadas que la regla define, conservando el contenido de
+  la entrada inicial.
+- **Archivos afectados:**
+  - `.kiro/steering/registro-de-cambios.md` — regla nueva (`inclusion: always`).
+  - `CHANGELOG.md` — reestructurado al formato de entradas fechadas bajo
+    `## [Sin publicar]`.
+
 ### 2026-09-15 12:06:03 (America/Mexico_City)
 
 - **Tipo:** Añadido
