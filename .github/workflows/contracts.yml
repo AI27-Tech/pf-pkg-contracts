@@ -1,0 +1,142 @@
+# =============================================================================
+# CI de pf-pkg-contracts (E0-T2 / ADR 25).
+#
+# Dos responsabilidades:
+#   - verificar: en cada push/PR. Lint de OpenAPI y eventos, breaking check,
+#     equivalencia estados<->OpenAPI, codegen reproducible y build de Go.
+#   - publicar:  al empujar un tag `v*-tracer.*`. UNA sola ejecución publica las
+#     fuentes, los artefactos Go y TS, y el manifiesto con tag/SHA/checksums
+#     bajo la misma versión contractual.
+#
+# El freeze del tracer (v0.1.0-tracer.1) sólo existe cuando este workflow corre
+# sobre su tag y produce SHA, checksums y manifiesto verificables.
+# =============================================================================
+name: contracts
+
+on:
+  push:
+    branches: [pf-contracts-m, pf-contracts-d, pf-contracts-q]
+    tags: ['v*-tracer.*']
+  pull_request:
+    branches: [pf-contracts-m, pf-contracts-d, pf-contracts-q]
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.27'
+  NODE_VERSION: '24'
+  BUF_VERSION: '1.45.0'
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # breaking check necesita historia
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          version: ${{ env.BUF_VERSION }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lint de eventos (buf lint)
+        run: buf lint
+
+      - name: Breaking check de eventos contra la rama principal
+        if: github.ref != 'refs/heads/pf-contracts-m'
+        run: buf breaking --against 'https://github.com/AI27-Tech/pf-pkg-contracts.git#branch=pf-contracts-m'
+        continue-on-error: false
+
+      - name: Lint de OpenAPI (redocly)
+        run: make lint-openapi
+
+      - name: Equivalencia estados <-> OpenAPI
+        run: make check-estados
+
+      - name: Codegen reproducible (no debe dejar diffs)
+        run: make check-reproducible
+
+      - name: Build y vet del módulo Go
+        run: |
+          cd packages/api-client-go
+          go build ./...
+          go vet ./...
+
+      - name: Typecheck del paquete TS
+        run: |
+          cd packages/api-client-ts
+          npm install --no-audit --no-fund
+          npx tsc --noEmit
+
+  publicar:
+    # Sólo al empujar un tag de tracer. Depende de que la verificación pase.
+    needs: verificar
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-tracer.')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # crear release y adjuntar artefactos
+      packages: write   # publicar el paquete npm en GitHub Packages
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://npm.pkg.github.com'
+
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          version: ${{ env.BUF_VERSION }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verificar que el tag coincide con VERSION
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="$(cat VERSION)"
+          if [ "$tag" != "$version" ]; then
+            echo "El tag ($tag) no coincide con VERSION ($version)"; exit 1
+          fi
+
+      - name: Generar artefactos (misma ejecución que publica)
+        run: make generate
+
+      - name: Confirmar codegen reproducible
+        run: make check-reproducible
+
+      - name: Escribir manifiesto (tag, SHA, checksums)
+        run: make manifest
+
+      - name: Publicar paquete npm (@ai27-tech/contracts)
+        working-directory: packages/api-client-ts
+        run: |
+          npm install --no-audit --no-fund
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # El módulo Go se publica por el propio tag Git (go get lo resuelve por
+      # tag/SHA). No hay registry adicional: el tag ES la publicación.
+      - name: Crear GitHub Release con fuentes y manifiesto
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          fail_on_unmatched_files: true
+          files: |
+            manifiesto/tracer.manifest.json
+            VERSION

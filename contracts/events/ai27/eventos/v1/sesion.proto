@@ -1,0 +1,26 @@
+// Evento `sesion.revocada`, publicado por `identidad` (ADR 26, E0-T4).
+// Superficie AMPLIA. Orden por agregado = sesion_id.
+//
+// Payload MÍNIMO por diseño: sesion_id, revocada_en, expira_en. Cada consumidor
+// protegido mantiene una proyección local de tombstones reconstruible y rechaza
+// tokens todavía vigentes cuyo sesion_id esté revocado, con corte máximo de
+// 30 segundos (ADR 26).
+syntax = "proto3";
+
+package ai27.eventos.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1;eventosv1";
+
+// sesion.revocada — una por cada sesión revocada. Una revocación masiva de un
+// sujeto genera exactamente un evento por cada sesión activa.
+message SesionRevocada {
+  // Identificador de sesión propio de AI27, estable durante todos los refresh.
+  string sesion_id = 1;
+  // Momento de la revocación (tiempo de dominio), en UTC.
+  google.protobuf.Timestamp revocada_en = 2;
+  // Expiración natural del token asociado. El tombstone puede descartarse
+  // después de este instante: un token expirado ya no se acepta por otras vías.
+  google.protobuf.Timestamp expira_en = 3;
+}

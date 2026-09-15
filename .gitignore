@@ -1,0 +1,27 @@
+# Manifiesto: es evidencia de release, la produce CI al etiquetar. No se commitea.
+/manifiesto/tracer.manifest.json
+
+# Artefactos generados desde OpenAPI y eventos. Se regeneran de forma
+# reproducible con `make generate` y CI verifica que no haya diffs. NO se
+# commitean para evitar deriva entre la fuente y el artefacto.
+/packages/api-client-go/identidad/
+/packages/api-client-go/catalogos/
+/packages/api-client-go/operacion/
+/packages/api-client-go/bff/
+/packages/api-client-go/reportes/
+/packages/api-client-go/eventos/
+/packages/api-client-ts/src/openapi/
+/packages/api-client-ts/src/eventos/
+
+# NOTA: los estados generados (packages/api-client-go/estados/ y
+# packages/api-client-ts/src/estados/) SÍ se commitean: son la rebanada mínima
+# que muchos consumidores usan y su revisión en diff es barata y determinista.
+
+# Dependencias y salidas de herramientas
+node_modules/
+*.tsbuildinfo
+/dist/
+
+# Binarios compilados de las herramientas Go (se ejecutan con `go run`)
+/tools/gen-estados/gen-estados
+/tools/check-estados/check-estados

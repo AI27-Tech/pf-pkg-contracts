@@ -1,0 +1,15 @@
+# Configuración del módulo buf para los eventos de dominio (contracts/events).
+# `buf lint` y `buf breaking` corren en CI (E0-T2). El breaking check compara
+# contra la última release publicada.
+version: v2
+modules:
+  - path: contracts/events
+lint:
+  use:
+    - STANDARD
+  # Los nombres de tipo de evento y sus campos usan sustantivos de dominio en
+  # español (ADR 22). Eso no infringe las reglas de estilo de buf, que aplican a
+  # la forma (PascalCase para mensajes, snake_case para campos), no al idioma.
+breaking:
+  use:
+    - FILE

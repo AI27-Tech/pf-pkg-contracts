@@ -1,0 +1,23 @@
+# Generación reproducible de tipos de evento para Go y TypeScript desde
+# contracts/events. Los plugins se fijan por versión exacta para que el mismo
+# commit y toolchain produzcan los mismos bytes (ADR 25: codegen reproducible).
+#
+# Salidas:
+#   - Go: packages/api-client-go/eventos/...
+#   - TS: packages/api-client-ts/src/eventos/...
+version: v2
+# Sin managed mode: el `go_package` explícito de cada .proto gobierna la ruta de
+# salida (apunta al módulo publicado). Managed mode lo sobrescribiría.
+plugins:
+  # --- Go ---
+  - remote: buf.build/protocolbuffers/go:v1.34.2
+    out: packages/api-client-go/eventos
+    opt:
+      - paths=source_relative
+  # --- TypeScript (protobuf-es) ---
+  - remote: buf.build/bufbuild/es:v1.10.0
+    out: packages/api-client-ts/src/eventos
+    opt:
+      - target=ts
+inputs:
+  - directory: contracts/events
