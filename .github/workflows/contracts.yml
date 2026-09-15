@@ -139,7 +139,19 @@ jobs:
         working-directory: packages/api-client-ts
         run: |
           npm install --no-audit --no-fund
-          npm publish
+          version="$(node -p "require('./package.json').version")"
+          # npm exige un dist-tag explícito para prereleases (versiones con
+          # sufijo -algo), para no mover `latest` a una prerelease. Se deriva el
+          # dist-tag del sufijo: 0.1.0-tracer.1 -> `tracer`. Una versión estable
+          # (sin sufijo) se publica bajo `latest`.
+          if [[ "$version" == *-* ]]; then
+            disttag="$(printf '%s' "${version#*-}" | sed 's/[.].*$//')"
+            echo "Prerelease detectada ($version); publicando bajo dist-tag '$disttag'."
+            npm publish --tag "$disttag"
+          else
+            echo "Versión estable ($version); publicando bajo 'latest'."
+            npm publish
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

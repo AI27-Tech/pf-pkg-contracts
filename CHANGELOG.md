@@ -3,6 +3,21 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026:09:15 13:35
+
+**Resumen:** Se corrigió el paso de publicación de npm del job `publicar`, que
+fallaba con `You must specify a tag using --tag when publishing a prerelease
+version` al publicar la versión prerelease `0.1.0-tracer.1`.
+
+**Cambios:**
+- El paso ahora deriva un dist-tag de npm del sufijo de prerelease de la versión
+  (`0.1.0-tracer.1` → `--tag tracer`) y publica con `npm publish --tag`; una
+  versión estable (sin sufijo) se publica bajo `latest`. npm no permite publicar
+  una prerelease bajo `latest`, de ahí el error.
+
+**Archivos modificados:**
+- `.github/workflows/contracts.yml`
+
 ## 2026:09:15 12:59
 
 **Resumen:** Se adoptó el formato de `CHANGELOG.md` definido por la regla de
