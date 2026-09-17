@@ -3,6 +3,25 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026:09:15 14:03
+
+**Resumen:** Se corrigió la publicación del módulo Go, que no se podía resolver
+con `go get` porque vive en el subdirectorio `packages/api-client-go/` y el tag
+de release `v0.1.0-tracer.1` sólo resuelve el módulo raíz (inexistente).
+
+**Cambios:**
+- El job `publicar` ahora crea y empuja, junto al release, el tag prefijado por
+  subdirectorio que Go exige para un módulo anidado
+  (`packages/api-client-go/vX.Y.Z`), apuntando al mismo commit del release. Es
+  idempotente: no recrea el tag si ya existe.
+- Se documentó en el `README.md` el esquema de dos tags por release (el limpio
+  `vX.Y.Z` para npm/Release/manifiesto y el prefijado para el módulo Go) y se
+  aclaró que en `go get` la versión se escribe sin prefijo.
+
+**Archivos modificados:**
+- `.github/workflows/contracts.yml`
+- `README.md`
+
 ## 2026:09:15 13:35
 
 **Resumen:** Se corrigió el paso de publicación de npm del job `publicar`, que
