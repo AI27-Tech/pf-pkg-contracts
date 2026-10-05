@@ -218,10 +218,10 @@ jobs:
         # Esto es lo que no se hizo en tracer.1 y por eso se retiró: el tag
         # resolvía, pero no traía nada importable.
         #
-        # AI27-Tech/* es privado (decisión de owner), así que go no debe validar
-        # el módulo contra el checksum DB público ni pedir credenciales de forma
-        # interactiva: GOPRIVATE/GONOSUMDB cubren el prefijo y el token llega por
-        # el secreto del repo a un .netrc efímero, nunca hardcodeado.
+        # AI27-Tech/* es privado (decisión de owner): GOPRIVATE cubre el prefijo
+        # para el checksum DB y el proxy, y el token llega por el secreto del repo
+        # a una config de git efímera (URL rewriting), nunca hardcodeado. El
+        # runner no trae credenciales para el clon del caché de módulos.
         run: make contract-tests
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

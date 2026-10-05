@@ -57,22 +57,29 @@ MOD
     #
     # GOPRIVATE cubre el prefijo para que go no intente validar el módulo contra
     # el checksum DB público (sum.golang.org), que no conoce repos privados
-    # (decisión de owner #3: AI27-Tech/* es privado). GONOSUMDB/GONOSUMCHECK y
-    # GOFLAGS los respeta el toolchain según versión.
+    # (decisión de owner #3: AI27-Tech/* es privado). Con GOPRIVATE tampoco se
+    # consulta el proxy, así que la resolución es por git directo.
     export GOPRIVATE="github.com/AI27-Tech/*"
-    export GONOSUMDB="github.com/AI27-Tech/*"
-    export GONOSUMCHECK=1
-    export GONOSUMDB_CHECK=1
     export GOFLAGS="${GOFLAGS:-} -mod=mod"
 
-    # Credenciales: si hay token en el entorno (CI lo inyecta desde el secreto del
-    # repo) se usa un .netrc efímero; si no, se confía en la config de git local.
+    # Credenciales. AI27-Tech/* es privado, así que el clon que go hace para
+    # resolver el módulo necesita autenticación. El runner no tiene ninguna:
+    # `actions/checkout` deja un http.extraheader en el repo clonado, que no
+    # aplica al clon nuevo del caché de módulos.
+    #
+    # Se reescriben las URLs de git en vez de usar .netrc porque go no lee NETRC
+    # (lo intentamos: el fallo fue "could not read Username for
+    # 'https://github.com': terminal prompts disabled"). `insteadOf` sí lo
+    # respeta git, que es quien hace el clon. El token llega por el secreto del
+    # repo a una config efímera, nunca al log ni al repositorio.
     if [ -n "${GITHUB_TOKEN:-}" ]; then
+      GIT_CFG="$WORK/gitconfig"
       umask 077
-      cat > "$WORK/netrc" <<NETRC
-machine github.com login x-access-token password ${GITHUB_TOKEN}
-NETRC
-      export NETRC="$WORK/netrc"
+      cat > "$GIT_CFG" <<GITCFG
+[url "https://x-access-token:${GITHUB_TOKEN}@github.com/"]
+    insteadOf = https://github.com/
+GITCFG
+      export GIT_CONFIG_GLOBAL="$GIT_CFG"
     fi
 
     echo "    - go get github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go@${VERSION}"
