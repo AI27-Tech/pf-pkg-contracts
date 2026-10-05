@@ -165,6 +165,13 @@ jobs:
       - name: Escribir manifiesto (tag, SHA, checksums)
         run: make manifest
 
+      - name: Verificar el manifiesto contra el árbol etiquetado
+        # Escribir el manifiesto es sólo la mitad de la garantía: hay que
+        # comprobar que los bytes que promete son los del commit etiquetado, y
+        # que no deja ningún artefacto fuera. Es lo que convierte el manifiesto
+        # en evidencia del freeze y no en un documento decorativo.
+        run: make verificar-manifiesto
+
       - name: Publicar el módulo Go (tag prefijado por subdirectorio)
         # El módulo Go vive en packages/api-client-go/, un subdirectorio. Go exige
         # que la versión de un módulo anidado se etiquete con el prefijo de su

@@ -139,3 +139,7 @@ contract-tests: ## Contract tests del repo (consumidor limpio + consistencia del
 .PHONY: manifest
 manifest: ## Escribe el manifiesto del tracer (tag, SHA, checksums)
 	./scripts/manifiesto.sh
+
+.PHONY: verificar-manifiesto
+verificar-manifiesto: ## Verifica que el manifiesto congela el árbol actual (coherencia y completitud)
+	./scripts/verificar-manifiesto.sh
