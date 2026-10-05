@@ -260,6 +260,11 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           fail_on_unmatched_files: true
+          # Una versión con sufijo de prerelease (-tracer.N) DEBE marcarse como
+          # prerelease en GitHub. Sin esto la release aparece como estable y se
+          # mezcla con las releases de verdad; `latest` en npm tampoco se mueve,
+          # pero en GitHub el distintivo es la única señal que ve un humano.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             manifiesto/tracer.manifest.json
             VERSION
