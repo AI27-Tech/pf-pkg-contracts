@@ -3,6 +3,33 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026:10:05 22:40
+
+**Resumen:** Se ejecutaron las **pruebas negativas** que exige la definición de
+listo del handoff y dos de ellas no estaban documentadas. Las tres pasan. Una
+sorprendió: quitar un campo `required` de un cuerpo de petición **no** es un
+cambio incompatible, y el gate acierta al no marcarlo.
+
+**Verificación (pruebas negativas, con salida real):**
+- `make breaking-openapi` — se agrega `notas` como campo **nuevo y `required`**
+  a `CrearViajeEntrada` (`bff.yaml`), que sigue siendo un spec válido para
+  `lint-openapi`. Resultado: `1 changes: 1 error, 0 warning, 0 info`,
+  `error [new-required-request-property]`, y el script sale **2** (rojo). Al
+  revertir: `OK: OpenAPI compatible con v0.1.0-tracer.3`. El invariante «un
+  cambio incompatible de OpenAPI rompe CI» está comprobado, no supuesto.
+- El caso inverso **no** es incompatible: quitar `destinos` de
+  `required: [origen, destinos]` deja el gate en verde, y está bien que sea así.
+  `required` en una petición significa «el cliente debe enviar esto»; relajarlo
+  amplía lo que el servidor acepta, así que un cliente viejo sigue funcionando.
+  Escribir el test al revés habría producido una falsa alarma y, peor, la
+  impresión de que el gate estaba probado cuando sólo se había probado que
+  dispara ante el caso fácil.
+- `make check-reproducible` — se edita a mano `roles.gen.go`
+  (`"cliente"` → `"CLIENTE"`). Resultado: `check-arbol-limpio` lo detecta con
+  `1 file changed` y sale **2** antes de regenerar, con el mensaje de que los
+  `*.gen.*` no se editan a mano. Al revertir: `OK: los artefactos generados
+  coinciden con la fuente`.
+
 ## 2026:10:05 22:05
 
 **Resumen:** `v0.1.0-tracer.3` sustituye a `v0.1.0-tracer.2`, que se retira.
