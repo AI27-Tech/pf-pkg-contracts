@@ -67,6 +67,10 @@ breaking: ## buf breaking contra la última release publicada (rama principal)
 breaking-openapi: ## Rompe CI ante un cambio incompatible de OpenAPI vs la última release
 	./scripts/breaking-openapi.sh
 
+# oasdiff se ancla en tools/oasdiff (ver tools/oasdiff/tools.go) para que el
+# veredicto sea el mismo en local y en CI. Fijado en v1.11.7; no actualizar sin
+# revisar el diff que introduce.
+
 .PHONY: check-estados
 check-estados: ## Verifica que el enum OpenAPI de operacion coincida con estados/
 	cd tools/check-estados && go run . \

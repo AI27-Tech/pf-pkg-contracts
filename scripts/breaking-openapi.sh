@@ -22,7 +22,10 @@ RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$RAIZ"
 
 # Fijado por versión: el mismo commit + toolchain deben dar el mismo veredicto.
-OASDIFF_VERSION="${OASDIFF_VERSION:-v1.11.7}"
+# oasdiff se ancla como dependencia del repo (tools/oasdiff), igual que
+# oapi-codegen en tools/openapi-codegen, para que local y CI usen exactamente el
+# mismo binario.
+OASDIFF="go run github.com/oasdiff/oasdiff"
 REDOCLY="npx --yes @redocly/cli@1.25.11"
 
 SERVICIOS=(identidad catalogos operacion bff reportes)
@@ -82,7 +85,14 @@ for s in "${SERVICIOS[@]}"; do
   fi
 
   echo "    - $s: cambió; diff de compatibilidad contra $base"
-  if npx --yes "oasdiff@${OASDIFF_VERSION}" breaking "$previo" "$actual" --format text; then
+  # Rutas absolutas: se corre desde tools/oasdiff para que el binario.resolve su
+  # go.mod, pero los specs se pasan con ruta absoluta porque el subdirectorio de
+  # trabajo cambia.
+  abs_prev="$(cd "$(dirname "$previo")" && pwd)/$(basename "$previo")"
+  abs_actual="$(cd "$(dirname "$actual")" && pwd)/$(basename "$actual")"
+  # `--fail-on ERR` es lo que hace que oasdiff salga distinto de cero ante un
+  # cambio incompatible; sin él, el diff se imprimiría y el script daría verde.
+  if ( cd tools/oasdiff && $OASDIFF breaking "$abs_prev" "$abs_actual" --format text --fail-on ERR ); then
     echo "        compatible"
   else
     echo "        INCOMPATIBLE (arriba el detalle). Sube la versión o publica un"
