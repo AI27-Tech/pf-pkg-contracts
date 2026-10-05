@@ -3,6 +3,83 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026:10:05 18:56
+
+**Resumen:** Se preparó la prerelease `v0.1.0-tracer.2`, que sustituye a
+`tracer.1` (retirada). El defecto de `tracer.1` fue que su tag resolvía el módulo
+Go sin llevar dentro los clientes generados: no había nada importable. Aquí los
+artefactos se versionan, y el pipeline verifica que el árbol etiquetado esté
+completo y que el manifiesto congele sus bytes antes de publicar.
+
+**Cambios:**
+- Los clientes generados de Go y TypeScript ahora se commitean (decisión de owner,
+  opción (a)) y `.gitignore` deja de ignorarlos. Congelar el contrato exige que lo
+  que el consumidor resuelve por versión esté en el tag.
+- Se agregó el registro de tipos de evento `contracts/events/registro.tipos.yaml`,
+  su generador `tools/gen-registro` (Go y TS) y el verificador
+  `tools/check-registro`, que contrasta registro, `.proto` e `INVENTARIO.md`.
+- Se agregó el enum canónico de roles (ocho roles) y su generador
+  `tools/gen-roles`, con validador en runtime: un rol desconocido se rechaza en
+  servidor, nunca se degrada a un permiso por defecto.
+- `check-reproducible` ahora compara cada artefacto contra su blob en `HEAD` en
+  vez de contra el árbol de trabajo. Antes sólo veía lo que la generación dejaba:
+  editar a mano un `*.gen.go` y commitearlo pasaba el chequeo, porque regenerar lo
+  sobrescribía antes de comparar. Se agrega `check-arbol-limpio` para el caso
+  simétrico (editar sin commitear).
+- Se agregó `scripts/breaking-openapi.sh` (oasdiff contra el último tag de tracer
+  publicado, no contra una rama: una rama no es evidencia de freeze) y `oasdiff`
+  quedó anclado en `tools/oasdiff`, como `oapi-codegen` en `tools/openapi-codegen`.
+  Antes el script invocaba `npx oasdiff@v1.11.7`, un paquete npm que no existe.
+- Se agregó `scripts/check-tags.sh`: el árbol etiquetado debe traer los nueve
+  paquetes del módulo Go. Convierte en fallo de CI el defecto de `tracer.1`.
+- Se agregó `scripts/contract-tests.sh`: compila un consumidor limpio que importa
+  y usa los nueve paquetes contra el tag publicado, más la consistencia del
+  registro. Corre en el job `publicar` después de crear el tag prefijado y antes
+  de publicar en npm (invariante 7 de ADR 25).
+- El manifiesto ahora congela fuentes **y** artefactos (tres clases de checksums,
+  incluyendo `package.json` y `tsconfig.json` del paquete npm) y se valida a sí
+  mismo como JSON. Se agregó `scripts/verificar-manifiesto.sh`, que comprueba
+  coherencia (cada archivo listado hashea igual), completitud (cada archivo del
+  alcance está listado, en ambos sentidos) e identidad (tag/SHA contra `HEAD`).
+- El job `verificar` ganó breaking de OpenAPI, consistencia del registro y
+  contenido del árbol etiquetado; `publicar` verifica el manifiesto y corre los
+  contract tests antes de publicar en npm.
+- El `README.md` documenta la estructura real, los nuevos objetivos de `make`, el
+  orden del pipeline y el estado del freeze.
+
+**Archivos modificados:**
+- `.github/workflows/contracts.yml`
+- `.gitignore`
+- `Makefile`
+- `VERSION`
+- `README.md`
+- `contracts/events/INVENTARIO.md`
+- `contracts/events/registro.tipos.yaml` (nuevo)
+- `contracts/openapi/_comunes.yaml`
+- `contracts/openapi/bff.yaml`
+- `contracts/openapi/catalogos.yaml`
+- `contracts/openapi/identidad.yaml`
+- `contracts/openapi/operacion.yaml`
+- `contracts/openapi/reportes.yaml`
+- `packages/api-client-go/` (clientes, eventos, estados, roles y registro generados)
+- `packages/api-client-go/doc.go`
+- `packages/api-client-go/go.mod`
+- `packages/api-client-ts/package.json`
+- `packages/api-client-ts/package-lock.json`
+- `packages/api-client-ts/src/index.ts`
+- `packages/api-client-ts/src/` (tipos OpenAPI, eventos, estados, roles y registro)
+- `scripts/breaking-openapi.sh` (nuevo)
+- `scripts/check-reproducible.sh` (nuevo)
+- `scripts/check-tags.sh` (nuevo)
+- `scripts/contract-tests.sh` (nuevo)
+- `scripts/generar.sh`
+- `scripts/manifiesto.sh`
+- `scripts/verificar-manifiesto.sh` (nuevo)
+- `tools/check-registro/` (nuevo)
+- `tools/gen-registro/` (nuevo)
+- `tools/gen-roles/` (nuevo)
+- `tools/oasdiff/` (nuevo)
+
 ## 2026:09:15 14:03
 
 **Resumen:** Se corrigió la publicación del módulo Go, que no se podía resolver
