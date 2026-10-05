@@ -85,13 +85,23 @@ check-tags: ## Falla si el árbol etiquetado no trae cada paquete publicado
 	./scripts/check-tags.sh
 
 .PHONY: check-reproducible
-check-reproducible: check-no-ignorados generate ## Falla si la generación deja diffs (codegen no reproducible)
+check-reproducible: check-no-ignorados check-arbol-limpio generate ## Falla si alguien editó a mano un artefacto generado
+	./scripts/check-reproducible.sh
+
+.PHONY: check-arbol-limpio
+check-arbol-limpio: ## Falla si packages/ ya difiere de HEAD ANTES de regenerar
+	# Detecta la edición a mano de un cliente generado cuando aún no se ha
+	# regenerado: `make generate` sobrescribe el archivo, así que el diff de
+	# después no la vería. Si el árbol ya difiere de lo commiteado, alguien tocó
+	# un *.gen.* a mano (o no regeneró tras cambiar la fuente).
 	@if [ -n "$$(git status --porcelain packages/)" ]; then \
-		echo "ERROR: la generación produjo cambios no commiteados (no reproducible o sin regenerar):"; \
+		echo "ERROR: packages/ ya difiere de HEAD antes de regenerar."; \
 		git --no-pager diff --stat packages/; \
+		echo "       Los *.gen.* no se editan a mano: cambia la fuente en contracts/"; \
+		echo "       y vuelve a generar, o revierte el cambio."; \
 		exit 1; \
 	fi
-	@echo "OK: artefactos generados sin diffs."
+	@echo "OK: packages/ coincide con HEAD antes de regenerar."
 
 .PHONY: check-no-ignorados
 check-no-ignorados: ## Falla si algún artefacto generado está en .gitignore

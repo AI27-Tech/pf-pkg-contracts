@@ -73,8 +73,26 @@ jobs:
       - name: Lint de OpenAPI (redocly)
         run: make lint-openapi
 
+      - name: Breaking check de OpenAPI vs la última release publicada
+        # Invariante 4 de ADR 25: un cambio incompatible de OpenAPI debe romper
+        # CI contra la última release publicada. Antes de tracer.2 sólo corría
+        # `buf breaking`, que cubre los EVENTOS; el spec HTTP podía cambiar de
+        # forma incompatible sin que nada lo notara.
+        # Se compara contra el último TAG de tracer, no contra una rama: una
+        # rama no es evidencia de freeze (invariante 2). Sin release previa, el
+        # script lo dice y sale 0, igual que `buf breaking` en el primer release.
+        run: make breaking-openapi
+
       - name: Equivalencia estados <-> OpenAPI
         run: make check-estados
+
+      - name: Consistencia del registro de eventos (registro <-> .proto <-> INVENTARIO)
+        run: make check-registro
+
+      - name: El árbol publicado trae todos los paquetes del módulo Go
+        # Así se convirtió el defecto de tracer.1 (tag sin clientes generados)
+        # en un fallo de CI en vez de en un retiro de release.
+        run: make check-tags
 
       - name: Codegen reproducible (no debe dejar diffs)
         run: make check-reproducible
@@ -132,6 +150,18 @@ jobs:
       - name: Confirmar codegen reproducible
         run: make check-reproducible
 
+      - name: Verificar el árbol YA etiquetado (evidencia del freeze)
+        # A diferencia del paso equivalente en `verificar`, aquí se comprueba el
+        # commit etiquetado, que es lo que los consumidores van a resolver. Un tag
+        # sin los clientes generados es exactamente como se retiró tracer.1.
+        run: ./scripts/check-tags.sh "${GITHUB_SHA}"
+
+      - name: Consistencia del registro de eventos
+        # El grueso de los contract tests (registro <-> .proto <-> INVENTARIO) no
+        # depende del tag, así que corre aquí y falla antes de publicar nada. El
+        # consumidor limpio necesita el tag prefijado, que se crea más abajo.
+        run: make check-registro
+
       - name: Escribir manifiesto (tag, SHA, checksums)
         run: make manifest
 
@@ -152,6 +182,23 @@ jobs:
             git push origin "${gotag}"
             echo "Publicado el módulo Go como ${gotag}."
           fi
+
+      - name: Contract tests — consumidor limpio del módulo publicado
+        # Invariante 7 de ADR 25: los contract tests pasan antes de publicar el
+        # resto de los artefactos. Se ejecutan contra el tag ya empujado, en un
+        # módulo Go NUEVO, sin go.work ni replace: la resolución tiene que ocurrir
+        # por versión publicada o el test no prueba nada (ADR 17).
+        #
+        # Esto es lo que no se hizo en tracer.1 y por eso se retiró: el tag
+        # resolvía, pero no traía nada importable.
+        #
+        # AI27-Tech/* es privado (decisión de owner), así que go no debe validar
+        # el módulo contra el checksum DB público ni pedir credenciales de forma
+        # interactiva: GOPRIVATE/GONOSUMDB cubren el prefijo y el token llega por
+        # el secreto del repo a un .netrc efímero, nunca hardcodeado.
+        run: make contract-tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publicar paquete npm (@ai27-tech/contracts)
         working-directory: packages/api-client-ts
