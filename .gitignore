@@ -1,21 +1,20 @@
 # Manifiesto: es evidencia de release, la produce CI al etiquetar. No se commitea.
 /manifiesto/tracer.manifest.json
 
-# Artefactos generados desde OpenAPI y eventos. Se regeneran de forma
-# reproducible con `make generate` y CI verifica que no haya diffs. NO se
-# commitean para evitar deriva entre la fuente y el artefacto.
-/packages/api-client-go/identidad/
-/packages/api-client-go/catalogos/
-/packages/api-client-go/operacion/
-/packages/api-client-go/bff/
-/packages/api-client-go/reportes/
-/packages/api-client-go/eventos/
-/packages/api-client-ts/src/openapi/
-/packages/api-client-ts/src/eventos/
-
-# NOTA: los estados generados (packages/api-client-go/estados/ y
-# packages/api-client-ts/src/estados/) SÍ se commitean: son la rebanada mínima
-# que muchos consumidores usan y su revisión en diff es barata y determinista.
+# Los artefactos generados desde OpenAPI y eventos SÍ se commitean (decisión de
+# owner, 2026-10-02, opción (a) del C1 del handoff tracer.2).
+#
+# Motivo: la release `v0.1.0-tracer.1` se retiró porque el tag del módulo Go no
+# traía los clientes generados (el .gitignore los excluía y CI sólo generaba en
+# el runner), de modo que `go get` no daba nada importable a ningún servicio. Al
+# commitear lo generado, el árbol etiquetado es el artefacto: lo que se publica
+# es exactamente lo que se revisó, y `make check-reproducible` vuelve a tener
+# efecto (antes `git status --porcelain packages/` no veía archivos ignorados, así
+# que la deriva fuente↔artefacto era invisible).
+#
+# Invariante: los *.gen.go / *.gen.ts NUNCA se editan a mano. Se cambian las
+# fuentes en `contracts/` y se regenera con `make generate`; CI regenera y falla
+# si queda diff.
 
 # Dependencias y salidas de herramientas
 node_modules/

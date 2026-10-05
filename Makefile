@@ -28,6 +28,20 @@ generate-estados: ## Genera solo los tipos de estados (Go + TS)
 	  -go ../../packages/api-client-go/estados/viaje_estados.gen.go \
 	  -ts ../../packages/api-client-ts/src/estados/viajeEstados.gen.ts
 
+.PHONY: generate-registro
+generate-registro: ## Genera solo el registro de tipos de evento (Go + TS)
+	cd tools/gen-registro && go run . \
+	  -src ../../contracts/events/registro.tipos.yaml \
+	  -go ../../packages/api-client-go/registro/registro.gen.go \
+	  -ts ../../packages/api-client-ts/src/registro/registro.gen.ts
+
+.PHONY: generate-roles
+generate-roles: ## Genera solo el enum de roles (Go + TS)
+	cd tools/gen-roles && go run . \
+	  -src ../../contracts/openapi/_comunes.yaml \
+	  -go ../../packages/api-client-go/roles/roles.gen.go \
+	  -ts ../../packages/api-client-ts/src/roles/roles.gen.ts
+
 .PHONY: lint
 lint: lint-events lint-openapi ## Corre todos los linters de contrato
 
@@ -49,25 +63,64 @@ lint-openapi: ## Valida cada spec de OpenAPI (bundle + lint con $ref resueltos)
 breaking: ## buf breaking contra la última release publicada (rama principal)
 	buf breaking --against '.git#branch=pf-contracts-m'
 
+.PHONY: breaking-openapi
+breaking-openapi: ## Rompe CI ante un cambio incompatible de OpenAPI vs la última release
+	./scripts/breaking-openapi.sh
+
 .PHONY: check-estados
 check-estados: ## Verifica que el enum OpenAPI de operacion coincida con estados/
 	cd tools/check-estados && go run . \
 	  -estados ../../contracts/estados/viaje.estados.yaml \
 	  -openapi ../../contracts/openapi/operacion.yaml
 
+.PHONY: check-registro
+check-registro: ## Verifica que registro, .proto e INVENTARIO.md coincidan
+	cd tools/check-registro && go run . \
+	  -registro ../../contracts/events/registro.tipos.yaml \
+	  -proto ../../contracts/events \
+	  -inventario ../../contracts/events/INVENTARIO.md
+
+.PHONY: check-tags
+check-tags: ## Falla si el árbol etiquetado no trae cada paquete publicado
+	./scripts/check-tags.sh
+
 .PHONY: check-reproducible
-check-reproducible: generate ## Falla si la generación deja diffs (codegen no reproducible)
+check-reproducible: check-no-ignorados generate ## Falla si la generación deja diffs (codegen no reproducible)
 	@if [ -n "$$(git status --porcelain packages/)" ]; then \
-	  echo "ERROR: la generación produjo cambios no commiteados (no reproducible o sin regenerar):"; \
-	  git --no-pager diff --stat packages/; \
-	  exit 1; \
+		echo "ERROR: la generación produjo cambios no commiteados (no reproducible o sin regenerar):"; \
+		git --no-pager diff --stat packages/; \
+		exit 1; \
 	fi
 	@echo "OK: artefactos generados sin diffs."
 
+.PHONY: check-no-ignorados
+check-no-ignorados: ## Falla si algún artefacto generado está en .gitignore
+	# Sin este chequeo, `git status --porcelain packages/` no ve lo ignorado y
+	# check-reproducible da verde con deriva fuente<->artefacto. Así fue como
+	# v0.1.0-tracer.1 publicó el módulo Go sin los clientes (C1 del handoff).
+	#
+	# Se miran sólo los directorios de ARTEFACTOS GENERADOS; `node_modules/` sí
+	# debe seguir ignorado (es una dependencia instalada, no un artefacto
+	# contractual).
+	@ignorado="$$(git ls-files --others --ignored --exclude-standard -- \
+	  packages/api-client-go packages/api-client-ts/src | \
+	  grep -v '^packages/api-client-ts/src/.*/node_modules/' || true)"; \
+	if [ -n "$$ignorado" ]; then \
+		echo "ERROR: hay artefactos generados que .gitignore excluye."; \
+		echo "       No se publicarían en el tag, que es exactamente el defecto de tracer.1:"; \
+		echo "$$ignorado"; \
+		exit 1; \
+	fi
+	@echo "OK: ningún artefacto generado está ignorado."
+
 .PHONY: verify
-verify: lint check-estados ## Verificación estática que no requiere publicar
+verify: lint check-estados check-registro check-tags ## Verificación estática que no requiere publicar
 	cd packages/api-client-go && go build ./... && go vet ./...
 	@echo "OK: verify."
+
+.PHONY: contract-tests
+contract-tests: ## Contract tests del repo (consumidor limpio + consistencia del registro)
+	./scripts/contract-tests.sh
 
 .PHONY: manifest
 manifest: ## Escribe el manifiesto del tracer (tag, SHA, checksums)

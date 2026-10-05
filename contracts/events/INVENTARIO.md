@@ -1,4 +1,11 @@
-# Inventario contractual de eventos — tracer `v0.1.0-tracer.1`
+# Inventario contractual de eventos — tracer `v0.1.0-tracer.2`
+
+> **La tabla de abajo es prosa; el dato legible por máquina es
+> `contracts/events/registro.tipos.yaml`.** Desde `tracer.2` el registro es un
+> archivo que las tools leen y sobre el que se generan los clientes Go y TS
+> (`tools/gen-registro`), y `make check-registro` falla si esta tabla, el
+> registro y los `.proto` dejan de decir lo mismo. Si cambias una fila de aquí,
+> cámbiala también allá: el checker es el que mantiene la correspondencia.
 
 Este inventario es parte del contrato (E0-T2). Declara, para cada familia de
 evento **aprobada para el tracer**: productor → evento → consumidores durables →
@@ -13,7 +20,7 @@ Reglas que este inventario materializa:
   puede entrar al fanout. Un tipo/versión ausente del registro se rechaza antes
   del fanout y, si llega a un consumidor, se trata como evento venenoso.
 - El tracer usa **sólo la superficie amplia**. La superficie restringida
-  (conversación, bandeja, emergencia) es de E3/E7 y **no** entra en `tracer.1`.
+  (conversación, bandeja, emergencia) es de E3/E7 y **no** entra en `tracer.2`.
 
 ## Familias del tracer
 
@@ -44,7 +51,7 @@ Reglas que este inventario materializa:
 - **`catalogo.actualizado`** — Efecto idempotente (invalida caché). Reentregar
   sólo vuelve a invalidar.
 
-## Fuera del tracer (declarado, NO incluido en `tracer.1`)
+## Fuera del tracer (declarado, NO incluido en `tracer.2`)
 
 Las familias de conversación, bandeja y emergencia (E3/E7) pertenecen a la
 **superficie restringida** y se incorporan en releases posteriores compatibles.

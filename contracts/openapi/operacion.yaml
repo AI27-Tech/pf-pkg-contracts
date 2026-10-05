@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — operacion
-  version: 0.1.0-tracer.1
+  version: 0.1.0-tracer.2
   description: >-
     Progreso del viaje: creación, transiciones, asignación, bitácora,
     incidencias y auditoría. Consumido por `bff`, nunca por el frontend directo.
@@ -318,10 +318,10 @@ paths:
     get:
       operationId: consultarAuditoria
       tags: [auditoria]
-      summary: Consulta probatoria de la auditoría del viaje (administrator).
+      summary: Consulta probatoria de la auditoría del viaje (administrador).
       description: >-
-        Consulta/exportación probatoria. Sólo administrator (DEC-036); cada
-        acceso queda a su vez auditado.
+        Consulta/exportación probatoria. Sólo el rol `administrador` (DEC-036);
+        cada acceso queda a su vez auditado.
       parameters:
       - name: cursor
         in: query
