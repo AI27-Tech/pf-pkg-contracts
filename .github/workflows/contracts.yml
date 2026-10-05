@@ -151,6 +151,15 @@ jobs:
             echo "El tag ($tag) no coincide con VERSION ($version)"; exit 1
           fi
 
+      - name: Identidad de git para etiquetar
+        # El runner no trae user.name/user.email, y `git tag -a` aborta con
+        # "Committer identity unknown" (exit 128) ANTES de publicar nada. La
+        # identidad es la del bot de Actions: este pipeline no commitea código,
+        # sólo etiqueta el commit ya publicado.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Generar artefactos (misma ejecución que publica)
         run: make generate
 
@@ -189,8 +198,11 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME}"
           gotag="packages/api-client-go/${version}"
-          if git rev-parse -q --verify "refs/tags/${gotag}" >/dev/null; then
-            echo "El tag ${gotag} ya existe; no se recrea (prerelease inmutable)."
+          # La idempotencia se consulta al ORIGEN, no a los refs locales: el
+          # checkout de un push de tag no trae los demás tags, así que un reintento
+          # del job intentaría recrear un tag ya publicado.
+          if git ls-remote --exit-code --tags origin "refs/tags/${gotag}" >/dev/null 2>&1; then
+            echo "El tag ${gotag} ya existe en el origen; no se recrea (prerelease inmutable)."
           else
             git tag -a "${gotag}" "${GITHUB_SHA}" -m "Módulo Go de ${version}"
             git push origin "${gotag}"
