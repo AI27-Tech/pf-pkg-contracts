@@ -11,8 +11,8 @@
     "./estados": "./src/estados/viajeEstados.gen.ts",
     "./registro": "./src/registro/registro.gen.ts",
     "./roles": "./src/roles/roles.gen.ts",
-    "./openapi/*": "./src/openapi/*.ts",
-    "./eventos/*": "./src/eventos/*"
+    "./openapi/*": "./src/openapi/*.gen.ts",
+    "./eventos/*": "./src/eventos/*.ts"
   },
   "files": [
     "src"

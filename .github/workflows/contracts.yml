@@ -109,6 +109,13 @@ jobs:
           npm install --no-audit --no-fund
           npx tsc --noEmit
 
+      - name: El paquete TS sirve los subpath que declara en exports
+        # tsc --noEmit mira los archivos por ruta relativa: nunca resuelve un
+        # subpath de 'exports'. Un 'exports' que promete un subpath inexistente
+        # sólo revienta en el build del consumidor, sin relación aparente con
+        # este repo. Se prueba sobre el tarball real, en un proyecto limpio.
+        run: make check-ts-exports
+
   publicar:
     # Sólo al empujar un tag de tracer. Depende de que la verificación pase.
     needs: verificar

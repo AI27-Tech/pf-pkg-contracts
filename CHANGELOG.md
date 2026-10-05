@@ -5,13 +5,24 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 
 ## 2026:10:05 18:56
 
-**Resumen:** Se preparó la prerelease `v0.1.0-tracer.2`, que sustituye a
-`tracer.1` (retirada). El defecto de `tracer.1` fue que su tag resolvía el módulo
-Go sin llevar dentro los clientes generados: no había nada importable. Aquí los
+**Resumen:** Se corrigieron los `exports` del paquete npm, que declaraban
+subpaths que no resolvían, y se agregó la comprobación que lo detecta. Se
+preparó además la prerelease `v0.1.0-tracer.2`, que sustituye a `tracer.1`
+(retirada). El defecto de `tracer.1` fue que su tag resolvía el módulo Go sin
+llevar dentro los clientes generados: no había nada importable. Aquí los
 artefactos se versionan, y el pipeline verifica que el árbol etiquetado esté
 completo y que el manifiesto congele sus bytes antes de publicar.
 
 **Cambios:**
+- `packages/api-client-ts/package.json`: los patrones `./openapi/*` y
+  `./eventos/*` apuntaban a `./src/openapi/*.ts` y `./src/eventos/*`. Los
+  archivos reales se llaman `*.gen.ts`, así que `@ai27-tech/contracts/openapi/bff`
+  devolvía `MODULE_NOT_FOUND` en el consumidor. Ahora son `./src/openapi/*.gen.ts`
+  y `./src/eventos/*.ts`.
+- Se agregó `scripts/check-ts-exports.sh`: empaqueta el tarball que se
+  publicaría, lo instala en un proyecto limpio y resuelve cada subpath declarado
+  en `exports`. `tsc --noEmit` no lo detectaba, porque nunca resuelve subpaths.
+  Probado en positivo y en negativo (con el patrón anterior, que falla).
 - Los clientes generados de Go y TypeScript ahora se commitean (decisión de owner,
   opción (a)) y `.gitignore` deja de ignorarlos. Congelar el contrato exige que lo
   que el consumidor resuelve por versión esté en el tag.
@@ -71,6 +82,7 @@ completo y que el manifiesto congele sus bytes antes de publicar.
 - `scripts/breaking-openapi.sh` (nuevo)
 - `scripts/check-reproducible.sh` (nuevo)
 - `scripts/check-tags.sh` (nuevo)
+- `scripts/check-ts-exports.sh` (nuevo)
 - `scripts/contract-tests.sh` (nuevo)
 - `scripts/generar.sh`
 - `scripts/manifiesto.sh`

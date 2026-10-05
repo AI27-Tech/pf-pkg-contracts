@@ -136,6 +136,10 @@ verify: lint check-estados check-registro check-tags ## Verificación estática 
 contract-tests: ## Contract tests del repo (consumidor limpio + consistencia del registro)
 	./scripts/contract-tests.sh
 
+.PHONY: check-ts-exports
+check-ts-exports: ## Empaqueta el paquete npm y resuelve cada subpath de 'exports' desde el tarball
+	./scripts/check-ts-exports.sh
+
 .PHONY: manifest
 manifest: ## Escribe el manifiesto del tracer (tag, SHA, checksums)
 	./scripts/manifiesto.sh

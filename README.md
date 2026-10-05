@@ -66,6 +66,7 @@ scripts/
   generar.sh                   Único camino de codegen (lo usa make y CI).
   breaking-openapi.sh          oasdiff contra el último tag de tracer publicado.
   check-tags.sh                El árbol etiquetado trae los 9 paquetes del módulo.
+  check-ts-exports.sh          El tarball npm resuelve cada subpath de exports.
   contract-tests.sh            Consumidor limpio del módulo Go + registro.
   manifiesto.sh                Escribe el manifiesto (tag/SHA/checksums).
   verificar-manifiesto.sh      El manifiesto congela el árbol actual, byte a byte.
@@ -282,6 +283,7 @@ make lint                # buf lint (eventos) + redocly lint (OpenAPI)
 make breaking            # buf breaking contra pf-contracts-m
 make breaking-openapi    # oasdiff contra el último tag de tracer publicado
 make contract-tests      # consumidor limpio del módulo Go publicado + registro
+make check-ts-exports    # el tarball npm resuelve cada subpath de 'exports'
 make manifest            # escribe manifiesto/tracer.manifest.json
 make verificar-manifiesto  # el manifiesto congela el árbol actual, byte a byte
 ```
@@ -290,8 +292,8 @@ CI (`.github/workflows/contracts.yml`):
 
 - **verificar** (push/PR): `buf lint`, `buf breaking`, lint de OpenAPI,
   `breaking-openapi`, equivalencia estados↔OpenAPI, consistencia del registro,
-  contenido del árbol etiquetado, codegen reproducible, build de Go, typecheck
-  TS.
+  contenido del árbol etiquetado, codegen reproducible, build de Go, typecheck TS
+  y resolución de los subpath de `exports` desde el tarball.
 - **publicar** (tag `v*-tracer.*`): una sola ejecución genera, confirma que el
   codegen es reproducible, verifica el árbol etiquetado, escribe y verifica el
   manifiesto, publica el módulo Go (tag prefijado
