@@ -209,6 +209,13 @@ jobs:
             echo "Publicado el módulo Go como ${gotag}."
           fi
 
+      - name: El tag del módulo Go apunta al mismo commit del release
+        # Se comprueba DESPUÉS de crearlo: es la evidencia del freeze que
+        # comparten release y módulo Go. Antes no podía comprobarse (el tag no
+        # existía) y en el job verificar exigirlo rompía CI en cuanto había una
+        # release previa, porque ese tag apunta por definición a otro commit.
+        run: ./scripts/check-tags.sh "${GITHUB_SHA}" --verificar-tag-go
+
       - name: Contract tests — consumidor limpio del módulo publicado
         # Invariante 7 de ADR 25: los contract tests pasan antes de publicar el
         # resto de los artefactos. Se ejecutan contra el tag ya empujado, en un

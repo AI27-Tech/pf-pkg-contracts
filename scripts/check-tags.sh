@@ -21,8 +21,30 @@ set -euo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$RAIZ"
 
-# Se puede pasar un ref explícito (el SHA etiquetado en el job publicar).
-REF="${1:-HEAD}"
+# Uso:
+#   check-tags.sh [<ref>] [--verificar-tag-go]
+#
+# <ref>               commit contra el que se comprueba (el SHA etiquetado en el
+#                     job publicar; HEAD si no se indica).
+# --verificar-tag-go  además exige que el tag prefijado del módulo Go apunte al
+#                     MISMO commit. Sólo tiene sentido en el job publicar, y sólo
+#                     justo después de crear ese tag.
+#
+# Por qué el flag es opt-in: en el job verificar (push a rama, antes de
+# publicar) el tag prefijado del release ANTERIOR existe y por definición apunta
+# a otro commit. Exigir la igualdad ahí rompe CI en cuanto hay una release
+# previa, que es justo el estado normal del repo. La igualdad es una propiedad de
+# la publicación, no de cualquier commit.
+REF=""
+verificar_tag_go=0
+for arg in "$@"; do
+  case "$arg" in
+    --verificar-tag-go) verificar_tag_go=1 ;;
+    -*) echo "Opción desconocida: $arg" >&2; exit 2 ;;
+    *) REF="$arg" ;;
+  esac
+done
+[ -n "$REF" ] || REF="HEAD"
 
 GO_DIR="packages/api-client-go"
 
@@ -56,16 +78,22 @@ done
 
 # El tag prefijado que Go resuelve para el módulo anidado debe apuntar al mismo
 # commit que el release. Si difieren, los consumidores fijan una versión cuyo
-# contenido no es el congelado.
+# contenido no es el congelado: el release y el módulo Go cuentan historias
+# distintas.
 tag_prefijado="packages/api-client-go/$(cat VERSION)"
-if git rev-parse -q --verify "refs/tags/$tag_prefijado" >/dev/null; then
-  sha_tag="$(git rev-parse "refs/tags/$tag_prefijado^{commit}")"
+if [ "$verificar_tag_go" -eq 1 ]; then
   sha_ref="$(git rev-parse "$REF^{commit}")"
-  if [ "$sha_tag" != "$sha_ref" ]; then
+  # Se consulta al ORIGEN: en el job publicar el tag lo acaba de crear el paso
+  # anterior empujándolo, y el clon del runner no lo tiene en sus refs locales.
+  sha_tag="$(git ls-remote --tags origin "refs/tags/${tag_prefijado}^{}" 2>/dev/null | awk '{print $1}')"
+  if [ -z "$sha_tag" ]; then
+    echo "  FALTA  el tag $tag_prefijado no existe en el origen"
+    fallos=1
+  elif [ "$sha_tag" != "$sha_ref" ]; then
     echo "  FALTA  el tag $tag_prefijado apunta a ${sha_tag:0:12}, no a ${sha_ref:0:12}"
     fallos=1
   else
-    echo "  ok     el tag $tag_prefijado apunta al mismo commit"
+    echo "  ok     el tag $tag_prefijado apunta al mismo commit del release"
   fi
 fi
 
