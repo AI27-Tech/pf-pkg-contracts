@@ -16,7 +16,7 @@
 #      INVENTARIO.md dicen lo mismo. Delega en tools/check-registro.
 #
 # El contrato productor–consumidor que exige ADR 25 NO se prueba aquí: no hay
-# servicios que consuman todavía. Es una brecha conocida, no un 测试 que se pueda
+# servicios que consuman todavía. Es una brecha conocida, no una prueba que se pueda
 # simular.
 # =============================================================================
 set -euo pipefail
@@ -92,12 +92,13 @@ import (
 
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/bff"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/catalogos"
-	eventosv1 "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/estados"
+	eventosv1 "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/identidad"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/operacion"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/registro"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/reportes"
+	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/roles"
 )
 
 func main() {
@@ -122,21 +123,95 @@ func main() {
 	_ = eventosv1.Sobre{Tipo: "viaje.creado"}
 	_ = eventosv1.ViajeCreado{ViajeId: "v-1"}
 
-	// Los cinco paquetes de cliente HTTP por servicio.
-	var _ bff.Respuesta
-	var _ catalogos.Respuesta
-	var _ identidad.Respuesta
-	var _ operacion.Respuesta
-	var _ reportes.Respuesta
+	// roles/ — el enum canónico de roles y su validación en runtime. Un rol
+	// desconocido se rechaza, no se degrada a un permiso por defecto.
+	if !roles.EsRol("jefe_operativo") {
+		panic("jefe_operativo debe estar en el enum de roles publicado")
+	}
+	if roles.EsRol("operador") {
+		panic("operador no es un rol del contrato y no debe existir")
+	}
+	if len(roles.Todos) != 8 {
+		panic("el contrato declara ocho roles canónicos")
+	}
 
-	// Un cliente generado de verdad: el de identidad debe exponer su constructor.
-	_ = identidad.NewClient
+	// Los cinco paquetes de cliente HTTP por servicio: cada uno debe exponer su
+	// constructor (oapi-codegen) y un tipo de recurso del dominio. Se usan
+	// valores concretos, no `var _`, para que un símbolo ausente o renombrado
+	// rompa la compilación en vez de resolverse a algo vacío.
+	if c, err := bff.NewClient("https://api.ai27.tech"); err != nil || c == nil {
+		panic("bff.NewClient debe construir un cliente")
+	}
+	if c, err := catalogos.NewClient("https://api.ai27.tech"); err != nil || c == nil {
+		panic("catalogos.NewClient debe construir un cliente")
+	}
+	if c, err := identidad.NewClient("https://api.ai27.tech"); err != nil || c == nil {
+		panic("identidad.NewClient debe construir un cliente")
+	}
+	if c, err := operacion.NewClient("https://api.ai27.tech"); err != nil || c == nil {
+		panic("operacion.NewClient debe construir un cliente")
+	}
+	if c, err := reportes.NewClient("https://api.ai27.tech"); err != nil || c == nil {
+		panic("reportes.NewClient debe construir un cliente")
+	}
+
+	// Un viaje del contrato. operacion.EstadoViaje y estados.EstadoViaje son
+	// enums-data distintos por diseño (oapi-codegen genera su propio), pero deben
+	// narr los MISMOS valores: un estado declarado en contracts/estados/ que no
+	// exista en el cliente HTTP deja al consumidor sin forma de expresarlo.
+	//
+	// oapi-codegen no exporta el enum como slice ni como validador, así que el set
+	// se arma con las constantes que sí expone. Es lo que puede comprobar un
+	// consumidor; la equivalencia exhaustiva estado<->spec la hace
+	// `make check-estados` en el job verificar.
+	operacionEstados := map[estados.EstadoViaje]operacion.EstadoViaje{
+		estados.EstadoSolicitado:          operacion.SOLICITADO,
+		estados.EstadoAprobado:            operacion.APROBADO,
+		estados.EstadoRechazadoPorAi27:    operacion.RECHAZADOPORAI27,
+		estados.EstadoRechazadoPorCliente: operacion.RECHAZADOPORCLIENTE,
+		estados.EstadoAsignado:            operacion.ASIGNADO,
+		estados.EstadoAptoParaSalida:      operacion.APTOPARASALIDA,
+		estados.EstadoEnEmbarque:          operacion.ENEMBARQUE,
+		estados.EstadoPatrullaEnCamino:    operacion.PATRULLAENCAMINO,
+		estados.EstadoEnTransito:          operacion.ENTRANSITO,
+		estados.EstadoEnDestino:           operacion.ENDESTINO,
+		estados.EstadoEnDescarga:          operacion.ENDESCARGA,
+		estados.EstadoCerrado:             operacion.CERRADO,
+		estados.EstadoCancelado:           operacion.CANCELADO,
+	}
+	if len(operacionEstados) != len(estados.EstadosViaje) {
+		panic(fmt.Sprintf(
+			"operacion declara %d estados y contracts/estados/ %d: la enumeración quedó desfasada",
+			len(operacionEstados), len(estados.EstadosViaje)))
+	}
+	for canonico, generado := range operacionEstados {
+		if string(generado) != string(canonico) {
+			panic(fmt.Sprintf("operacion.%q y estados.%q no son el mismo estado",
+				string(generado), string(canonico)))
+		}
+	}
+
+	// estados/ — la máquina de estados: transiciones válidas entre estados.
+	if !estados.PuedeTransicionar(estados.EstadoSolicitado, estados.EstadoAprobado) {
+		panic("SOLICITADO -> APROBADO es una transición válida")
+	}
+	if estados.PuedeTransicionar(estados.EstadoCerrado, estados.EstadoEnTransito) {
+		panic("un viaje cerrado no puede volver a tránsito")
+	}
+	if !estados.EstadoCerrado.EsTerminal() {
+		panic("CERRADO es terminal")
+	}
+
+	// Resumen de viaje del bff, el tipo que la web realmente consume. El bff
+	// publica Estado como string (no como enum): el consumidor no debe asumir el
+	// enum canónico en ese borde.
+	_ = bff.ViajeResumen{Estado: string(estados.EstadoAsignado)}
 
 	fmt.Println("consumidor limpio OK")
 }
 GO
 
-    echo "    - go build (importa y usa los 8 paquetes)"
+    echo "    - go build (importa y usa los 9 paquetes)"
     if go build ./... 2>&1; then
       echo "    OK: el módulo publicado compila para un consumidor limpio."
     else
