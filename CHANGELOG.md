@@ -3,6 +3,40 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026:10:05 22:05
+
+**Resumen:** `v0.1.0-tracer.3` sustituye a `v0.1.0-tracer.2`, que se retira.
+`tracer.2` se publicó con `roles.EsInterno()` y su gemelo TS `esInterno`
+devolviendo la semántica de `Audiencia` invertida (`cliente` dado como interno,
+`jefe_operativo` como externo). El defecto de `tracer.2` es el mismo tipo de
+problema que el de `tracer.1`: un artefacto publicado que un consumidor resuelve
+y en el que no puede confiar.
+
+**Cambios:**
+- Versión bumpeada a `v0.1.0-tracer.3` en `VERSION` y `package.json`.
+- Se retira `v0.1.0-tracer.2`: se borran su release, sus dos tags y su versión
+  en el registry npm, de la misma forma en que se retiró `tracer.1`. No queda
+  ningún artefacto defectuoso resoluble.
+- Se corrige `tools/gen-roles` (ver la entrada anterior): `esInterno` se genera
+  como `r != RolCliente` y la generación falla si el enum deja de contener
+  `cliente`.
+- `scripts/contract-tests.sh` ejecuta al consumidor limpio (`go run`) en vez de
+  sólo compilarlo, con la aserción sobre el mapeo a `Audiencia` para los ocho
+  roles. Ese par de cambios es lo que hace imposible que `tracer.3` repita el
+  defecto de `tracer.2` sin que CI se ponga rojo.
+- `.github/workflows/contracts.yml`: el gate de versión compara también
+  `VERSION` con la versión de `packages/api-client-ts/package.json`. Eran dos
+  fuentes de verdad escritas a mano; si la segunda se quedaba atrás, el tarball
+  publicado llevaría un número distinto al del release.
+
+**Hueco conocido:** `scripts/check-ts-exports.sh` empaqueta el tarball y resuelve
+cada subpath de `exports`, pero no ejecuta el TypeScript. No hay, por tanto,
+ninguna comprobación de *valor* en TS: que `esInterno` devuelva lo correcto no lo
+verifica nadie. El bug invertido venía de un helper único del generador y la
+aserción de Go lo cubre, pero el TS se renderiza por separado y eso no lo
+garantiza a futuro. Cerrarlo requiere un runner de TS (`node` sobre el tarball
+instalado) y merece su propio paso, no un fix de correctness.
+
 ## 2026:10:05 21:40
 
 **Resumen:** La prerelease `v0.1.0-tracer.2` se publicó y quedó revealed un
