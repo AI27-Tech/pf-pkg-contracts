@@ -141,6 +141,21 @@ func main() {
 	if len(roles.Todos) != 8 {
 		panic("el contrato declara ocho roles canónicos")
 	}
+	// El mapeo a `Audiencia` (`Cliente` | `Interno`): `cliente` es el ÚNICO rol
+	// externo y los otros siete son internos. Esta aserción existe porque
+	// `EsInterno` se generó una vez invertido (negando a `jefe_operativo` en
+	// lugar de a `cliente`), lo que daba la respuesta correcta por casualidad en
+	// seis de los ocho roles y la equivocada justo en los dos que importan. Un
+	// chequeo de "compila" no lo habría visto; hay que comprobar el VALOR.
+	for _, r := range roles.Todos {
+		want := r != roles.RolCliente
+		if r.EsInterno() != want {
+			panic(fmt.Sprintf("EsInterno(%q) = %v; el contrato dice %v", r, !want, want))
+		}
+	}
+	if roles.RolCliente.EsInterno() {
+		panic("`cliente` es el único rol externo: EsInterno debe ser false")
+	}
 
 	// Los cinco paquetes de cliente HTTP por servicio: cada uno debe exponer su
 	// constructor (oapi-codegen) y un tipo de recurso del dominio. Se usan
@@ -218,10 +233,19 @@ func main() {
 }
 GO
 
-    echo "    - go build (importa y usa los 9 paquetes)"
-    if go build ./... 2>&1; then
-      echo "    OK: el módulo publicado compila para un consumidor limpio."
+    # Se EJECUTA, no sólo se compila. El consumidor lleva aserciones con panic
+    # sobre los valores que importan (mapeo a `Audiencia`, enum de estados,
+    # registro de eventos); con `go build` alone esas aserciones eran código
+    # muerto y un artefacto publicado con la semántica invertida pasaba en
+    # verde. Compilar sólo prueba que los símbolos existen, que es la mitad
+    # menos interesante del contrato. Por eso el orden es `go run`, no
+    # `go build`: `go run` compila igual y además ejecuta.
+    echo "    - go run (compila, importa y EJECUTA las aserciones del consumidor)"
+    if salida=$(go run . 2>&1); then
+      echo "    OK: el módulo publicado sirve a un consumidor limpio."
+      [ -n "$salida" ] && echo "$salida" | sed 's/^/       /'
     else
+      echo "$salida" | sed 's/^/       /'
       echo "    ERROR: el módulo publicado no sirve a un consumidor limpio." >&2
       exit 1
     fi

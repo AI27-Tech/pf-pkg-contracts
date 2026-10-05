@@ -50,5 +50,5 @@ func EsRol(v string) bool {
 // EsInterno indica si el rol pertenece a la superficie interna del producto.
 // `cliente` es el único externo; los otros siete son internos.
 func (r Rol) EsInterno() bool {
-	return r != RolJefeOperativo
+	return r != RolCliente
 }

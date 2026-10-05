@@ -41,6 +41,7 @@ import (
 	"fmt"
 	"go/format"
 	"os"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -60,6 +61,11 @@ type source struct {
 
 // nombreEsquema es la clave del enum dentro de _comunes.yaml.
 const nombreEsquema = "Rol"
+
+// rolCliente es el único rol de la superficie externa. Ancla el mapeo a
+// `Audiencia`: `cliente` -> `Cliente`, los otros siete -> `Interno`. La forma
+// canónica no se traduce (ADR 22 / DEC-024).
+const rolCliente = "cliente"
 
 func main() {
 	src := flag.String("src", "contracts/openapi/_comunes.yaml", "ruta de la fuente YAML")
@@ -88,6 +94,14 @@ func main() {
 	}
 	if err := validar(rol.Enum); err != nil {
 		fatal("enum de roles inconsistente: %v", err)
+	}
+	// `cliente` es el único rol externo y ancla el mapeo a `Audiencia`
+	// (`Cliente` | `Interno`). Si dejara de estar en el enum, la generación de
+	// `esInterno` no tendría a qué negarse, y un generador que no puede inventar
+	// semántica debe fallar en vez de emitir un mapeo equivocado.
+	if !slices.Contains(rol.Enum, rolCliente) {
+		fatal("el enum de roles no contiene %q, que es el único rol externo; "+
+			"sin él no se puede derivar el mapeo a `Audiencia`", rolCliente)
 	}
 
 	if *goOut != "" {
@@ -172,7 +186,7 @@ func genGo(enum []string) []byte {
 
 	b.WriteString("// EsInterno indica si el rol pertenece a la superficie interna del producto.\n")
 	b.WriteString("// `cliente` es el único externo; los otros siete son internos.\n")
-	fmt.Fprintf(&b, "func (r Rol) EsInterno() bool {\n\treturn r != Rol%s\n}\n", camel(primerNoCliente(enum)))
+	fmt.Fprintf(&b, "func (r Rol) EsInterno() bool {\n\treturn r != Rol%s\n}\n", camel(rolCliente))
 
 	return b.Bytes()
 }
@@ -208,21 +222,9 @@ func genTS(enum []string) []byte {
 
 	b.WriteString("/** `cliente` es el único rol externo; los otros siete son internos. */\n")
 	b.WriteString("export function esInterno(r: Rol): boolean {\n")
-	fmt.Fprintf(&b, "  return r !== Rol.%s;\n}\n", camel(primerNoCliente(enum)))
+	fmt.Fprintf(&b, "  return r !== Rol.%s;\n}\n", camel(rolCliente))
 
 	return b.Bytes()
-}
-
-// primerNoCliente devuelve el primer rol que no es `cliente`: el único rol
-// externo. Si el enum dejara de contener `cliente`, devuelve el primero, que es
-// lo menos asertivo posible para un generador que no puede inventar semántica.
-func primerNoCliente(enum []string) string {
-	for _, r := range enum {
-		if r != "cliente" {
-			return r
-		}
-	}
-	return ""
 }
 
 // camel convierte un rol snake_case a su forma PascalCase en Go y TypeScript:

@@ -3,6 +3,53 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026:10:05 21:40
+
+**Resumen:** La prerelease `v0.1.0-tracer.2` se publicó y quedó revealed un
+defecto en ella: `roles.EsInterno()` (y su gemelo TS `esInterno`) devolvían la
+semántica de `Audiencia` invertida. Se corrige el generador y, sobre todo, se
+arregla el fallo del arnés que dejó pasar el defecto: los contract tests
+compilaban al consumidor limpio pero no lo ejecutaban, así que todas sus
+aserciones eran código muerto.
+
+**Cambios:**
+- `tools/gen-roles`: `esInterno` se generaba como `r != <primer rol que NO es
+  cliente>`, que con este enum es `jefe_operativo`. Decía "el único externo es
+  `cliente`" y hacía justo lo contrario: `EsInterno("cliente")` era `true` y
+  `EsInterno("jefe_operativo")` era `false`. Los otros seis roles salían bien por
+  casualidad, que es lo que lo hizo pasar desapercibido. Ahora se niega a
+  `RolCliente`, y si el enum dejara de contener `cliente` la generación **falla**
+  en vez de emitir un mapeo inventado.
+- `scripts/contract-tests.sh`: el consumidor limpio pasa de `go build` a `go run`.
+  Compilar sólo prueba que los símbolos existen; las aserciones sobre valores
+  (mapeo a `Audiencia`, enum de estados, registro de eventos) nunca se
+  ejecutaban. Es el mismo fallo de forma que el de `check-ts-exports`: una
+  comprobación que no puede fallar no es una comprobación.
+- `scripts/contract-tests.sh`: se agrega la aserción que faltaba sobre el mapeo a
+  `Audiencia`, para los ocho roles y no sólo para `cliente`.
+- `.github/workflows/contracts.yml`: `check-tags` compara el tag prefijado del
+  módulo Go con el commit **_solo_ durante la publicación
+  (`--verificar-tag-go`), en un paso nuevo justo después de crearlo. Antes se
+  comparaba siempre, y en el job `verificar` el tag era el de la release
+  anterior, que por definición apunta a otro commit: en cuanto hubo una release
+  previa —el estado normal del repo— CI rompía con un mensaje que además
+  describía el defecto de `tracer.1`, que no era lo que pasaba.
+- `.github/workflows/contracts.yml`: se fija la identidad de git antes de crear
+  el tag del módulo Go, se lee el tag existente con `git ls-remote` en vez de
+  recrearlo (prereleases son inmutables), y la release se marca `prerelease`
+  cuando la versión lleva sufijo. Sin esto la primera publicación salió como
+  release estable, que es la señal equivocada donde un humano decide si
+  consumirla.
+- `scripts/contract-tests.sh`: el módulo es privado, así que el `go get` del
+  consumidor necesita credenciales y el runner no tiene ninguna. Se reescriben
+  las URLs con una config de git efímera (`insteadOf`) en vez de `.netrc`, que
+  go no lee: el fallo era `could not read Username for 'https://github.com'`.
+
+**Verificación:** con la corrección aplicada, `go run` del consumidor limpio
+falla contra el tag publicado con `panic: EsInterno("cliente") = true; el
+contrato dice false`. Es la evidencia de que el defecto era real y de que la
+comprobación nueva lo detecta.
+
 ## 2026:10:05 18:56
 
 **Resumen:** Se corrigieron los `exports` del paquete npm, que declaraban

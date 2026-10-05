@@ -39,5 +39,5 @@ export function esRol(v: string): v is Rol {
 
 /** `cliente` es el único rol externo; los otros siete son internos. */
 export function esInterno(r: Rol): boolean {
-  return r !== Rol.JefeOperativo;
+  return r !== Rol.Cliente;
 }
