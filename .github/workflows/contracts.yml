@@ -8,7 +8,7 @@
 #     fuentes, los artefactos Go y TS, y el manifiesto con tag/SHA/checksums
 #     bajo la misma versión contractual.
 #
-# El freeze del tracer (v0.1.0-tracer.1) sólo existe cuando este workflow corre
+# El freeze del tracer (v0.1.0-tracer.2) sólo existe cuando este workflow corre
 # sobre su tag y produce SHA, checksums y manifiesto verificables.
 # =============================================================================
 name: contracts
