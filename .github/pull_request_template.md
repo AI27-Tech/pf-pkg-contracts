@@ -1,91 +1,73 @@
 <!--
-Plantilla de Pull Request de portal-cliente (pf-web-frontend-client).
-Rellena las secciones que apliquen y borra las que no. El objetivo es que
-quien revisa entienda el porqué del cambio y pueda verificarlo sin adivinar.
+Plantilla de Pull Request de pf-pkg-contracts (la fuente única de contratos de
+AI27: OpenAPI + eventos + estados, de la que se generan los clientes Go y TS).
+Los contratos son el artefacto, no el repositorio. Rellena lo que aplique.
+Autoridad: ADR 25 (paquete contractual del tracer) y sus invariantes.
 -->
 
 ## Resumen
 
-<!-- Qué hace este PR y por qué. Una o dos frases. -->
+<!-- Qué cambia en el contrato y por qué. Una o dos frases. -->
 
 ## Contexto
 
-<!--
-Enlaza el issue, la decisión abierta o el documento de arquitectura relevante.
-La autoridad vive en docs/arquitectura/ del workspace padre; no la reexpliques,
-enlázala.
--->
-
-- Issue / spec relacionado:
-- Decisión de arquitectura afectada (ADR / decisión abierta del README):
+- Issue / historia técnica (E0-T2) / ola contractual:
+- ADR / decisión afectada (DEC-xxx):
+- HU que respalda la superficie (si aplica; no se congela superficie de HU en Borrador):
 
 ## Tipo de cambio
 
-- [ ] Feature
-- [ ] Bugfix
-- [ ] Refactor (sin cambio de comportamiento)
-- [ ] Estilos / UI
+- [ ] Nueva superficie de API / evento (aditivo)
+- [ ] Cambio incompatible (breaking) — justificar
+- [ ] Corrección de contrato (sin superficie nueva)
+- [ ] Codegen / tooling
 - [ ] Documentación
-- [ ] Tooling / build / CI
+- [ ] Release de prerelease (nuevo tag `v*-tracer.*`)
 - [ ] Otro:
 
 ## Cambios
 
-<!-- Lista concreta de lo que cambió. Agrupa por dominio o por capa si ayuda. -->
+<!-- Qué specs/protos/estados cambiaron y qué se regeneró. -->
 
 -
 
-## Invariantes del cliente
+## Invariantes del freeze (ADR 25)
 
-<!--
-Marca solo lo que este PR toca. Si tocas alguna, explica cómo se mantiene.
-Ver README > "Reglas del cliente, y cómo están hechas cumplir".
--->
+- [ ] No afecta ninguna invariante.
+- [ ] **Una sola corrida de CI** publica fuentes + Go + TS + manifiesto (tag, SHA, checksums) bajo la misma versión.
+- [ ] **Contrato primero** — Go y TS se generan de la misma fuente; no hay clientes ni enums escritos a mano como autoridad paralela.
+- [ ] **Un cambio incompatible de OpenAPI rompe CI** contra la última release publicada.
+- [ ] `buf lint` y `buf breaking` validan los eventos.
+- [ ] **Codegen reproducible** — mismo commit + toolchain producen los mismos checksums.
+- [ ] Los **contract tests** pasan (consumidor limpio que importa y **ejecuta**, no solo compila).
+- [ ] Una corrección no modifica una prerelease ya publicada; se publica otra (expand/contract).
 
-- [ ] No afecta ninguna invariante documentada.
-- [ ] **P4** — un solo parser de tracking para pull y push (`lib/tracking/parseTrackingPayload.ts`).
-- [ ] **P5** — orden y dedupe por secuencia de dominio, no por el `seq` del sobre.
-- [ ] **P10** — el navegador no selecciona canales arbitrarios; el filtrado por audiencia es del servidor.
-- [ ] La ausencia por degradación no se colapsa a `null` (`Fresco<T>` conserva sus tres estados).
-- [ ] El fetch se mantiene en la frontera de la ruta; las `*Section` siguen siendo presentacionales.
+## Sustantivos de dominio
 
-## Decisiones abiertas
-
-<!--
-¿Este PR toca alguna de las decisiones abiertas del README? ¿Introduce un supuesto
-nuevo sobre el contrato del backend, la custodia del token, el stream, etc.?
-Si es así, dilo aquí y deja el TODO en su sitio en lugar de resolverlo en silencio.
--->
-
--
+- [ ] Los sustantivos de dominio conservan su forma canónica en español (`viaje`, `catalogos`, `operacion`, `mensajeria`, `identidad`, `reportes`, `Audiencia`, roles, rutas, eventos y esquemas equivalentes). **No se traducen**: romperían la correspondencia entre contratos, código generado y documentación.
 
 ## Cómo se probó
 
-<!-- Comandos ejecutados y su resultado. No basta con que compile. -->
-
-- [ ] `pnpm run typecheck`
-- [ ] `pnpm run lint`
-- [ ] `pnpm run format:check`
-- [ ] `pnpm run test`
-- [ ] `pnpm run test:e2e`
-- [ ] Verificado a mano en `pnpm run dev:mock` (cliente@demo.ai27 / demo1234)
+- [ ] `make generate` y el árbol regenerado está commiteado (sin deriva)
+- [ ] `check-reproducible` falla ante una edición a mano de un generado
+- [ ] Breaking check de OpenAPI y `buf breaking` en verde
+- [ ] `make contract-tests` (consumidor limpio ejecuta las aserciones)
+- [ ] Typecheck del paquete TS
 
 Notas de la verificación:
 
-## Capturas / evidencia
+## Versión / release
 
-<!-- Para cambios de UI: antes / después. Borra si no aplica. -->
+<!-- Si este PR publica un tag, deja constancia. tracer.1 y tracer.2 se retiraron; sus nombres no se reutilizan. -->
+
+- Versión objetivo:
+- [ ] Manifiesto con tag + SHA + checksums para los artefactos Go y TS
 
 ## CHANGELOG
 
-<!-- El repo exige registrar cada cambio relevante. Ver .kiro/steering/changelog.md -->
-
-- [ ] Agregué la entrada correspondiente en `CHANGELOG.md` (resumen + archivos modificados, entrada más reciente al inicio).
+- [ ] Agregué la entrada en `CHANGELOG.md` (fecha+hora, resumen, cambios y archivos; la más reciente al inicio).
 
 ## Checklist
 
-- [ ] El cambio se limita a la audiencia cliente (nada de `panel-admin` / `Audiencia: Interno`).
-- [ ] No introduje librerías prohibidas (zustand, redux, jotai, swr, framer-motion, next-auth, aws-amplify, Radix, MUI, Chakra).
-- [ ] No importo `lib/api/generated/*` fuera de `src/lib/`.
-- [ ] Comentarios y docstrings en español; sustantivos de dominio en su forma canónica (`viaje`, `bitacora`, `conversacion`, `Audiencia`, `Fresco`, `Sobre`).
-- [ ] No commiteé artefactos generados (`src/routeTree.gen.ts`, `src/lib/api/generated/`).
+- [ ] Comentarios y prosa en español (México); identificadores técnicos en inglés.
+- [ ] No commiteé secretos ni tokens (ni en logs ni en el manifiesto).

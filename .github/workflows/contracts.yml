@@ -8,7 +8,7 @@
 #     fuentes, los artefactos Go y TS, y el manifiesto con tag/SHA/checksums
 #     bajo la misma versión contractual.
 #
-# El freeze del tracer (v0.1.0-tracer.1) sólo existe cuando este workflow corre
+# El freeze del tracer (v0.1.0-tracer.2) sólo existe cuando este workflow corre
 # sobre su tag y produce SHA, checksums y manifiesto verificables.
 # =============================================================================
 name: contracts
@@ -73,8 +73,26 @@ jobs:
       - name: Lint de OpenAPI (redocly)
         run: make lint-openapi
 
+      - name: Breaking check de OpenAPI vs la última release publicada
+        # Invariante 4 de ADR 25: un cambio incompatible de OpenAPI debe romper
+        # CI contra la última release publicada. Antes de tracer.2 sólo corría
+        # `buf breaking`, que cubre los EVENTOS; el spec HTTP podía cambiar de
+        # forma incompatible sin que nada lo notara.
+        # Se compara contra el último TAG de tracer, no contra una rama: una
+        # rama no es evidencia de freeze (invariante 2). Sin release previa, el
+        # script lo dice y sale 0, igual que `buf breaking` en el primer release.
+        run: make breaking-openapi
+
       - name: Equivalencia estados <-> OpenAPI
         run: make check-estados
+
+      - name: Consistencia del registro de eventos (registro <-> .proto <-> INVENTARIO)
+        run: make check-registro
+
+      - name: El árbol publicado trae todos los paquetes del módulo Go
+        # Así se convirtió el defecto de tracer.1 (tag sin clientes generados)
+        # en un fallo de CI en vez de en un retiro de release.
+        run: make check-tags
 
       - name: Codegen reproducible (no debe dejar diffs)
         run: make check-reproducible
@@ -90,6 +108,13 @@ jobs:
           cd packages/api-client-ts
           npm install --no-audit --no-fund
           npx tsc --noEmit
+
+      - name: El paquete TS sirve los subpath que declara en exports
+        # tsc --noEmit mira los archivos por ruta relativa: nunca resuelve un
+        # subpath de 'exports'. Un 'exports' que promete un subpath inexistente
+        # sólo revienta en el build del consumidor, sin relación aparente con
+        # este repo. Se prueba sobre el tarball real, en un proyecto limpio.
+        run: make check-ts-exports
 
   publicar:
     # Sólo al empujar un tag de tracer. Depende de que la verificación pase.
@@ -126,14 +151,57 @@ jobs:
             echo "El tag ($tag) no coincide con VERSION ($version)"; exit 1
           fi
 
+          # La versión del paquete npm es una segunda fuente de verdad, escrita a
+          # mano y fácil de olvidar al bumpear. Si se queda atrás, el tarball que
+          # se publica lleva un número distinto al del release, y el consumidor
+          # instala algo que no corresponde a la release que cree estar
+          # instalando. Se comparan entre sí y no se derivan: que se avisen
+          # mutuamente es lo que las mantiene honestas.
+          npmver="$(node -p "require('./packages/api-client-ts/package.json').version")"
+          expected="v${npmver}"
+          if [ "$version" != "$expected" ]; then
+            echo "VERSION dice '$version' pero package.json dice '$npmver'."
+            echo "Se bumpean juntas: los artefactos TS se versionan y el manifiesto"
+            echo "congela package.json, así que la divergencia llegaría al tag."
+            exit 1
+          fi
+
+      - name: Identidad de git para etiquetar
+        # El runner no trae user.name/user.email, y `git tag -a` aborta con
+        # "Committer identity unknown" (exit 128) ANTES de publicar nada. La
+        # identidad es la del bot de Actions: este pipeline no commitea código,
+        # sólo etiqueta el commit ya publicado.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Generar artefactos (misma ejecución que publica)
         run: make generate
 
       - name: Confirmar codegen reproducible
         run: make check-reproducible
 
+      - name: Verificar el árbol YA etiquetado (evidencia del freeze)
+        # A diferencia del paso equivalente en `verificar`, aquí se comprueba el
+        # commit etiquetado, que es lo que los consumidores van a resolver. Un tag
+        # sin los clientes generados es exactamente como se retiró tracer.1.
+        run: ./scripts/check-tags.sh "${GITHUB_SHA}"
+
+      - name: Consistencia del registro de eventos
+        # El grueso de los contract tests (registro <-> .proto <-> INVENTARIO) no
+        # depende del tag, así que corre aquí y falla antes de publicar nada. El
+        # consumidor limpio necesita el tag prefijado, que se crea más abajo.
+        run: make check-registro
+
       - name: Escribir manifiesto (tag, SHA, checksums)
         run: make manifest
+
+      - name: Verificar el manifiesto contra el árbol etiquetado
+        # Escribir el manifiesto es sólo la mitad de la garantía: hay que
+        # comprobar que los bytes que promete son los del commit etiquetado, y
+        # que no deja ningún artefacto fuera. Es lo que convierte el manifiesto
+        # en evidencia del freeze y no en un documento decorativo.
+        run: make verificar-manifiesto
 
       - name: Publicar el módulo Go (tag prefijado por subdirectorio)
         # El módulo Go vive en packages/api-client-go/, un subdirectorio. Go exige
@@ -145,13 +213,40 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME}"
           gotag="packages/api-client-go/${version}"
-          if git rev-parse -q --verify "refs/tags/${gotag}" >/dev/null; then
-            echo "El tag ${gotag} ya existe; no se recrea (prerelease inmutable)."
+          # La idempotencia se consulta al ORIGEN, no a los refs locales: el
+          # checkout de un push de tag no trae los demás tags, así que un reintento
+          # del job intentaría recrear un tag ya publicado.
+          if git ls-remote --exit-code --tags origin "refs/tags/${gotag}" >/dev/null 2>&1; then
+            echo "El tag ${gotag} ya existe en el origen; no se recrea (prerelease inmutable)."
           else
             git tag -a "${gotag}" "${GITHUB_SHA}" -m "Módulo Go de ${version}"
             git push origin "${gotag}"
             echo "Publicado el módulo Go como ${gotag}."
           fi
+
+      - name: El tag del módulo Go apunta al mismo commit del release
+        # Se comprueba DESPUÉS de crearlo: es la evidencia del freeze que
+        # comparten release y módulo Go. Antes no podía comprobarse (el tag no
+        # existía) y en el job verificar exigirlo rompía CI en cuanto había una
+        # release previa, porque ese tag apunta por definición a otro commit.
+        run: ./scripts/check-tags.sh "${GITHUB_SHA}" --verificar-tag-go
+
+      - name: Contract tests — consumidor limpio del módulo publicado
+        # Invariante 7 de ADR 25: los contract tests pasan antes de publicar el
+        # resto de los artefactos. Se ejecutan contra el tag ya empujado, en un
+        # módulo Go NUEVO, sin go.work ni replace: la resolución tiene que ocurrir
+        # por versión publicada o el test no prueba nada (ADR 17).
+        #
+        # Esto es lo que no se hizo en tracer.1 y por eso se retiró: el tag
+        # resolvía, pero no traía nada importable.
+        #
+        # AI27-Tech/* es privado (decisión de owner): GOPRIVATE cubre el prefijo
+        # para el checksum DB y el proxy, y el token llega por el secreto del repo
+        # a una config de git efímera (URL rewriting), nunca hardcodeado. El
+        # runner no trae credenciales para el clon del caché de módulos.
+        run: make contract-tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publicar paquete npm (@ai27-tech/contracts)
         working-directory: packages/api-client-ts
@@ -180,6 +275,11 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           fail_on_unmatched_files: true
+          # Una versión con sufijo de prerelease (-tracer.N) DEBE marcarse como
+          # prerelease en GitHub. Sin esto la release aparece como estable y se
+          # mezcla con las releases de verdad; `latest` en npm tampoco se mueve,
+          # pero en GitHub el distintivo es la única señal que ve un humano.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             manifiesto/tracer.manifest.json
             VERSION

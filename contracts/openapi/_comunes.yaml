@@ -11,7 +11,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — Componentes comunes
-  version: 0.1.0-tracer.1
+  version: 0.1.0-tracer.2
   description: >-
     Esquemas y respuestas reutilizables del paquete contractual del tracer.
     Alcance congelado por ADR 25.
@@ -79,10 +79,22 @@ components:
     Rol:
       type: string
       description: >-
-        Rol interno de AI27. `reaccion` existe en el modelo pero queda fuera del
-        tracer (E7). El tracer ejercita cliente, operator, supervisor y
-        administrator.
-      enum: [cliente, operator, supervisor, administrator, reaccion]
+        Rol del sujeto dentro del tenant. Los ocho identificadores son
+        canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el
+        modelo pero queda fuera del tracer (E7); el resto sí se ejercita.
+        El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no
+        viaja en el token, se resuelve en servidor. `Audiencia` es un valor de
+        dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a
+        `Cliente` y los otros siete roles a `Interno`.
+      enum:
+        - cliente
+        - jefe_operativo
+        - monitorista
+        - supervisor
+        - coordinador
+        - ejecutivo
+        - reaccion
+        - administrador
 
   responses:
     NoAutorizado:
