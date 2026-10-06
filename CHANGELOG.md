@@ -3,6 +3,16 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026:10:06 12:55
+
+**Resumen:** Se reemplazó la plantilla de Pull Request (venía copiada del frontend) por una adaptada al rol de este repo como fuente de contratos.
+
+**Cambios:**
+- Se reescribió `.github/pull_request_template.md`: la anterior era la del portal-cliente (comandos pnpm, invariantes de UI), que no aplica. La nueva es específica de `pf-pkg-contracts`: invariantes del freeze (ADR 25), breaking checks de OpenAPI y eventos, codegen reproducible, contract tests que ejecutan, conservación de sustantivos de dominio en español, y manifiesto con tag/SHA/checksums en los releases.
+
+**Archivos modificados:**
+- `.github/pull_request_template.md`
+
 ## 2026:10:05 22:40
 
 **Resumen:** Se ejecutaron las **pruebas negativas** que exige la definición de
