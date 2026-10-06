@@ -14,13 +14,13 @@ aquí, por versión exacta.
 |---|---|
 | **Repositorio autoritativo** | `AI27-Tech/pf-pkg-contracts` |
 | **Ramas** | `pf-contracts-m` (main) · `pf-contracts-d` (desarrollo) · `pf-contracts-q` (QA) |
-| **Versión objetivo del tracer** | `v0.1.0-tracer.1` (prerelease SemVer inmutable — ADR 25) |
+| **Versión objetivo del tracer** | `v0.1.0-tracer.2` (prerelease SemVer inmutable — ADR 25) |
 | **Historia técnica** | E0-T2 (`docs/historias-tecnicas/E0-fundamentos-plataforma.md`) |
 | **Decisiones base** | ADR 19 (estados), ADR 22 (idioma), ADR 24 (recursos), ADR 25 (freeze), ADR 26 (revocación), ADR 27/28 (transporte) |
 
 ---
 
-## Qué congela `v0.1.0-tracer.1`
+## Qué congela `v0.1.0-tracer.2`
 
 La primera release cubre **sólo el tracer vertical**: la rebanada de arquitectura
 que prueba las fronteras principales de extremo a extremo antes de desarrollar
@@ -34,7 +34,7 @@ de hitos/ETA · revocación para HTTP y SSE.
 **Fuera de esta release** (llegan en releases posteriores compatibles):
 mensajería, emergencias/Reacción, y toda capacidad V2 (telemetría, posiciones,
 señal, geocercas). Que una capacidad esté decidida no obliga a incluirla en
-`tracer.1`.
+`tracer.2`.
 
 ---
 
@@ -47,16 +47,29 @@ contracts/
     identidad.yaml  catalogos.yaml  operacion.yaml  bff.yaml  reportes.yaml
   events/                      Eventos Protobuf + INVENTARIO.md.
     ai27/eventos/v1/*.proto
+    registro.tipos.yaml        Registro legible por máquina de tipos de evento.
 packages/
-  api-client-go/               Módulo Go publicado (estados commiteado; resto generado).
-  api-client-ts/               Paquete npm @ai27-tech/contracts (idem).
+  api-client-go/               Módulo Go publicado. Todo commiteado.
+    bff/ catalogos/ identidad/ operacion/ reportes/   clientes HTTP
+    estados/ roles/ registro/                          datos del contrato
+    eventos/ai27/eventos/v1/                           eventos Protobuf
+  api-client-ts/               Paquete npm @ai27-tech/contracts. Todo commiteado.
 tools/
   gen-estados/                 Genera estados -> Go y TS desde la fuente única.
+  gen-roles/                   Genera el enum de roles -> Go y TS.
+  gen-registro/                Genera el registro de eventos -> Go y TS.
   check-estados/               Verifica que el enum OpenAPI == fuente de estados.
+  check-registro/              Verifica registro == .proto == INVENTARIO.md.
   openapi-codegen/             Fija la versión de oapi-codegen (reproducible).
+  oasdiff/                     Fija la versión de oasdiff (breaking de OpenAPI).
 scripts/
   generar.sh                   Único camino de codegen (lo usa make y CI).
-  manifiesto.sh                Escribe el manifiesto del tracer (tag/SHA/checksums).
+  breaking-openapi.sh          oasdiff contra el último tag de tracer publicado.
+  check-tags.sh                El árbol etiquetado trae los 9 paquetes del módulo.
+  check-ts-exports.sh          El tarball npm resuelve cada subpath de exports.
+  contract-tests.sh            Consumidor limpio del módulo Go + registro.
+  manifiesto.sh                Escribe el manifiesto (tag/SHA/checksums).
+  verificar-manifiesto.sh      El manifiesto congela el árbol actual, byte a byte.
 ```
 
 ---
@@ -110,7 +123,7 @@ flowchart TB
     GO -.-> REPRO
     TS -.-> REPRO
 
-    ART ==>|"go get / npm @ v0.1.0-tracer.1"| CONS["Servicios y frontends<br/><i>consumen por versión exacta</i>"]
+    ART ==>|"go get / npm @ v0.1.0-tracer.2"| CONS["Servicios y frontends<br/><i>consumen por versión exacta</i>"]
 
     classDef fuente fill:#14532d,color:#fff
     classDef art fill:#1e3a8a,color:#fff
@@ -135,20 +148,36 @@ flowchart TB
 3. **La verificación protege el contrato** (en `make verify` y en CI):
    `check-estados` confirma que el enum del spec de `operacion` no se desvíe de
    la fuente de estados; `redocly lint` valida los specs empaquetados y
-   `buf lint` los eventos; `buf breaking` impide quitar o renumerar un campo que
-   un consumidor todavía lee; y `check-reproducible` regenera y falla si queda
-   cualquier diff (señal de que alguien editó a mano o no regeneró).
+   `buf lint` los eventos; `check-registro` confirma que el registro de tipos de
+   evento, los `.proto` e `INVENTARIO.md` digan lo mismo; `breaking` y
+   `breaking-openapi` impiden quitar o renumerar algo que un consumidor todavía
+   lee (el primero contra la rama principal, el segundo contra el último tag
+   publicado, porque una rama no es evidencia de freeze); `check-tags` confirma
+   que el árbol etiquetado trae los nueve paquetes del módulo Go; y
+   `check-reproducible` regenera y compara contra `HEAD`, fallando si alguien
+   editó un artefacto a mano.
 4. **CI publica una versión exacta.** Al empujar el tag `v*-tracer.*`, una sola
-   ejecución genera los artefactos, escribe el manifiesto (tag/SHA/checksums) y
-   publica el módulo Go (por su tag prefijado `packages/api-client-go/vX.Y.Z`) y
-   el paquete npm.
+   ejecución genera los artefactos, escribe y **verifica** el manifiesto (tag,
+   SHA y checksums de fuentes y artefactos), publica el módulo Go por su tag
+   prefijado `packages/api-client-go/vX.Y.Z`, corre los **contract tests**
+   (consumidor limpio que compila los nueve paquetes contra el tag ya
+   empujado, más la consistencia del registro) y sólo entonces publica el
+   paquete npm y crea el release.
 5. **Los consumidores fijan esa versión exacta** — nunca `latest` ni una ruta
    local —, de modo que todos hablan el mismo contrato congelado.
 
-Qué se versiona y qué no: las **fuentes** y la **rebanada de estados generada**
-sí se commitean; los clientes de OpenAPI y los tipos de evento generados **no**
-(los ignora `.gitignore` y los regenera CI), para que la fuente y su artefacto
-no puedan divergir en el árbol.
+Qué se versiona: **todo**, las fuentes y los artefactos generados. Desde
+tracer.2 los clientes Go y TS se commitean (decisión de owner, 2026-10-02,
+opción (a)), y por eso `check-reproducible` tiene efecto real: compara cada
+artefacto contra su blob en `HEAD`, de modo que editar a mano un `*.gen.go` y
+commitearlo se detecta en CI.
+
+La razón por la que antes no se commiteaban era evitar que la fuente y su
+artefacto divergieran en el árbol. El tag de `tracer.1` resolvió el módulo Go y
+**no traía nada importable**, porque el artefacto viajaba en el workflow en vez
+de en el tag. Congelar el contrato significa que lo que el consumidor resuelve
+por versión esté versionado: los `*.gen.*` se commitean y nunca se editan a
+mano; se cambia la fuente y se regenera.
 
 ---
 
@@ -215,20 +244,20 @@ canónica en español —también como ruta de API, nombre de evento o esquema�
 
 ## Cómo se consume (por versión exacta)
 
-Los consumidores **fijan la versión exacta** `v0.1.0-tracer.1`. Nadie consume
+Los consumidores **fijan la versión exacta** `v0.1.0-tracer.2`. Nadie consume
 por `CONTRACTS_DIR`, rama mutable ni `latest`; eso sirve para experimentación
 local, no es un release.
 
 **Go** — se resuelve por el tag Git del módulo:
 
 ```
-go get github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go@v0.1.0-tracer.1
+go get github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go@v0.1.0-tracer.2
 ```
 
 > **Dos tags por release.** El módulo Go vive en el subdirectorio
 > `packages/api-client-go/`, así que Go exige que su versión se etiquete con el
-> prefijo de la ruta: `packages/api-client-go/v0.1.0-tracer.1`. El release usa
-> además el tag limpio `v0.1.0-tracer.1` (npm, GitHub Release, manifiesto). CI
+> prefijo de la ruta: `packages/api-client-go/v0.1.0-tracer.2`. El release usa
+> además el tag limpio `v0.1.0-tracer.2` (npm, GitHub Release, manifiesto). CI
 > crea el tag prefijado automáticamente al publicar; en el comando `go get` se
 > escribe la versión sin prefijo — Go lo traduce al tag prefijado por sí solo.
 
@@ -246,32 +275,52 @@ mismos bytes).
 
 ```
 make generate            # genera todos los artefactos Go y TS
-make verify              # lint + check-estados + build/vet de Go
-make check-reproducible  # falla si la generación deja diffs
+make verify              # lint + check-estados + check-registro + build/vet de Go
+make check-reproducible  # falla si alguien editó a mano un artefacto generado
+make check-tags          # el árbol etiquetado trae los 9 paquetes del módulo Go
+make check-registro      # registro de eventos <-> .proto <-> INVENTARIO.md
 make lint                # buf lint (eventos) + redocly lint (OpenAPI)
 make breaking            # buf breaking contra pf-contracts-m
+make breaking-openapi    # oasdiff contra el último tag de tracer publicado
+make contract-tests      # consumidor limpio del módulo Go publicado + registro
+make check-ts-exports    # el tarball npm resuelve cada subpath de 'exports'
+make manifest            # escribe manifiesto/tracer.manifest.json
+make verificar-manifiesto  # el manifiesto congela el árbol actual, byte a byte
 ```
 
 CI (`.github/workflows/contracts.yml`):
 
 - **verificar** (push/PR): `buf lint`, `buf breaking`, lint de OpenAPI,
-  equivalencia estados↔OpenAPI, codegen reproducible, build de Go, typecheck TS.
-- **publicar** (tag `v*-tracer.*`): una sola ejecución genera, escribe el
-  manifiesto (tag, SHA, checksums), publica el paquete npm, crea el tag
-  prefijado del módulo Go (`packages/api-client-go/vX.Y.Z`) y crea el release.
+  `breaking-openapi`, equivalencia estados↔OpenAPI, consistencia del registro,
+  contenido del árbol etiquetado, codegen reproducible, build de Go, typecheck TS
+  y resolución de los subpath de `exports` desde el tarball.
+- **publicar** (tag `v*-tracer.*`): una sola ejecución genera, confirma que el
+  codegen es reproducible, verifica el árbol etiquetado, escribe y verifica el
+  manifiesto, publica el módulo Go (tag prefijado
+  `packages/api-client-go/vX.Y.Z`), corre los contract tests, publica el paquete
+  npm y crea el release.
+
+El orden importa: **los contract tests corren antes de publicar el paquete npm**
+(invariante 7 de ADR 25). Es lo que no se hizo en `tracer.1` y por eso se retiró:
+el tag resolvía, pero no traía nada importable.
 
 ---
 
 ## Estado del freeze (F-01)
 
-La **decisión** de ADR 25 está cerrada. El hallazgo crítico **F-01** permanece
-abierto como *evidencia* hasta que CI publique `v0.1.0-tracer.1` con SHA,
-checksums y manifiesto verificables, los consumidores fijen la versión exacta y
-pasen codegen, breaking checks y contract tests. Este repositorio deja de estar
-vacío; el tag lo publica el pipeline, no se crea a mano.
+La **decisión** de ADR 25 está cerrada y el repositorio ya no está vacío. El
+hallazgo crítico **F-01** se cierra con `v0.1.0-tracer.2`, que sustituye a la
+prerelease retirada `tracer.1`. La diferencia no es de versión: `tracer.1` publicó
+un tag cuyo módulo Go resolvía sin llevar los clientes generados dentro, así que
+no había nada importable. `tracer.2` versiona los artefactos, verifica el árbol
+etiquetado y corre los contract tests contra el tag antes de publicar nada más.
+
+F-01 queda cerrado cuando, además del release, los consumidores fijen la versión
+exacta. El tag lo publica el pipeline, no se crea a mano.
 
 ## Regla de evolución
 
 Agregar es aditivo. Quitar o renumerar requiere un release de gracia
-(expand/contract). Una corrección posterior **no** modifica `tracer.1`: publica
-otra prerelease (`tracer.2`).
+(expand/contract). Una corrección posterior **no** modifica `tracer.2`: publica
+otra prerelease (`tracer.3`). Un sufijo de prerelease retirado no se reutiliza
+jamás, aunque su contenido se repita.

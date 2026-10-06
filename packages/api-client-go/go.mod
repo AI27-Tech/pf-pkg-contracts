@@ -1,5 +1,5 @@
 // Módulo Go generado y publicado por pf-pkg-contracts.
-// Los consumidores lo fijan por versión exacta (tag v0.1.0-tracer.1); nadie lo
+// Los consumidores lo fijan por versión exacta (tag v0.1.0-tracer.2); nadie lo
 // consume por ruta relativa (CONTRACTS_DIR), branch mutable ni `latest`.
 module github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go
 
