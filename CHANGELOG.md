@@ -3,6 +3,97 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026:10:08 13:36
+
+**Resumen:** Se preparó (sin publicar) la **ola contractual 1**, `v0.1.0-tracer.4`,
+para `catalogos` y `operacion`. Es la ola que DEC-065 renumeró desde `tracer.3`
+tras el retiro de `tracer.2`. Incluye las correcciones respaldadas por fuentes
+(aptitud informativa y `APTO_PARA_SALIDA` opcional), la brecha de contrato del
+roster de `unidades`, el renombre del átomo a `vehiculo`, el ETA de ADR 20, y un
+mecanismo de allowlist de rupturas intencionales por versión. Nada se commitea,
+etiqueta ni publica: queda en `feat/tracer-4-ola-1` para que el Lead publique.
+
+**Cambios respaldados por fuentes (DEC-055 / DEC-043 / ADR 31 / ADR 20):**
+- `contracts/estados/viaje.estados.yaml`: se retira la guarda `ningun_recurso_no_apto`
+  de `ASIGNADO → APTO_PARA_SALIDA`; se agregan `ASIGNADO → EN_EMBARQUE` y
+  `ASIGNADO → EN_TRANSITO` (disparador operador) que hacen `APTO_PARA_SALIDA`
+  opcional (DEC-043 #1); la guarda de `APROBADO → ASIGNADO` se renombra a
+  `escolta_reservada` (ya no menciona aptitud; la aptitud no gatea en V1,
+  DEC-055). El enum de 13 estados no cambia.
+- `contracts/openapi/operacion.yaml` `asignarRecursos`: el único rechazo 409 queda
+  `recurso_no_disponible` (reserva fallida); se elimina `recurso_no_apto`.
+  Descripciones reescritas en términos de escolta.
+- `contracts/openapi/catalogos.yaml`: la aptitud es informativa en V1; `catalogos`
+  devuelve `apto` true/false y NUNCA "desconocida" — ese valor lo calcula el
+  consumidor (operacion/bff). Se corrigieron los textos que podían sugerir lo
+  contrario.
+
+**Cambios de la ola (D1–D6):**
+- **D6b (ruptura):** el átomo de `catalogos` se renombra a `vehiculo`:
+  `/api/v1/unidades`→`/api/v1/vehiculos`, `.../aptitud` igual, esquema
+  `Unidad`→`Vehiculo`, `listarUnidades`→`listarVehiculos`,
+  `aptitudUnidad`→`aptitudVehiculo`.
+- **D6a:** roster mínimo de `unidades` en `operacion` (brecha de ADR 33): listar,
+  crear, obtener y modificar (activar/desactivar vía `activa`). `Unidad` del roster
+  con `id`, `vehiculo_id` (referencia, no FK), `custodios_ids` (1..2), `activa`, y
+  `tipo` (patrulla|moto) SOLO LECTURA derivado del vehículo. Queda anotada como
+  pregunta abierta de Operación si un custodio puede estar en varias unidades (no
+  se restringe en el contrato).
+- **D1:** la respuesta de `asignarRecursos` lleva aptitud informativa por átomo
+  (`unidades[].aptitud[]` con `recurso`, `recurso_id`, `estado`
+  apto|no_apto|desconocido, `motivos`). Sin aptitud agregada por unidad.
+- **D2 (ruptura):** `AsignacionEntrada` pasa a `unidades_ids` (1..N);
+  `ReasignacionEntrada` manda la escolta completa (`unidades_ids` ≥1 y `motivo`,
+  ambos obligatorios) y pierde `custodios_ids`/`unidad_id`.
+- **D3 (ruptura):** en `viaje.proto`, `ViajeAsignado`/`ViajeReasignado` marcan
+  `unidad_id` y `custodios_ids` como `reserved` (número y nombre) y agregan
+  `repeated string unidades_ids`. No se crea v2.
+- **D5:** `PATCH /api/v1/viajes/{id}/eta` con 409 `viaje_en_estado_terminal`;
+  `Viaje.eta_estimado` fecha-hora nullable (reemplaza el objeto `Eta` con
+  `obsoleto`); `operacion` no expone `stale`, lo calcula el `bff` (ADR 20).
+
+**Mecanismo de rupturas intencionales (D4):**
+- `rompimientos/v0.1.0-tracer.4.yaml`: allowlist por versión; cada ruptura lista
+  la operación/mensaje afectado y su fuente (ADR/DEC).
+- `tools/breaking-gate`: tool Go que lee la salida de oasdiff/buf y autoriza SOLO
+  las rupturas declaradas en `rompimientos/${VERSION}.yaml`, y SOLO mientras
+  `VERSION` sea esa versión; cualquier ruptura no listada sigue fallando.
+- `scripts/breaking-openapi.sh` y el nuevo `scripts/breaking-eventos.sh` (al que
+  apunta `make breaking` y la invocación de `buf breaking` en CI) pasan su veredicto
+  por el gate.
+- `scripts/test-breaking-gate.sh` (target `make test-breaking-gate`, paso nuevo en
+  CI): prueba el propio mecanismo — una ruptura no listada falla, y la allowlist
+  no aplica a otra versión.
+
+**Versión:** `VERSION`, `package.json` y el `info.version` de los seis specs
+suben a `0.1.0-tracer.4` (los specs venían rezagados en `tracer.2`).
+
+**Verificación (gate local, salida real):** `make lint`, `check-estados` (13
+estados), `check-registro` (12 tipos), `check-tags` (9 paquetes), `breaking` y
+`breaking-openapi` (rupturas declaradas aceptadas; el resto compatible),
+`test-breaking-gate` y `contract-tests` pasan. El consumidor limpio del gate se
+salta sin tag publicado (R5); se verificó de verdad con un consumidor Go por
+`replace` al árbol (`.scratch/tracer-4-ola-1/`) que EJECUTA y afirma:
+`PuedeTransicionar(ASIGNADO, EN_TRANSITO)` true, la guarda de aptitud ausente, la
+forma nueva de asignación/roster/eventos, y el mapeo roles/Audiencia (ocho roles,
+`cliente` externo). `check-reproducible` sólo pasará cuando el Lead commitee
+fuentes y artefactos juntos; el codegen es determinista (regenerar dos veces da
+los mismos bytes).
+
+**Archivos modificados:**
+- `VERSION`, `packages/api-client-ts/package.json`
+- `contracts/estados/viaje.estados.yaml`
+- `contracts/events/ai27/eventos/v1/viaje.proto`
+- `contracts/events/INVENTARIO.md` (etiqueta de versión del encabezado)
+- `contracts/openapi/catalogos.yaml`, `contracts/openapi/operacion.yaml`
+- `contracts/openapi/{_comunes,bff,identidad,reportes}.yaml` (sólo `info.version`)
+- `rompimientos/v0.1.0-tracer.4.yaml` (nuevo)
+- `tools/breaking-gate/` (nuevo)
+- `scripts/breaking-openapi.sh`, `scripts/breaking-eventos.sh` (nuevo),
+  `scripts/test-breaking-gate.sh` (nuevo)
+- `Makefile`, `.github/workflows/contracts.yml`
+- `packages/api-client-go/`, `packages/api-client-ts/src/` (artefactos regenerados)
+
 ## 2026:10:06 12:55
 
 **Resumen:** Se reemplazó la plantilla de Pull Request (venía copiada del frontend) por una adaptada al rol de este repo como fuente de contratos.

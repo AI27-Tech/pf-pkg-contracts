@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — operacion
-  version: 0.1.0-tracer.2
+  version: 0.1.0-tracer.4
   description: >-
     Progreso del viaje: creación, transiciones, asignación, bitácora,
     incidencias y auditoría. Consumido por `bff`, nunca por el frontend directo.
@@ -34,6 +34,8 @@ security:
 tags:
 - name: viajes
 - name: asignacion
+- name: roster
+  description: Roster de unidades (paquetes vehículo + custodios) administrado por el jefe_operativo (ADR 31/33).
 - name: bitacora
 - name: incidencias
 - name: auditoria
@@ -156,11 +158,14 @@ paths:
     post:
       operationId: asignarRecursos
       tags: [asignacion]
-      summary: Asignar unidad + custodios (escritura atómica).
+      summary: Asignar la escolta (una o más unidades) en una escritura atómica.
       description: >-
-        Reserva `unidad` y `custodios` con disponibilidad verificada en una sola
-        transacción (ADR 24). Si algún recurso no es apto o no está disponible,
-        no se reserva parcialmente nada (409).
+        Reserva la `escolta` —una o más `unidades` (paquetes vehículo + custodios)
+        del roster— con disponibilidad verificada en una sola transacción (ADR 31).
+        La reserva es por `unidad` completa, no por vehículo y custodio por
+        separado. Si alguna unidad no está disponible en la ventana, no se reserva
+        parcialmente nada (409). La aptitud es informativa y NO condiciona la
+        asignación en V1 (DEC-055).
       requestBody:
         required: true
         content:
@@ -177,15 +182,21 @@ paths:
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "409":
           description: >-
-            Recurso no apto o no disponible en la ventana; sin reserva parcial.
-            `codigo` `recurso_no_disponible` o `recurso_no_apto`.
+            Alguna unidad no está disponible en la ventana del viaje; sin reserva
+            parcial. Único código de rechazo: `recurso_no_disponible` (la reserva
+            falló, el "no hay gente" de DEC-043). La aptitud nunca rechaza en V1
+            (DEC-055): no existe `recurso_no_apto`.
           content:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
     patch:
       operationId: reasignarRecursos
       tags: [asignacion]
-      summary: Reasignar con motivo (auditado).
+      summary: Reasignar la escolta completa, con motivo (auditado).
+      description: >-
+        La reasignación manda la escolta completa en `unidades_ids` (una o más
+        unidades del roster). Cambiar un custodio es edición de roster, NO
+        reasignación (D2): por eso no se reciben custodios aquí.
       requestBody:
         required: true
         content:
@@ -201,6 +212,133 @@ paths:
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/viajes/{id}/eta:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    patch:
+      operationId: fijarEta
+      tags: [viajes]
+      summary: Fijar el ETA estimado del viaje (captura manual del operador).
+      description: >-
+        En V1 el ETA es un dato capturado a mano, no un cálculo (ADR 20 /
+        DEC-007). NO valida contra el grafo de transiciones —no es un cambio de
+        estado—; sólo exige que el viaje no esté en un estado terminal.
+        `operacion` guarda y devuelve el valor crudo; la obsolescencia (`stale`)
+        la calcula el `bff` al leer, no este servicio (ADR 20).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EtaEntrada"}
+      responses:
+        "200":
+          description: ETA actualizado.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Viaje"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409":
+          description: >-
+            El viaje está en un estado terminal y no admite fijar ETA. `codigo`
+            de máquina `viaje_en_estado_terminal`.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/unidades:
+    get:
+      operationId: listarUnidades
+      tags: [roster]
+      summary: Listar unidades del roster (administración del jefe_operativo).
+      description: >-
+        El roster de `unidades` vive en `operacion` (ADR 31 §5 / ADR 33), no en
+        `catalogos`. Una `unidad` es un paquete pre-armado: un vehículo (de
+        `catalogos`) con uno o dos custodios (de `catalogos`), referidos por
+        identificador. En V1 la lectura del roster NO expone aptitud (queda para
+        después).
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de unidades del roster.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaUnidades"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    post:
+      operationId: crearUnidad
+      tags: [roster]
+      summary: Crear una unidad del roster (jefe_operativo).
+      description: >-
+        Arma una `unidad` emparejando un vehículo con uno o dos custodios
+        (coche: uno o dos; moto: uno — ADR 31). El `tipo` NO se envía: se deriva
+        del vehículo en el servidor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UnidadEntrada"}
+      responses:
+        "201":
+          description: Unidad creada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Unidad"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
+  /api/v1/unidades/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerUnidad
+      tags: [roster]
+      summary: Detalle de una unidad del roster.
+      responses:
+        "200":
+          description: Unidad.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Unidad"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: modificarUnidad
+      tags: [roster]
+      summary: Modificar una unidad del roster, incluido activar/desactivar.
+      description: >-
+        Cambia el vehículo, los custodios o el estado `activa` de la unidad.
+        Activar/desactivar es un cambio de `activa` por esta misma ruta. El
+        `tipo` nunca se escribe: se deriva del vehículo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UnidadModificacion"}
+      responses:
+        "200":
+          description: Unidad modificada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Unidad"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/viajes/{id}/bitacora:
     parameters:
@@ -425,10 +563,17 @@ components:
           format: date-time
           nullable: true
           description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
-        # eta_cliente es opcional: ETA A→B capturado manualmente por el operador
-        # (DEC-007, A1). Ausente = sin ETA aún (equivale a null en 3.0.x).
-        eta_cliente:
-          $ref: "#/components/schemas/Eta"
+        # eta_estimado es nullable: ETA A->B capturado manualmente por el operador
+        # (ADR 20 / DEC-007). null = sin ETA aún. `operacion` guarda y devuelve el
+        # valor crudo; la obsolescencia (`stale`) la deriva el `bff` al leer.
+        eta_estimado:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            ETA estimado del viaje, capturado a mano (ADR 20). Mismo formato que
+            `MarcaTiempo`. null si no se ha fijado. `operacion` no calcula ni
+            expone `stale`: eso lo hace el `bff`.
         creado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
 
     ViajeDetalle:
@@ -450,17 +595,16 @@ components:
         tipo: {$ref: "#/components/schemas/CondicionViaje"}
         abierta_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
 
-    Eta:
+    EtaEntrada:
       type: object
       additionalProperties: false
-      required: [valor, obsoleto]
+      required: [eta_estimado]
       properties:
-        valor: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
-        obsoleto:
-          type: boolean
+        eta_estimado:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"]
           description: >-
-            true cuando el ETA venció y no se ha re-confirmado (marca `stale`,
-            DEC-021 #2). El ETA no se recalcula solo.
+            ETA estimado a fijar (captura manual, ADR 20). Reemplaza el valor
+            previo; `operacion` no lo recalcula ni lo marca obsoleto.
 
     PaginaViajes:
       type: object
@@ -492,41 +636,171 @@ components:
     AsignacionEntrada:
       type: object
       additionalProperties: false
-      required: [unidad_id, custodios_ids]
+      required: [unidades_ids]
+      description: >-
+        Escolta a reservar: una o más `unidades` del roster (D2). Reemplaza el
+        par `unidad_id` + `custodios_ids`: la reserva es por unidad completa
+        (paquete vehículo + custodios), no por recursos sueltos (ADR 31).
       properties:
-        unidad_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
-        custodios_ids:
+        unidades_ids:
           type: array
           minItems: 1
+          description: Identificadores de las unidades del roster que forman la escolta.
           items: {$ref: "_comunes.yaml#/components/schemas/Id"}
 
     ReasignacionEntrada:
       type: object
       additionalProperties: false
-      required: [motivo]
+      required: [unidades_ids, motivo]
+      description: >-
+        La reasignación manda la escolta completa (D2). Ambos campos son
+        obligatorios. No recibe custodios: cambiar un custodio es edición de
+        roster, no reasignación.
       properties:
-        unidad_id:
-          type: string
-          format: uuid
-          nullable: true
-          description: Opcional; mismo formato que `Id`. null si no aplica.
-        custodios_ids:
+        unidades_ids:
           type: array
+          minItems: 1
+          description: "Escolta resultante: una o más unidades del roster."
           items: {$ref: "_comunes.yaml#/components/schemas/Id"}
         motivo:
           type: string
           description: Motivo de la reasignación (auditado).
 
+    # --- Aptitud informativa por átomo en la RESPUESTA de la asignación (D1 /
+    #     DEC-055). NO hay aptitud agregada por unidad: sería regla nueva. El
+    #     estado `desconocido` lo calcula `operacion` cuando `catalogos` no
+    #     responde o el dato está obsoleto; `catalogos` nunca lo devuelve. ---
+    AptitudRecurso:
+      type: object
+      additionalProperties: false
+      required: [recurso, recurso_id, estado]
+      properties:
+        recurso:
+          type: string
+          enum: [vehiculo, custodio]
+          description: Átomo evaluado dentro de la unidad.
+        recurso_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        estado:
+          type: string
+          enum: [apto, no_apto, desconocido]
+          description: >-
+            Afirmación informativa (DEC-055). `desconocido` lo calcula
+            `operacion`, no `catalogos`. Nunca bloquea la asignación en V1.
+        motivos:
+          type: array
+          description: Motivos, cuando el estado es `no_apto`.
+          items: {type: string}
+
+    UnidadAsignada:
+      type: object
+      additionalProperties: false
+      required: [unidad_id, aptitud]
+      properties:
+        unidad_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        aptitud:
+          type: array
+          description: Aptitud informativa por átomo (vehículo y custodios de la unidad).
+          items: {$ref: "#/components/schemas/AptitudRecurso"}
+
     Asignacion:
       type: object
       additionalProperties: false
-      required: [viaje_id, unidad_id, custodios_ids]
+      required: [viaje_id, unidades]
       properties:
         viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
-        unidad_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        unidades:
+          type: array
+          description: >-
+            Unidades de la escolta reservada, cada una con su aptitud informativa
+            por átomo (D1). La reserva ya ocurrió: la aptitud es sólo dato.
+          items: {$ref: "#/components/schemas/UnidadAsignada"}
+
+    # --- Roster de unidades (D6a / ADR 31 §5 / ADR 33). La `unidad` es un
+    #     paquete pre-armado: un vehículo (átomo de `catalogos`) con uno o dos
+    #     custodios (átomos de `catalogos`), referidos POR IDENTIFICADOR, nunca
+    #     por FK cruzada de esquema. El roster lo administra el `jefe_operativo`.
+    #
+    #     PREGUNTA ABIERTA (Operación): si un mismo custodio puede estar en más
+    #     de una `unidad` (exclusividad) NO está decidido. El contrato NO impone
+    #     esa restricción; se resolverá cuando Operación lo defina.
+    #
+    #     El `tipo` (patrulla|moto) es SOLO LECTURA: se deriva del vehículo
+    #     (coche -> patrulla, moto -> moto, ADR 31). No es columna de entrada. ---
+    Unidad:
+      type: object
+      additionalProperties: false
+      required: [id, vehiculo_id, custodios_ids, tipo, activa]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        vehiculo_id:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
+          description: Identificador del vehículo en `catalogos`. Referencia, no FK.
         custodios_ids:
           type: array
+          minItems: 1
+          maxItems: 2
+          description: >-
+            Custodios de la unidad, por identificador de `catalogos`. Un coche
+            lleva uno o dos; una moto, uno (ADR 31).
           items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        tipo:
+          type: string
+          enum: [patrulla, moto]
+          readOnly: true
+          description: >-
+            Tipo de unidad, SOLO LECTURA, derivado del vehículo en el servidor
+            (coche -> patrulla, moto -> moto, ADR 31). Nunca se envía en una
+            petición.
+        activa:
+          type: boolean
+          description: Si la unidad está activa (disponible para asignarse).
+
+    UnidadEntrada:
+      type: object
+      additionalProperties: false
+      required: [vehiculo_id, custodios_ids]
+      description: >-
+        Alta de unidad. El `tipo` NO se envía: se deriva del vehículo. `activa`
+        es opcional al crear (el servidor decide el valor por defecto).
+      properties:
+        vehiculo_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        custodios_ids:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        activa:
+          type: boolean
+          description: Opcional al crear. Si se omite, el servidor fija el valor por defecto.
+
+    UnidadModificacion:
+      type: object
+      additionalProperties: false
+      description: >-
+        Modificación de unidad. Todos los campos son opcionales; activar o
+        desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado).
+      properties:
+        vehiculo_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        custodios_ids:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        activa:
+          type: boolean
+
+    PaginaUnidades:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Unidad"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
 
     EntradaBitacoraEntrada:
       type: object
