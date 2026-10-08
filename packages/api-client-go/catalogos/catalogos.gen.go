@@ -33,13 +33,19 @@ const (
 	CustodioEstadoInactivo CustodioEstado = "inactivo"
 )
 
-// Defines values for UnidadEstado.
+// Defines values for VehiculoEstado.
 const (
-	Activa   UnidadEstado = "activa"
-	Inactiva UnidadEstado = "inactiva"
+	Activa   VehiculoEstado = "activa"
+	Inactiva VehiculoEstado = "inactiva"
 )
 
-// Aptitud Afirmación de aptitud administrativa. `apto=false` no reserva ni bloquea; informa a `operacion`, que decide dentro de su transacción de asignación.
+// Defines values for VehiculoTipo.
+const (
+	Coche VehiculoTipo = "coche"
+	Moto  VehiculoTipo = "moto"
+)
+
+// Aptitud Afirmación de aptitud administrativa, INFORMATIVA en V1 (DEC-055). `apto=false` no reserva ni bloquea; informa a `operacion`, que decide dentro de su transacción de asignación y asigna igual. `catalogos` devuelve `apto` true/false; el estado "desconocido" NO existe aquí, lo calcula el consumidor cuando no hay respuesta o el dato está obsoleto.
 type Aptitud struct {
 	Apto bool `json:"apto"`
 
@@ -130,11 +136,11 @@ type PaginaCustodios struct {
 	Items           []Custodio `json:"items"`
 }
 
-// PaginaUnidades defines model for PaginaUnidades.
-type PaginaUnidades struct {
+// PaginaVehiculos defines model for PaginaVehiculos.
+type PaginaVehiculos struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
-	CursorSiguiente *string  `json:"cursor_siguiente"`
-	Items           []Unidad `json:"items"`
+	CursorSiguiente *string    `json:"cursor_siguiente"`
+	Items           []Vehiculo `json:"items"`
 }
 
 // Sla defines model for Sla.
@@ -149,22 +155,25 @@ type Sla struct {
 	Id Id `json:"id"`
 }
 
-// Unidad defines model for Unidad.
-type Unidad struct {
-	// Economico Número económico de la unidad.
-	Economico *string      `json:"economico,omitempty"`
-	Estado    UnidadEstado `json:"estado"`
+// Vehiculo Vehículo de la flota de AI27 (ÁTOMO de catalogos). La `unidad` (paquete vehículo + custodios) NO vive aquí: es roster de `operacion` (ADR 31 §5).
+type Vehiculo struct {
+	// Economico Número económico del vehículo.
+	Economico *string        `json:"economico,omitempty"`
+	Estado    VehiculoEstado `json:"estado"`
 
 	// Id Identificador único (UUID). Nunca un correlativo expuesto.
 	Id     Id      `json:"id"`
 	Placas *string `json:"placas,omitempty"`
 
-	// Tipo Tipo de unidad; `patrulla` es un tipo de unidad (ADR 24 / DEC-035), no un recurso aparte.
-	Tipo string `json:"tipo"`
+	// Tipo Tipo de vehículo de AI27. Un coche lleva uno o dos custodios; una moto, uno (ADR 31). El `tipo` de la `unidad` del roster (patrulla|moto) se deriva de este valor en `operacion`, no se escribe aquí.
+	Tipo VehiculoTipo `json:"tipo"`
 }
 
-// UnidadEstado defines model for Unidad.Estado.
-type UnidadEstado string
+// VehiculoEstado defines model for Vehiculo.Estado.
+type VehiculoEstado string
+
+// VehiculoTipo Tipo de vehículo de AI27. Un coche lleva uno o dos custodios; una moto, uno (ADR 31). El `tipo` de la `unidad` del roster (patrulla|moto) se deriva de este valor en `operacion`, no se escribe aquí.
+type VehiculoTipo string
 
 // NoAutorizado defines model for NoAutorizado.
 type NoAutorizado = Error
@@ -201,13 +210,13 @@ type ObtenerSlaParams struct {
 	AFecha *MarcaTiempo `form:"a_fecha,omitempty" json:"a_fecha,omitempty"`
 }
 
-// ListarUnidadesParams defines parameters for ListarUnidades.
-type ListarUnidadesParams struct {
+// ListarVehiculosParams defines parameters for ListarVehiculos.
+type ListarVehiculosParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
-// AptitudUnidadParams defines parameters for AptitudUnidad.
-type AptitudUnidadParams struct {
+// AptitudVehiculoParams defines parameters for AptitudVehiculo.
+type AptitudVehiculoParams struct {
 	// ClienteId Cliente para cuyo contrato/SLA se evalúa la aptitud.
 	ClienteId Id `form:"cliente_id" json:"cliente_id"`
 }
@@ -303,11 +312,11 @@ type ClientInterface interface {
 	// ObtenerSla request
 	ObtenerSla(ctx context.Context, id Id, params *ObtenerSlaParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListarUnidades request
-	ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// ListarVehiculos request
+	ListarVehiculos(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AptitudUnidad request
-	AptitudUnidad(ctx context.Context, id Id, params *AptitudUnidadParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// AptitudVehiculo request
+	AptitudVehiculo(ctx context.Context, id Id, params *AptitudVehiculoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) ListarClientes(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -382,8 +391,8 @@ func (c *Client) ObtenerSla(ctx context.Context, id Id, params *ObtenerSlaParams
 	return c.Client.Do(req)
 }
 
-func (c *Client) ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListarUnidadesRequest(c.Server, params)
+func (c *Client) ListarVehiculos(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarVehiculosRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -394,8 +403,8 @@ func (c *Client) ListarUnidades(ctx context.Context, params *ListarUnidadesParam
 	return c.Client.Do(req)
 }
 
-func (c *Client) AptitudUnidad(ctx context.Context, id Id, params *AptitudUnidadParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAptitudUnidadRequest(c.Server, id, params)
+func (c *Client) AptitudVehiculo(ctx context.Context, id Id, params *AptitudVehiculoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAptitudVehiculoRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -702,8 +711,8 @@ func NewObtenerSlaRequest(server string, id Id, params *ObtenerSlaParams) (*http
 	return req, nil
 }
 
-// NewListarUnidadesRequest generates requests for ListarUnidades
-func NewListarUnidadesRequest(server string, params *ListarUnidadesParams) (*http.Request, error) {
+// NewListarVehiculosRequest generates requests for ListarVehiculos
+func NewListarVehiculosRequest(server string, params *ListarVehiculosParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -711,7 +720,7 @@ func NewListarUnidadesRequest(server string, params *ListarUnidadesParams) (*htt
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/unidades")
+	operationPath := fmt.Sprintf("/api/v1/vehiculos")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -751,8 +760,8 @@ func NewListarUnidadesRequest(server string, params *ListarUnidadesParams) (*htt
 	return req, nil
 }
 
-// NewAptitudUnidadRequest generates requests for AptitudUnidad
-func NewAptitudUnidadRequest(server string, id Id, params *AptitudUnidadParams) (*http.Request, error) {
+// NewAptitudVehiculoRequest generates requests for AptitudVehiculo
+func NewAptitudVehiculoRequest(server string, id Id, params *AptitudVehiculoParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -767,7 +776,7 @@ func NewAptitudUnidadRequest(server string, id Id, params *AptitudUnidadParams) 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/unidades/%s/aptitud", pathParam0)
+	operationPath := fmt.Sprintf("/api/v1/vehiculos/%s/aptitud", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -864,11 +873,11 @@ type ClientWithResponsesInterface interface {
 	// ObtenerSlaWithResponse request
 	ObtenerSlaWithResponse(ctx context.Context, id Id, params *ObtenerSlaParams, reqEditors ...RequestEditorFn) (*ObtenerSlaResponse, error)
 
-	// ListarUnidadesWithResponse request
-	ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error)
+	// ListarVehiculosWithResponse request
+	ListarVehiculosWithResponse(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*ListarVehiculosResponse, error)
 
-	// AptitudUnidadWithResponse request
-	AptitudUnidadWithResponse(ctx context.Context, id Id, params *AptitudUnidadParams, reqEditors ...RequestEditorFn) (*AptitudUnidadResponse, error)
+	// AptitudVehiculoWithResponse request
+	AptitudVehiculoWithResponse(ctx context.Context, id Id, params *AptitudVehiculoParams, reqEditors ...RequestEditorFn) (*AptitudVehiculoResponse, error)
 }
 
 type ListarClientesResponse struct {
@@ -1015,16 +1024,16 @@ func (r ObtenerSlaResponse) StatusCode() int {
 	return 0
 }
 
-type ListarUnidadesResponse struct {
+type ListarVehiculosResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *PaginaUnidades
+	JSON200      *PaginaVehiculos
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
 }
 
 // Status returns HTTPResponse.Status
-func (r ListarUnidadesResponse) Status() string {
+func (r ListarVehiculosResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -1032,14 +1041,14 @@ func (r ListarUnidadesResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ListarUnidadesResponse) StatusCode() int {
+func (r ListarVehiculosResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type AptitudUnidadResponse struct {
+type AptitudVehiculoResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *Aptitud
@@ -1048,7 +1057,7 @@ type AptitudUnidadResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r AptitudUnidadResponse) Status() string {
+func (r AptitudVehiculoResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -1056,7 +1065,7 @@ func (r AptitudUnidadResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r AptitudUnidadResponse) StatusCode() int {
+func (r AptitudVehiculoResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1117,22 +1126,22 @@ func (c *ClientWithResponses) ObtenerSlaWithResponse(ctx context.Context, id Id,
 	return ParseObtenerSlaResponse(rsp)
 }
 
-// ListarUnidadesWithResponse request returning *ListarUnidadesResponse
-func (c *ClientWithResponses) ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error) {
-	rsp, err := c.ListarUnidades(ctx, params, reqEditors...)
+// ListarVehiculosWithResponse request returning *ListarVehiculosResponse
+func (c *ClientWithResponses) ListarVehiculosWithResponse(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*ListarVehiculosResponse, error) {
+	rsp, err := c.ListarVehiculos(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseListarUnidadesResponse(rsp)
+	return ParseListarVehiculosResponse(rsp)
 }
 
-// AptitudUnidadWithResponse request returning *AptitudUnidadResponse
-func (c *ClientWithResponses) AptitudUnidadWithResponse(ctx context.Context, id Id, params *AptitudUnidadParams, reqEditors ...RequestEditorFn) (*AptitudUnidadResponse, error) {
-	rsp, err := c.AptitudUnidad(ctx, id, params, reqEditors...)
+// AptitudVehiculoWithResponse request returning *AptitudVehiculoResponse
+func (c *ClientWithResponses) AptitudVehiculoWithResponse(ctx context.Context, id Id, params *AptitudVehiculoParams, reqEditors ...RequestEditorFn) (*AptitudVehiculoResponse, error) {
+	rsp, err := c.AptitudVehiculo(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseAptitudUnidadResponse(rsp)
+	return ParseAptitudVehiculoResponse(rsp)
 }
 
 // ParseListarClientesResponse parses an HTTP response from a ListarClientesWithResponse call
@@ -1375,22 +1384,22 @@ func ParseObtenerSlaResponse(rsp *http.Response) (*ObtenerSlaResponse, error) {
 	return response, nil
 }
 
-// ParseListarUnidadesResponse parses an HTTP response from a ListarUnidadesWithResponse call
-func ParseListarUnidadesResponse(rsp *http.Response) (*ListarUnidadesResponse, error) {
+// ParseListarVehiculosResponse parses an HTTP response from a ListarVehiculosWithResponse call
+func ParseListarVehiculosResponse(rsp *http.Response) (*ListarVehiculosResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ListarUnidadesResponse{
+	response := &ListarVehiculosResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest PaginaUnidades
+		var dest PaginaVehiculos
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1415,15 +1424,15 @@ func ParseListarUnidadesResponse(rsp *http.Response) (*ListarUnidadesResponse, e
 	return response, nil
 }
 
-// ParseAptitudUnidadResponse parses an HTTP response from a AptitudUnidadWithResponse call
-func ParseAptitudUnidadResponse(rsp *http.Response) (*AptitudUnidadResponse, error) {
+// ParseAptitudVehiculoResponse parses an HTTP response from a AptitudVehiculoWithResponse call
+func ParseAptitudVehiculoResponse(rsp *http.Response) (*AptitudVehiculoResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &AptitudUnidadResponse{
+	response := &AptitudVehiculoResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

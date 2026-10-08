@@ -57,6 +57,9 @@ jobs:
         # publicados. En el primer release aún no hay línea base, así que se
         # omite. Se compara contra el ref LOCAL (no por clone HTTPS, que
         # requeriría credenciales y falla con 'could not read Username').
+        # La invocación pasa por scripts/breaking-eventos.sh, que aplica la
+        # allowlist de rupturas por versión (D4): una ruptura pasa sólo si está
+        # declarada en rompimientos/${VERSION}.yaml.
         if: github.ref != 'refs/heads/pf-contracts-m'
         run: |
           if ! git fetch --no-tags origin pf-contracts-m 2>/dev/null; then
@@ -65,7 +68,7 @@ jobs:
           fi
           if git cat-file -e FETCH_HEAD:buf.yaml 2>/dev/null; then
             echo "Comparando eventos contra pf-contracts-m"
-            buf breaking --against '.git#ref=FETCH_HEAD'
+            ./scripts/breaking-eventos.sh '.git#ref=FETCH_HEAD'
           else
             echo "pf-contracts-m aún no tiene contratos publicados; se omite el breaking check (primer release)."
           fi
@@ -82,6 +85,13 @@ jobs:
         # rama no es evidencia de freeze (invariante 2). Sin release previa, el
         # script lo dice y sale 0, igual que `buf breaking` en el primer release.
         run: make breaking-openapi
+
+      - name: Prueba del mecanismo de allowlist de rupturas (D4)
+        # El gate de rupturas intencionales (rompimientos/${VERSION}.yaml) sólo
+        # sirve si una ruptura NO declarada sigue fallando. Se prueba el propio
+        # mecanismo con entradas deterministas (R5: una comprobación que no puede
+        # fallar no es una comprobación).
+        run: make test-breaking-gate
 
       - name: Equivalencia estados <-> OpenAPI
         run: make check-estados

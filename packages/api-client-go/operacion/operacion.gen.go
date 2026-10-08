@@ -22,6 +22,19 @@ const (
 	BearerCognitoScopes = "bearerCognito.Scopes"
 )
 
+// Defines values for AptitudRecursoEstado.
+const (
+	Apto        AptitudRecursoEstado = "apto"
+	Desconocido AptitudRecursoEstado = "desconocido"
+	NoApto      AptitudRecursoEstado = "no_apto"
+)
+
+// Defines values for AptitudRecursoRecurso.
+const (
+	Custodio AptitudRecursoRecurso = "custodio"
+	Vehiculo AptitudRecursoRecurso = "vehiculo"
+)
+
 // Defines values for CondicionViaje.
 const (
 	INCIDENCIA CondicionViaje = "INCIDENCIA"
@@ -51,23 +64,46 @@ const (
 	Resuelta   IncidenciaEstado = "resuelta"
 )
 
+// Defines values for UnidadTipo.
+const (
+	Moto     UnidadTipo = "moto"
+	Patrulla UnidadTipo = "patrulla"
+)
+
+// AptitudRecurso defines model for AptitudRecurso.
+type AptitudRecurso struct {
+	// Estado Afirmación informativa (DEC-055). `desconocido` lo calcula `operacion`, no `catalogos`. Nunca bloquea la asignación en V1.
+	Estado AptitudRecursoEstado `json:"estado"`
+
+	// Motivos Motivos, cuando el estado es `no_apto`.
+	Motivos *[]string `json:"motivos,omitempty"`
+
+	// Recurso Átomo evaluado dentro de la unidad.
+	Recurso AptitudRecursoRecurso `json:"recurso"`
+
+	// RecursoId Identificador único (UUID). Nunca un correlativo expuesto.
+	RecursoId Id `json:"recurso_id"`
+}
+
+// AptitudRecursoEstado Afirmación informativa (DEC-055). `desconocido` lo calcula `operacion`, no `catalogos`. Nunca bloquea la asignación en V1.
+type AptitudRecursoEstado string
+
+// AptitudRecursoRecurso Átomo evaluado dentro de la unidad.
+type AptitudRecursoRecurso string
+
 // Asignacion defines model for Asignacion.
 type Asignacion struct {
-	CustodiosIds []Id `json:"custodios_ids"`
-
-	// UnidadId Identificador único (UUID). Nunca un correlativo expuesto.
-	UnidadId Id `json:"unidad_id"`
+	// Unidades Unidades de la escolta reservada, cada una con su aptitud informativa por átomo (D1). La reserva ya ocurrió: la aptitud es sólo dato.
+	Unidades []UnidadAsignada `json:"unidades"`
 
 	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.
 	ViajeId Id `json:"viaje_id"`
 }
 
-// AsignacionEntrada defines model for AsignacionEntrada.
+// AsignacionEntrada Escolta a reservar: una o más `unidades` del roster (D2). Reemplaza el par `unidad_id` + `custodios_ids`: la reserva es por unidad completa (paquete vehículo + custodios), no por recursos sueltos (ADR 31).
 type AsignacionEntrada struct {
-	CustodiosIds []Id `json:"custodios_ids"`
-
-	// UnidadId Identificador único (UUID). Nunca un correlativo expuesto.
-	UnidadId Id `json:"unidad_id"`
+	// UnidadesIds Identificadores de las unidades del roster que forman la escolta.
+	UnidadesIds []Id `json:"unidades_ids"`
 }
 
 // CondicionAbierta defines model for CondicionAbierta.
@@ -84,6 +120,7 @@ type CondicionViaje string
 
 // CrearViajeEntrada defines model for CrearViajeEntrada.
 type CrearViajeEntrada struct {
+	// Asignacion Escolta a reservar: una o más `unidades` del roster (D2). Reemplaza el par `unidad_id` + `custodios_ids`: la reserva es por unidad completa (paquete vehículo + custodios), no por recursos sueltos (ADR 31).
 	Asignacion *AsignacionEntrada `json:"asignacion,omitempty"`
 
 	// ClienteId Opcional; mismo formato que `Id`. null si no aplica.
@@ -151,13 +188,10 @@ type Error struct {
 // EstadoViaje Estado de progreso del viaje. Espejo del enum canónico de `contracts/estados/` (ADR 19). Incluye estados V2 declarados e inalcanzables en V1 (PATRULLA_EN_CAMINO).
 type EstadoViaje string
 
-// Eta defines model for Eta.
-type Eta struct {
-	// Obsoleto true cuando el ETA venció y no se ha re-confirmado (marca `stale`, DEC-021 #2). El ETA no se recalcula solo.
-	Obsoleto bool `json:"obsoleto"`
-
-	// Valor Instante en UTC, RFC 3339.
-	Valor MarcaTiempo `json:"valor"`
+// EtaEntrada defines model for EtaEntrada.
+type EtaEntrada struct {
+	// EtaEstimado ETA estimado a fijar (captura manual, ADR 20). Reemplaza el valor previo; `operacion` no lo recalcula ni lo marca obsoleto.
+	EtaEstimado MarcaTiempo `json:"eta_estimado"`
 }
 
 // Id Identificador único (UUID). Nunca un correlativo expuesto.
@@ -208,6 +242,13 @@ type PaginaBitacora struct {
 	Items           []EntradaBitacora `json:"items"`
 }
 
+// PaginaUnidades defines model for PaginaUnidades.
+type PaginaUnidades struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string  `json:"cursor_siguiente"`
+	Items           []Unidad `json:"items"`
+}
+
 // PaginaViajes defines model for PaginaViajes.
 type PaginaViajes struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
@@ -215,15 +256,13 @@ type PaginaViajes struct {
 	Items           []Viaje `json:"items"`
 }
 
-// ReasignacionEntrada defines model for ReasignacionEntrada.
+// ReasignacionEntrada La reasignación manda la escolta completa (D2). Ambos campos son obligatorios. No recibe custodios: cambiar un custodio es edición de roster, no reasignación.
 type ReasignacionEntrada struct {
-	CustodiosIds *[]Id `json:"custodios_ids,omitempty"`
-
 	// Motivo Motivo de la reasignación (auditado).
 	Motivo string `json:"motivo"`
 
-	// UnidadId Opcional; mismo formato que `Id`. null si no aplica.
-	UnidadId *openapi_types.UUID `json:"unidad_id"`
+	// UnidadesIds Escolta resultante: una o más unidades del roster.
+	UnidadesIds []Id `json:"unidades_ids"`
 }
 
 // RegistroAuditoria defines model for RegistroAuditoria.
@@ -254,6 +293,55 @@ type TransicionEntrada struct {
 	Causa *string `json:"causa,omitempty"`
 }
 
+// Unidad defines model for Unidad.
+type Unidad struct {
+	// Activa Si la unidad está activa (disponible para asignarse).
+	Activa bool `json:"activa"`
+
+	// CustodiosIds Custodios de la unidad, por identificador de `catalogos`. Un coche lleva uno o dos; una moto, uno (ADR 31).
+	CustodiosIds []Id `json:"custodios_ids"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// Tipo Tipo de unidad, SOLO LECTURA, derivado del vehículo en el servidor (coche -> patrulla, moto -> moto, ADR 31). Nunca se envía en una petición.
+	Tipo *UnidadTipo `json:"tipo,omitempty"`
+
+	// VehiculoId Identificador del vehículo en `catalogos`. Referencia, no FK.
+	VehiculoId Id `json:"vehiculo_id"`
+}
+
+// UnidadTipo Tipo de unidad, SOLO LECTURA, derivado del vehículo en el servidor (coche -> patrulla, moto -> moto, ADR 31). Nunca se envía en una petición.
+type UnidadTipo string
+
+// UnidadAsignada defines model for UnidadAsignada.
+type UnidadAsignada struct {
+	// Aptitud Aptitud informativa por átomo (vehículo y custodios de la unidad).
+	Aptitud []AptitudRecurso `json:"aptitud"`
+
+	// UnidadId Identificador único (UUID). Nunca un correlativo expuesto.
+	UnidadId Id `json:"unidad_id"`
+}
+
+// UnidadEntrada Alta de unidad. El `tipo` NO se envía: se deriva del vehículo. `activa` es opcional al crear (el servidor decide el valor por defecto).
+type UnidadEntrada struct {
+	// Activa Opcional al crear. Si se omite, el servidor fija el valor por defecto.
+	Activa       *bool `json:"activa,omitempty"`
+	CustodiosIds []Id  `json:"custodios_ids"`
+
+	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
+	VehiculoId Id `json:"vehiculo_id"`
+}
+
+// UnidadModificacion Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado).
+type UnidadModificacion struct {
+	Activa       *bool `json:"activa,omitempty"`
+	CustodiosIds *[]Id `json:"custodios_ids,omitempty"`
+
+	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
+	VehiculoId *Id `json:"vehiculo_id,omitempty"`
+}
+
 // Viaje defines model for Viaje.
 type Viaje struct {
 	// ClienteId Identificador único (UUID). Nunca un correlativo expuesto.
@@ -264,8 +352,10 @@ type Viaje struct {
 	Destinos []Destino   `json:"destinos"`
 
 	// Estado Estado de progreso del viaje. Espejo del enum canónico de `contracts/estados/` (ADR 19). Incluye estados V2 declarados e inalcanzables en V1 (PATRULLA_EN_CAMINO).
-	Estado     EstadoViaje `json:"estado"`
-	EtaCliente *Eta        `json:"eta_cliente,omitempty"`
+	Estado EstadoViaje `json:"estado"`
+
+	// EtaEstimado ETA estimado del viaje, capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado. `operacion` no calcula ni expone `stale`: eso lo hace el `bff`.
+	EtaEstimado *time.Time `json:"eta_estimado"`
 
 	// FechaHoraServicio Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
 	FechaHoraServicio *time.Time `json:"fecha_hora_servicio"`
@@ -297,6 +387,11 @@ type Prohibido = Error
 // SolicitudInvalida defines model for SolicitudInvalida.
 type SolicitudInvalida = Error
 
+// ListarUnidadesParams defines parameters for ListarUnidades.
+type ListarUnidadesParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListarViajesParams defines parameters for ListarViajes.
 type ListarViajesParams struct {
 	// Estado Filtro por estado de progreso.
@@ -314,6 +409,12 @@ type ListarBitacoraParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// CrearUnidadJSONRequestBody defines body for CrearUnidad for application/json ContentType.
+type CrearUnidadJSONRequestBody = UnidadEntrada
+
+// ModificarUnidadJSONRequestBody defines body for ModificarUnidad for application/json ContentType.
+type ModificarUnidadJSONRequestBody = UnidadModificacion
+
 // CrearViajeJSONRequestBody defines body for CrearViaje for application/json ContentType.
 type CrearViajeJSONRequestBody = CrearViajeEntrada
 
@@ -325,6 +426,9 @@ type AsignarRecursosJSONRequestBody = AsignacionEntrada
 
 // RegistrarEntradaBitacoraJSONRequestBody defines body for RegistrarEntradaBitacora for application/json ContentType.
 type RegistrarEntradaBitacoraJSONRequestBody = EntradaBitacoraEntrada
+
+// FijarEtaJSONRequestBody defines body for FijarEta for application/json ContentType.
+type FijarEtaJSONRequestBody = EtaEntrada
 
 // AbrirIncidenciaJSONRequestBody defines body for AbrirIncidencia for application/json ContentType.
 type AbrirIncidenciaJSONRequestBody = IncidenciaEntrada
@@ -408,6 +512,22 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// ListarUnidades request
+	ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CrearUnidadWithBody request with any body
+	CrearUnidadWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearUnidad(ctx context.Context, body CrearUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerUnidad request
+	ObtenerUnidad(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ModificarUnidadWithBody request with any body
+	ModificarUnidadWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ModificarUnidad(ctx context.Context, id Id, body ModificarUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarViajes request
 	ListarViajes(ctx context.Context, params *ListarViajesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -440,6 +560,11 @@ type ClientInterface interface {
 
 	RegistrarEntradaBitacora(ctx context.Context, id Id, body RegistrarEntradaBitacoraJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// FijarEtaWithBody request with any body
+	FijarEtaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	FijarEta(ctx context.Context, id Id, body FijarEtaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AbrirIncidenciaWithBody request with any body
 	AbrirIncidenciaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -454,6 +579,78 @@ type ClientInterface interface {
 	TransicionarViajeWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	TransicionarViaje(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarUnidadesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearUnidadWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearUnidadRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearUnidad(ctx context.Context, body CrearUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearUnidadRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerUnidad(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerUnidadRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ModificarUnidadWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewModificarUnidadRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ModificarUnidad(ctx context.Context, id Id, body ModificarUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewModificarUnidadRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) ListarViajes(ctx context.Context, params *ListarViajesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -600,6 +797,30 @@ func (c *Client) RegistrarEntradaBitacora(ctx context.Context, id Id, body Regis
 	return c.Client.Do(req)
 }
 
+func (c *Client) FijarEtaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarEtaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarEta(ctx context.Context, id Id, body FijarEtaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarEtaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) AbrirIncidenciaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAbrirIncidenciaRequestWithBody(c.Server, id, contentType, body)
 	if err != nil {
@@ -670,6 +891,176 @@ func (c *Client) TransicionarViaje(ctx context.Context, id Id, body Transicionar
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewListarUnidadesRequest generates requests for ListarUnidades
+func NewListarUnidadesRequest(server string, params *ListarUnidadesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/unidades")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCrearUnidadRequest calls the generic CrearUnidad builder with application/json body
+func NewCrearUnidadRequest(server string, body CrearUnidadJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearUnidadRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCrearUnidadRequestWithBody generates requests for CrearUnidad with any type of body
+func NewCrearUnidadRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/unidades")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewObtenerUnidadRequest generates requests for ObtenerUnidad
+func NewObtenerUnidadRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/unidades/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewModificarUnidadRequest calls the generic ModificarUnidad builder with application/json body
+func NewModificarUnidadRequest(server string, id Id, body ModificarUnidadJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewModificarUnidadRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewModificarUnidadRequestWithBody generates requests for ModificarUnidad with any type of body
+func NewModificarUnidadRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/unidades/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
 }
 
 // NewListarViajesRequest generates requests for ListarViajes
@@ -1064,6 +1455,53 @@ func NewRegistrarEntradaBitacoraRequestWithBody(server string, id Id, contentTyp
 	return req, nil
 }
 
+// NewFijarEtaRequest calls the generic FijarEta builder with application/json body
+func NewFijarEtaRequest(server string, id Id, body FijarEtaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewFijarEtaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewFijarEtaRequestWithBody generates requests for FijarEta with any type of body
+func NewFijarEtaRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/eta", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewAbrirIncidenciaRequest calls the generic AbrirIncidencia builder with application/json body
 func NewAbrirIncidenciaRequest(server string, id Id, body AbrirIncidenciaJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1255,6 +1693,22 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// ListarUnidadesWithResponse request
+	ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error)
+
+	// CrearUnidadWithBodyWithResponse request with any body
+	CrearUnidadWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearUnidadResponse, error)
+
+	CrearUnidadWithResponse(ctx context.Context, body CrearUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearUnidadResponse, error)
+
+	// ObtenerUnidadWithResponse request
+	ObtenerUnidadWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerUnidadResponse, error)
+
+	// ModificarUnidadWithBodyWithResponse request with any body
+	ModificarUnidadWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ModificarUnidadResponse, error)
+
+	ModificarUnidadWithResponse(ctx context.Context, id Id, body ModificarUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*ModificarUnidadResponse, error)
+
 	// ListarViajesWithResponse request
 	ListarViajesWithResponse(ctx context.Context, params *ListarViajesParams, reqEditors ...RequestEditorFn) (*ListarViajesResponse, error)
 
@@ -1287,6 +1741,11 @@ type ClientWithResponsesInterface interface {
 
 	RegistrarEntradaBitacoraWithResponse(ctx context.Context, id Id, body RegistrarEntradaBitacoraJSONRequestBody, reqEditors ...RequestEditorFn) (*RegistrarEntradaBitacoraResponse, error)
 
+	// FijarEtaWithBodyWithResponse request with any body
+	FijarEtaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarEtaResponse, error)
+
+	FijarEtaWithResponse(ctx context.Context, id Id, body FijarEtaJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarEtaResponse, error)
+
 	// AbrirIncidenciaWithBodyWithResponse request with any body
 	AbrirIncidenciaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AbrirIncidenciaResponse, error)
 
@@ -1301,6 +1760,105 @@ type ClientWithResponsesInterface interface {
 	TransicionarViajeWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
 
 	TransicionarViajeWithResponse(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
+}
+
+type ListarUnidadesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaUnidades
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarUnidadesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarUnidadesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearUnidadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Unidad
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearUnidadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearUnidadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerUnidadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Unidad
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerUnidadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerUnidadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ModificarUnidadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Unidad
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ModificarUnidadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ModificarUnidadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type ListarViajesResponse struct {
@@ -1501,6 +2059,32 @@ func (r RegistrarEntradaBitacoraResponse) StatusCode() int {
 	return 0
 }
 
+type FijarEtaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Viaje
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r FijarEtaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FijarEtaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type AbrirIncidenciaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -1577,6 +2161,58 @@ func (r TransicionarViajeResponse) StatusCode() int {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
+}
+
+// ListarUnidadesWithResponse request returning *ListarUnidadesResponse
+func (c *ClientWithResponses) ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error) {
+	rsp, err := c.ListarUnidades(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarUnidadesResponse(rsp)
+}
+
+// CrearUnidadWithBodyWithResponse request with arbitrary body returning *CrearUnidadResponse
+func (c *ClientWithResponses) CrearUnidadWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearUnidadResponse, error) {
+	rsp, err := c.CrearUnidadWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearUnidadResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearUnidadWithResponse(ctx context.Context, body CrearUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearUnidadResponse, error) {
+	rsp, err := c.CrearUnidad(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearUnidadResponse(rsp)
+}
+
+// ObtenerUnidadWithResponse request returning *ObtenerUnidadResponse
+func (c *ClientWithResponses) ObtenerUnidadWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerUnidadResponse, error) {
+	rsp, err := c.ObtenerUnidad(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerUnidadResponse(rsp)
+}
+
+// ModificarUnidadWithBodyWithResponse request with arbitrary body returning *ModificarUnidadResponse
+func (c *ClientWithResponses) ModificarUnidadWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ModificarUnidadResponse, error) {
+	rsp, err := c.ModificarUnidadWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseModificarUnidadResponse(rsp)
+}
+
+func (c *ClientWithResponses) ModificarUnidadWithResponse(ctx context.Context, id Id, body ModificarUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*ModificarUnidadResponse, error) {
+	rsp, err := c.ModificarUnidad(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseModificarUnidadResponse(rsp)
 }
 
 // ListarViajesWithResponse request returning *ListarViajesResponse
@@ -1683,6 +2319,23 @@ func (c *ClientWithResponses) RegistrarEntradaBitacoraWithResponse(ctx context.C
 	return ParseRegistrarEntradaBitacoraResponse(rsp)
 }
 
+// FijarEtaWithBodyWithResponse request with arbitrary body returning *FijarEtaResponse
+func (c *ClientWithResponses) FijarEtaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarEtaResponse, error) {
+	rsp, err := c.FijarEtaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarEtaResponse(rsp)
+}
+
+func (c *ClientWithResponses) FijarEtaWithResponse(ctx context.Context, id Id, body FijarEtaJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarEtaResponse, error) {
+	rsp, err := c.FijarEta(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarEtaResponse(rsp)
+}
+
 // AbrirIncidenciaWithBodyWithResponse request with arbitrary body returning *AbrirIncidenciaResponse
 func (c *ClientWithResponses) AbrirIncidenciaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AbrirIncidenciaResponse, error) {
 	rsp, err := c.AbrirIncidenciaWithBody(ctx, id, contentType, body, reqEditors...)
@@ -1732,6 +2385,187 @@ func (c *ClientWithResponses) TransicionarViajeWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseTransicionarViajeResponse(rsp)
+}
+
+// ParseListarUnidadesResponse parses an HTTP response from a ListarUnidadesWithResponse call
+func ParseListarUnidadesResponse(rsp *http.Response) (*ListarUnidadesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarUnidadesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaUnidades
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearUnidadResponse parses an HTTP response from a CrearUnidadWithResponse call
+func ParseCrearUnidadResponse(rsp *http.Response) (*CrearUnidadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearUnidadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Unidad
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerUnidadResponse parses an HTTP response from a ObtenerUnidadWithResponse call
+func ParseObtenerUnidadResponse(rsp *http.Response) (*ObtenerUnidadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerUnidadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Unidad
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseModificarUnidadResponse parses an HTTP response from a ModificarUnidadWithResponse call
+func ParseModificarUnidadResponse(rsp *http.Response) (*ModificarUnidadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ModificarUnidadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Unidad
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseListarViajesResponse parses an HTTP response from a ListarViajesWithResponse call
@@ -2090,6 +2924,60 @@ func ParseRegistrarEntradaBitacoraResponse(rsp *http.Response) (*RegistrarEntrad
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseFijarEtaResponse parses an HTTP response from a FijarEtaWithResponse call
+func ParseFijarEtaResponse(rsp *http.Response) (*FijarEtaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FijarEtaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Viaje
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

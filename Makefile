@@ -60,8 +60,12 @@ lint-openapi: ## Valida cada spec de OpenAPI (bundle + lint con $ref resueltos)
 	rm -rf "$$tmp"
 
 .PHONY: breaking
-breaking: ## buf breaking contra la última release publicada (rama principal)
-	buf breaking --against '.git#branch=pf-contracts-m'
+breaking: ## buf breaking de eventos con allowlist por versión (rompimientos/)
+	./scripts/breaking-eventos.sh
+
+.PHONY: test-breaking-gate
+test-breaking-gate: ## Prueba el mecanismo de allowlist: una ruptura no listada falla (D4)
+	./scripts/test-breaking-gate.sh
 
 .PHONY: breaking-openapi
 breaking-openapi: ## Rompe CI ante un cambio incompatible de OpenAPI vs la última release

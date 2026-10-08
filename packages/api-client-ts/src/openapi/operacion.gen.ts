@@ -84,15 +84,87 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Asignar unidad + custodios (escritura atómica).
-         * @description Reserva `unidad` y `custodios` con disponibilidad verificada en una sola transacción (ADR 24). Si algún recurso no es apto o no está disponible, no se reserva parcialmente nada (409).
+         * Asignar la escolta (una o más unidades) en una escritura atómica.
+         * @description Reserva la `escolta` —una o más `unidades` (paquetes vehículo + custodios) del roster— con disponibilidad verificada en una sola transacción (ADR 31). La reserva es por `unidad` completa, no por vehículo y custodio por separado. Si alguna unidad no está disponible en la ventana, no se reserva parcialmente nada (409). La aptitud es informativa y NO condiciona la asignación en V1 (DEC-055).
          */
         post: operations["asignarRecursos"];
         delete?: never;
         options?: never;
         head?: never;
-        /** Reasignar con motivo (auditado). */
+        /**
+         * Reasignar la escolta completa, con motivo (auditado).
+         * @description La reasignación manda la escolta completa en `unidades_ids` (una o más unidades del roster). Cambiar un custodio es edición de roster, NO reasignación (D2): por eso no se reciben custodios aquí.
+         */
         patch: operations["reasignarRecursos"];
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/eta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Fijar el ETA estimado del viaje (captura manual del operador).
+         * @description En V1 el ETA es un dato capturado a mano, no un cálculo (ADR 20 / DEC-007). NO valida contra el grafo de transiciones —no es un cambio de estado—; sólo exige que el viaje no esté en un estado terminal. `operacion` guarda y devuelve el valor crudo; la obsolescencia (`stale`) la calcula el `bff` al leer, no este servicio (ADR 20).
+         */
+        patch: operations["fijarEta"];
+        trace?: never;
+    };
+    "/api/v1/unidades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar unidades del roster (administración del jefe_operativo).
+         * @description El roster de `unidades` vive en `operacion` (ADR 31 §5 / ADR 33), no en `catalogos`. Una `unidad` es un paquete pre-armado: un vehículo (de `catalogos`) con uno o dos custodios (de `catalogos`), referidos por identificador. En V1 la lectura del roster NO expone aptitud (queda para después).
+         */
+        get: operations["listarUnidades"];
+        put?: never;
+        /**
+         * Crear una unidad del roster (jefe_operativo).
+         * @description Arma una `unidad` emparejando un vehículo con uno o dos custodios (coche: uno o dos; moto: uno — ADR 31). El `tipo` NO se envía: se deriva del vehículo en el servidor.
+         */
+        post: operations["crearUnidad"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/unidades/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /** Detalle de una unidad del roster. */
+        get: operations["obtenerUnidad"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modificar una unidad del roster, incluido activar/desactivar.
+         * @description Cambia el vehículo, los custodios o el estado `activa` de la unidad. Activar/desactivar es un cambio de `activa` por esta misma ruta. El `tipo` nunca se escribe: se deriva del vehículo.
+         */
+        patch: operations["modificarUnidad"];
         trace?: never;
     };
     "/api/v1/viajes/{id}/bitacora": {
@@ -232,7 +304,11 @@ export interface components {
              * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
              */
             fecha_hora_servicio?: string | null;
-            eta_cliente?: components["schemas"]["Eta"];
+            /**
+             * Format: date-time
+             * @description ETA estimado del viaje, capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado. `operacion` no calcula ni expone `stale`: eso lo hace el `bff`.
+             */
+            eta_estimado?: string | null;
             creado_en: components["schemas"]["MarcaTiempo"];
         };
         ViajeDetalle: {
@@ -244,10 +320,9 @@ export interface components {
             tipo: components["schemas"]["CondicionViaje"];
             abierta_en: components["schemas"]["MarcaTiempo"];
         };
-        Eta: {
-            valor: components["schemas"]["MarcaTiempo"];
-            /** @description true cuando el ETA venció y no se ha re-confirmado (marca `stale`, DEC-021 #2). El ETA no se recalcula solo. */
-            obsoleto: boolean;
+        EtaEntrada: {
+            /** @description ETA estimado a fijar (captura manual, ADR 20). Reemplaza el valor previo; `operacion` no lo recalcula ni lo marca obsoleto. */
+            eta_estimado: components["schemas"]["MarcaTiempo"];
         };
         PaginaViajes: {
             items: components["schemas"]["Viaje"][];
@@ -260,24 +335,74 @@ export interface components {
             /** @description Causa de la transición. Obligatoria cuando el destino la requiere (p. ej. motivo de rechazo, DEC-020 #2). La validación fina vive en el servicio. */
             causa?: string;
         };
+        /** @description Escolta a reservar: una o más `unidades` del roster (D2). Reemplaza el par `unidad_id` + `custodios_ids`: la reserva es por unidad completa (paquete vehículo + custodios), no por recursos sueltos (ADR 31). */
         AsignacionEntrada: {
-            unidad_id: components["schemas"]["Id"];
-            custodios_ids: components["schemas"]["Id"][];
+            /** @description Identificadores de las unidades del roster que forman la escolta. */
+            unidades_ids: components["schemas"]["Id"][];
         };
+        /** @description La reasignación manda la escolta completa (D2). Ambos campos son obligatorios. No recibe custodios: cambiar un custodio es edición de roster, no reasignación. */
         ReasignacionEntrada: {
-            /**
-             * Format: uuid
-             * @description Opcional; mismo formato que `Id`. null si no aplica.
-             */
-            unidad_id?: string | null;
-            custodios_ids?: components["schemas"]["Id"][];
+            /** @description Escolta resultante: una o más unidades del roster. */
+            unidades_ids: components["schemas"]["Id"][];
             /** @description Motivo de la reasignación (auditado). */
             motivo: string;
         };
+        AptitudRecurso: {
+            /**
+             * @description Átomo evaluado dentro de la unidad.
+             * @enum {string}
+             */
+            recurso: "vehiculo" | "custodio";
+            recurso_id: components["schemas"]["Id"];
+            /**
+             * @description Afirmación informativa (DEC-055). `desconocido` lo calcula `operacion`, no `catalogos`. Nunca bloquea la asignación en V1.
+             * @enum {string}
+             */
+            estado: "apto" | "no_apto" | "desconocido";
+            /** @description Motivos, cuando el estado es `no_apto`. */
+            motivos?: string[];
+        };
+        UnidadAsignada: {
+            unidad_id: components["schemas"]["Id"];
+            /** @description Aptitud informativa por átomo (vehículo y custodios de la unidad). */
+            aptitud: components["schemas"]["AptitudRecurso"][];
+        };
         Asignacion: {
             viaje_id: components["schemas"]["Id"];
-            unidad_id: components["schemas"]["Id"];
+            /** @description Unidades de la escolta reservada, cada una con su aptitud informativa por átomo (D1). La reserva ya ocurrió: la aptitud es sólo dato. */
+            unidades: components["schemas"]["UnidadAsignada"][];
+        };
+        Unidad: {
+            id: components["schemas"]["Id"];
+            /** @description Identificador del vehículo en `catalogos`. Referencia, no FK. */
+            vehiculo_id: components["schemas"]["Id"];
+            /** @description Custodios de la unidad, por identificador de `catalogos`. Un coche lleva uno o dos; una moto, uno (ADR 31). */
             custodios_ids: components["schemas"]["Id"][];
+            /**
+             * @description Tipo de unidad, SOLO LECTURA, derivado del vehículo en el servidor (coche -> patrulla, moto -> moto, ADR 31). Nunca se envía en una petición.
+             * @enum {string}
+             */
+            readonly tipo: "patrulla" | "moto";
+            /** @description Si la unidad está activa (disponible para asignarse). */
+            activa: boolean;
+        };
+        /** @description Alta de unidad. El `tipo` NO se envía: se deriva del vehículo. `activa` es opcional al crear (el servidor decide el valor por defecto). */
+        UnidadEntrada: {
+            vehiculo_id: components["schemas"]["Id"];
+            custodios_ids: components["schemas"]["Id"][];
+            /** @description Opcional al crear. Si se omite, el servidor fija el valor por defecto. */
+            activa?: boolean;
+        };
+        /** @description Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). */
+        UnidadModificacion: {
+            vehiculo_id?: components["schemas"]["Id"];
+            custodios_ids?: components["schemas"]["Id"][];
+            activa?: boolean;
+        };
+        PaginaUnidades: {
+            items: components["schemas"]["Unidad"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
         };
         EntradaBitacoraEntrada: {
             texto: string;
@@ -551,7 +676,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
-            /** @description Recurso no apto o no disponible en la ventana; sin reserva parcial. `codigo` `recurso_no_disponible` o `recurso_no_apto`. */
+            /** @description Alguna unidad no está disponible en la ventana del viaje; sin reserva parcial. Único código de rechazo: `recurso_no_disponible` (la reserva falló, el "no hay gente" de DEC-043). La aptitud nunca rechaza en V1 (DEC-055): no existe `recurso_no_apto`. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -590,6 +715,149 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             409: components["responses"]["Conflicto"];
+        };
+    };
+    fijarEta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EtaEntrada"];
+            };
+        };
+        responses: {
+            /** @description ETA actualizado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Viaje"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            /** @description El viaje está en un estado terminal y no admite fijar ETA. `codigo` de máquina `viaje_en_estado_terminal`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listarUnidades: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de unidades del roster. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaUnidades"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    crearUnidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnidadEntrada"];
+            };
+        };
+        responses: {
+            /** @description Unidad creada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unidad"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    obtenerUnidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unidad. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unidad"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    modificarUnidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnidadModificacion"];
+            };
+        };
+        responses: {
+            /** @description Unidad modificada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unidad"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
         };
     };
     listarBitacora: {
