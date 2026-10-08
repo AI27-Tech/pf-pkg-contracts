@@ -81,15 +81,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/unidades": {
+    "/api/v1/vehiculos": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Listar unidades (vehículos de flota de AI27). */
-        get: operations["listarUnidades"];
+        /** Listar vehículos de la flota de AI27 (coche o moto). */
+        get: operations["listarVehiculos"];
         put?: never;
         post?: never;
         delete?: never;
@@ -98,7 +98,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/unidades/{id}/aptitud": {
+    "/api/v1/vehiculos/{id}/aptitud": {
         parameters: {
             query?: never;
             header?: never;
@@ -108,10 +108,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Afirmación de aptitud administrativa de una unidad.
-         * @description Responde si la unidad está activa, con documentos vigentes y apta para el contrato/SLA de un cliente. Es una AFIRMACIÓN, no una reserva: no garantiza asignación (operacion.md (a)).
+         * Afirmación de aptitud administrativa de un vehículo.
+         * @description Responde si el vehículo está activo, con documentos vigentes y apto para el contrato/SLA de un cliente. En V1 la aptitud es INFORMATIVA (DEC-055): es una AFIRMACIÓN, no una reserva, y `operacion` nunca rechaza armar ni asignar por ella. `catalogos` devuelve `apto` true/false con sus motivos; NO devuelve "desconocida": ese valor lo calcula el CONSUMIDOR cuando `catalogos` no responde o el dato está obsoleto (catalogos.md (i)).
          */
-        get: operations["aptitudUnidad"];
+        get: operations["aptitudVehiculo"];
         put?: never;
         post?: never;
         delete?: never;
@@ -146,7 +146,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Afirmación de aptitud administrativa de un custodio. */
+        /**
+         * Afirmación de aptitud administrativa de un custodio.
+         * @description En V1 la aptitud es INFORMATIVA (DEC-055): `operacion` nunca rechaza por ella. `catalogos` devuelve `apto` true/false con sus motivos; el valor "desconocida" lo calcula el CONSUMIDOR, no `catalogos`.
+         */
         get: operations["aptitudCustodio"];
         put?: never;
         post?: never;
@@ -192,18 +195,22 @@ export interface components {
             /** @description Compromiso informativo en V1 (DEC-022 */
             descripcion?: string;
         };
-        Unidad: {
+        /** @description Vehículo de la flota de AI27 (ÁTOMO de catalogos). La `unidad` (paquete vehículo + custodios) NO vive aquí: es roster de `operacion` (ADR 31 §5). */
+        Vehiculo: {
             id: components["schemas"]["Id"];
-            /** @description Tipo de unidad; `patrulla` es un tipo de unidad (ADR 24 / DEC-035), no un recurso aparte. */
-            tipo: string;
-            /** @description Número económico de la unidad. */
+            /**
+             * @description Tipo de vehículo de AI27. Un coche lleva uno o dos custodios; una moto, uno (ADR 31). El `tipo` de la `unidad` del roster (patrulla|moto) se deriva de este valor en `operacion`, no se escribe aquí.
+             * @enum {string}
+             */
+            tipo: "coche" | "moto";
+            /** @description Número económico del vehículo. */
             economico?: string;
             placas?: string;
             /** @enum {string} */
             estado: "activa" | "inactiva";
         };
-        PaginaUnidades: {
-            items: components["schemas"]["Unidad"][];
+        PaginaVehiculos: {
+            items: components["schemas"]["Vehiculo"][];
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
@@ -219,7 +226,7 @@ export interface components {
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
-        /** @description Afirmación de aptitud administrativa. `apto=false` no reserva ni bloquea; informa a `operacion`, que decide dentro de su transacción de asignación. */
+        /** @description Afirmación de aptitud administrativa, INFORMATIVA en V1 (DEC-055). `apto=false` no reserva ni bloquea; informa a `operacion`, que decide dentro de su transacción de asignación y asigna igual. `catalogos` devuelve `apto` true/false; el estado "desconocido" NO existe aquí, lo calcula el consumidor cuando no hay respuesta o el dato está obsoleto. */
         Aptitud: {
             recurso_id: components["schemas"]["Id"];
             apto: boolean;
@@ -390,7 +397,7 @@ export interface operations {
             404: components["responses"]["NoEncontrado"];
         };
     };
-    listarUnidades: {
+    listarVehiculos: {
         parameters: {
             query?: {
                 cursor?: components["schemas"]["Cursor"];
@@ -401,20 +408,20 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Página de unidades. */
+            /** @description Página de vehículos. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginaUnidades"];
+                    "application/json": components["schemas"]["PaginaVehiculos"];
                 };
             };
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
         };
     };
-    aptitudUnidad: {
+    aptitudVehiculo: {
         parameters: {
             query: {
                 /** @description Cliente para cuyo contrato/SLA se evalúa la aptitud. */

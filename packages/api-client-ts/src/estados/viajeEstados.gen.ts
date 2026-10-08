@@ -57,6 +57,8 @@ export const TRANSICIONES_VIAJE: ReadonlyArray<readonly [EstadoViaje, EstadoViaj
   [EstadoViaje.Aprobado, EstadoViaje.Asignado],
   [EstadoViaje.Aprobado, EstadoViaje.Cancelado],
   [EstadoViaje.Asignado, EstadoViaje.AptoParaSalida],
+  [EstadoViaje.Asignado, EstadoViaje.EnEmbarque],
+  [EstadoViaje.Asignado, EstadoViaje.EnTransito],
   [EstadoViaje.Asignado, EstadoViaje.RechazadoPorCliente],
   [EstadoViaje.Asignado, EstadoViaje.Cancelado],
   [EstadoViaje.AptoParaSalida, EstadoViaje.EnEmbarque],

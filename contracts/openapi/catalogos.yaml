@@ -3,11 +3,18 @@
 # -----------------------------------------------------------------------------
 # Superficie HTTP interna de `catalogos` para el tracer. `catalogos` es el
 # registro maestro (hoja del grafo: no llama a nadie). En el tracer expone
-# lectura de clientes, contratos/SLA, unidades y custodios, y la AFIRMACIÓN de
-# aptitud administrativa que `operacion` consulta antes de reservar.
+# lectura de clientes, contratos/SLA, vehículos (átomos coche/moto) y custodios,
+# y la AFIRMACIÓN de aptitud administrativa que `operacion` consulta antes de
+# reservar.
 #
-# La aptitud es una afirmación, NO una reserva: la reserva vive en
-# `operacion.asignacion` (ADR 24 / operacion.md (a)).
+# La aptitud es INFORMATIVA en V1 (DEC-055): es una afirmación, NO una reserva ni
+# un bloqueo; la reserva vive en `operacion.asignacion` (ADR 24/31 /
+# operacion.md (a)). El valor "aptitud desconocida" lo calcula el CONSUMIDOR
+# (operacion/bff) cuando `catalogos` no responde o el dato está obsoleto;
+# `catalogos` nunca lo devuelve.
+#
+# La `unidad` (paquete vehículo + custodios) NO es de catalogos: es roster de
+# `operacion` (ADR 31 §5). Catalogos es dueño del ÁTOMO vehículo (coche/moto).
 #
 # Fuera del tracer / V2: rutas y zonas de riesgo (telemetría), escritura de
 # catálogos (E5).
@@ -15,7 +22,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — catalogos
-  version: 0.1.0-tracer.2
+  version: 0.1.0-tracer.4
   description: Registro maestro. Lectura para el tracer y afirmación de aptitud.
   x-ai27-servicio: catalogos
   x-ai27-capa: catalogo
@@ -32,7 +39,7 @@ tags:
 - name: clientes
 - name: contratos
 - name: recursos
-  description: Unidades y custodios — los recursos de AI27 (ADR 24).
+  description: Vehículos (átomos coche/moto) y custodios — los átomos de AI27 (ADR 31).
 
 paths:
   /api/v1/clientes:
@@ -125,11 +132,11 @@ paths:
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
-  /api/v1/unidades:
+  /api/v1/vehiculos:
     get:
-      operationId: listarUnidades
+      operationId: listarVehiculos
       tags: [recursos]
-      summary: Listar unidades (vehículos de flota de AI27).
+      summary: Listar vehículos de la flota de AI27 (coche o moto).
       parameters:
       - name: cursor
         in: query
@@ -137,27 +144,30 @@ paths:
         schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
       responses:
         "200":
-          description: Página de unidades.
+          description: Página de vehículos.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/PaginaUnidades"}
+              schema: {$ref: "#/components/schemas/PaginaVehiculos"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
-  /api/v1/unidades/{id}/aptitud:
+  /api/v1/vehiculos/{id}/aptitud:
     parameters:
     - name: id
       in: path
       required: true
       schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
     get:
-      operationId: aptitudUnidad
+      operationId: aptitudVehiculo
       tags: [recursos]
-      summary: Afirmación de aptitud administrativa de una unidad.
+      summary: Afirmación de aptitud administrativa de un vehículo.
       description: >-
-        Responde si la unidad está activa, con documentos vigentes y apta para
-        el contrato/SLA de un cliente. Es una AFIRMACIÓN, no una reserva: no
-        garantiza asignación (operacion.md (a)).
+        Responde si el vehículo está activo, con documentos vigentes y apto para
+        el contrato/SLA de un cliente. En V1 la aptitud es INFORMATIVA (DEC-055):
+        es una AFIRMACIÓN, no una reserva, y `operacion` nunca rechaza armar ni
+        asignar por ella. `catalogos` devuelve `apto` true/false con sus motivos;
+        NO devuelve "desconocida": ese valor lo calcula el CONSUMIDOR cuando
+        `catalogos` no responde o el dato está obsoleto (catalogos.md (i)).
       parameters:
       - name: cliente_id
         in: query
@@ -202,6 +212,10 @@ paths:
       operationId: aptitudCustodio
       tags: [recursos]
       summary: Afirmación de aptitud administrativa de un custodio.
+      description: >-
+        En V1 la aptitud es INFORMATIVA (DEC-055): `operacion` nunca rechaza por
+        ella. `catalogos` devuelve `apto` true/false con sus motivos; el valor
+        "desconocida" lo calcula el CONSUMIDOR, no `catalogos`.
       parameters:
       - name: cliente_id
         in: query
@@ -269,33 +283,38 @@ components:
           type: string
           description: Compromiso informativo en V1 (DEC-022 #4).
 
-    Unidad:
+    Vehiculo:
       type: object
       additionalProperties: false
       required: [id, tipo, estado]
+      description: >-
+        Vehículo de la flota de AI27 (ÁTOMO de catalogos). La `unidad` (paquete
+        vehículo + custodios) NO vive aquí: es roster de `operacion` (ADR 31 §5).
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         tipo:
           type: string
+          enum: [coche, moto]
           description: >-
-            Tipo de unidad; `patrulla` es un tipo de unidad (ADR 24 / DEC-035),
-            no un recurso aparte.
+            Tipo de vehículo de AI27. Un coche lleva uno o dos custodios; una
+            moto, uno (ADR 31). El `tipo` de la `unidad` del roster (patrulla|moto)
+            se deriva de este valor en `operacion`, no se escribe aquí.
         economico:
           type: string
-          description: Número económico de la unidad.
+          description: Número económico del vehículo.
         placas: {type: string}
         estado:
           type: string
           enum: [activa, inactiva]
 
-    PaginaUnidades:
+    PaginaVehiculos:
       type: object
       additionalProperties: false
       required: [items, cursor_siguiente]
       properties:
         items:
           type: array
-          items: {$ref: "#/components/schemas/Unidad"}
+          items: {$ref: "#/components/schemas/Vehiculo"}
         cursor_siguiente:
           type: string
           nullable: true
@@ -329,8 +348,11 @@ components:
       additionalProperties: false
       required: [recurso_id, apto]
       description: >-
-        Afirmación de aptitud administrativa. `apto=false` no reserva ni bloquea;
-        informa a `operacion`, que decide dentro de su transacción de asignación.
+        Afirmación de aptitud administrativa, INFORMATIVA en V1 (DEC-055).
+        `apto=false` no reserva ni bloquea; informa a `operacion`, que decide
+        dentro de su transacción de asignación y asigna igual. `catalogos`
+        devuelve `apto` true/false; el estado "desconocido" NO existe aquí, lo
+        calcula el consumidor cuando no hay respuesta o el dato está obsoleto.
       properties:
         recurso_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         apto: {type: boolean}

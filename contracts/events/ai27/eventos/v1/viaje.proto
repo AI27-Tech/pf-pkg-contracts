@@ -35,18 +35,28 @@ message ViajeEstadoCambiado {
 }
 
 // viaje.asignado — al comprometer la escritura atómica de asignación.
+// Ruptura intencional (`tracer.4`, D3): la asignación reserva una ESCOLTA de una
+// o más `unidades` (paquetes vehículo + custodios), no "unidad + custodios" por
+// separado (ADR 31 / DEC-044). Los campos viejos quedan `reserved` (número y
+// nombre) para que nadie reutilice ni su número de campo ni su nombre.
 message ViajeAsignado {
+  reserved 2, 3;
+  reserved "unidad_id", "custodios_ids";
   string viaje_id = 1;
-  string unidad_id = 2;
-  repeated string custodios_ids = 3;
+  // Unidades (paquetes) de la escolta reservada, por identificador del roster.
+  repeated string unidades_ids = 6;
   google.protobuf.Timestamp asignado_en = 4;
 }
 
-// viaje.reasignado — al comprometer una reasignación con motivo.
+// viaje.reasignado — al comprometer una reasignación con motivo. La reasignación
+// manda la escolta completa (`unidades_ids`); cambiar un custodio es edición de
+// roster, no reasignación (D2). Misma ruptura intencional que `viaje.asignado`.
 message ViajeReasignado {
+  reserved 2, 3;
+  reserved "unidad_id", "custodios_ids";
   string viaje_id = 1;
-  string unidad_id = 2;
-  repeated string custodios_ids = 3;
+  // Escolta resultante tras la reasignación, por identificador del roster.
+  repeated string unidades_ids = 6;
   string motivo = 4;
   google.protobuf.Timestamp reasignado_en = 5;
 }

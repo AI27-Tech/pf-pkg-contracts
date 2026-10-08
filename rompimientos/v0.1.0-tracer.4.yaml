@@ -1,0 +1,55 @@
+# =============================================================================
+# rompimientos/v0.1.0-tracer.4.yaml
+# -----------------------------------------------------------------------------
+# ALLOWLIST DE RUPTURAS INTENCIONALES de la ola contractual 1 (`v0.1.0-tracer.4`).
+#
+# El gate de compatibilidad (buf breaking para eventos, oasdiff para OpenAPI)
+# falla ante CUALQUIER cambio incompatible. Esta allowlist es la ÚNICA forma de
+# que una ruptura pase, y sólo mientras `VERSION` sea exactamente la del nombre
+# de este archivo (`v0.1.0-tracer.4`). Una ruptura que no esté aquí DEBE seguir
+# fallando. Lección de R5: el gate falla ante lo que nadie declaró.
+#
+# Correspondencia nombre<->VERSION: el archivo se llama como la versión que
+# autoriza. Cuando `VERSION` deja de ser `v0.1.0-tracer.4`, esta allowlist no
+# aplica (el script busca `rompimientos/${VERSION}.yaml`): las mismas rupturas
+# vuelven a fallar hasta que se declaren en la allowlist de la versión nueva.
+#
+# Cada entrada nombra la superficie afectada y su fuente (ADR/DEC). El matcher
+# compara el texto que emite la herramienta contra `match` (subcadena exacta).
+# =============================================================================
+version: v0.1.0-tracer.4
+
+# --- Rupturas de OpenAPI (oasdiff). `match` es una subcadena del texto que
+#     oasdiff imprime para la ruptura (regla + operación). `servicio` acota el
+#     spec en el que se permite. ---
+openapi:
+  - servicio: catalogos
+    match: "GET /api/v1/unidades"
+    fuente: D6b (ADR 31 §5) — el átomo se renombra a /api/v1/vehiculos; la unidad es roster de operacion
+  - servicio: catalogos
+    match: "GET /api/v1/unidades/{id}/aptitud"
+    fuente: D6b (ADR 31 §5) — aptitud del átomo pasa a /api/v1/vehiculos/{id}/aptitud
+
+  # operacion: AsignacionEntrada/ReasignacionEntrada/Asignacion cambian de forma
+  # (D1/D2). `match` es la API exacta que oasdiff nombra en "in API <método ruta>".
+  - servicio: operacion
+    match: "POST /api/v1/viajes"
+    fuente: D2 (ADR 31) — crearViaje embebe AsignacionEntrada; la escolta se manda como unidades_ids
+  - servicio: operacion
+    match: "POST /api/v1/viajes/{id}/asignacion"
+    fuente: D1/D2 (DEC-055, ADR 31) — la escolta va en unidades_ids; respuesta con aptitud por átomo, sin unidad_id/custodios_ids
+  - servicio: operacion
+    match: "PATCH /api/v1/viajes/{id}/asignacion"
+    fuente: D2 (ADR 31) — reasignación manda la escolta completa; se elimina custodios_ids/unidad_id de la respuesta
+
+# --- Rupturas de eventos (buf breaking). `match` es una subcadena del texto que
+#     buf imprime (nombra el mensaje y el campo eliminado). ---
+eventos:
+  - match: 'name "unidad_id" on message "ViajeAsignado"'
+    fuente: D3 (ADR 31 / DEC-044) — unidad_id reservado; la escolta va en unidades_ids
+  - match: 'name "custodios_ids" on message "ViajeAsignado"'
+    fuente: D3 (ADR 31 / DEC-044) — custodios_ids reservado; viajan dentro de la unidad
+  - match: 'name "unidad_id" on message "ViajeReasignado"'
+    fuente: D3 (ADR 31 / DEC-044) — unidad_id reservado; la escolta va en unidades_ids
+  - match: 'name "custodios_ids" on message "ViajeReasignado"'
+    fuente: D3 (D2 / ADR 31) — cambiar custodio es edición de roster, no reasignación
