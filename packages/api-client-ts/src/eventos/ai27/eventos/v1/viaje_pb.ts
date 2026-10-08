@@ -146,6 +146,10 @@ export class ViajeEstadoCambiado extends Message<ViajeEstadoCambiado> {
 
 /**
  * viaje.asignado — al comprometer la escritura atómica de asignación.
+ * Ruptura intencional (`tracer.4`, D3): la asignación reserva una ESCOLTA de una
+ * o más `unidades` (paquetes vehículo + custodios), no "unidad + custodios" por
+ * separado (ADR 31 / DEC-044). Los campos viejos quedan `reserved` (número y
+ * nombre) para que nadie reutilice ni su número de campo ni su nombre.
  *
  * @generated from message ai27.eventos.v1.ViajeAsignado
  */
@@ -156,14 +160,11 @@ export class ViajeAsignado extends Message<ViajeAsignado> {
   viajeId = "";
 
   /**
-   * @generated from field: string unidad_id = 2;
+   * Unidades (paquetes) de la escolta reservada, por identificador del roster.
+   *
+   * @generated from field: repeated string unidades_ids = 6;
    */
-  unidadId = "";
-
-  /**
-   * @generated from field: repeated string custodios_ids = 3;
-   */
-  custodiosIds: string[] = [];
+  unidadesIds: string[] = [];
 
   /**
    * @generated from field: google.protobuf.Timestamp asignado_en = 4;
@@ -179,8 +180,7 @@ export class ViajeAsignado extends Message<ViajeAsignado> {
   static readonly typeName = "ai27.eventos.v1.ViajeAsignado";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "viaje_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "unidad_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 3, name: "custodios_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 6, name: "unidades_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 4, name: "asignado_en", kind: "message", T: Timestamp },
   ]);
 
@@ -202,7 +202,9 @@ export class ViajeAsignado extends Message<ViajeAsignado> {
 }
 
 /**
- * viaje.reasignado — al comprometer una reasignación con motivo.
+ * viaje.reasignado — al comprometer una reasignación con motivo. La reasignación
+ * manda la escolta completa (`unidades_ids`); cambiar un custodio es edición de
+ * roster, no reasignación (D2). Misma ruptura intencional que `viaje.asignado`.
  *
  * @generated from message ai27.eventos.v1.ViajeReasignado
  */
@@ -213,14 +215,11 @@ export class ViajeReasignado extends Message<ViajeReasignado> {
   viajeId = "";
 
   /**
-   * @generated from field: string unidad_id = 2;
+   * Escolta resultante tras la reasignación, por identificador del roster.
+   *
+   * @generated from field: repeated string unidades_ids = 6;
    */
-  unidadId = "";
-
-  /**
-   * @generated from field: repeated string custodios_ids = 3;
-   */
-  custodiosIds: string[] = [];
+  unidadesIds: string[] = [];
 
   /**
    * @generated from field: string motivo = 4;
@@ -241,8 +240,7 @@ export class ViajeReasignado extends Message<ViajeReasignado> {
   static readonly typeName = "ai27.eventos.v1.ViajeReasignado";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "viaje_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "unidad_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 3, name: "custodios_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 6, name: "unidades_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 4, name: "motivo", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "reasignado_en", kind: "message", T: Timestamp },
   ]);

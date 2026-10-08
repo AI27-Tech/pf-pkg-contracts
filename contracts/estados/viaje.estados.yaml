@@ -26,6 +26,9 @@ authority:
   - DEC-005   # backbone de progreso confirmado
   - DEC-013   # modelo multi-parada
   - DEC-032   # reconciliación técnica -> negocio
+  - DEC-043   # APTO_PARA_SALIDA opcional; sin gating de aptitud en V1
+  - DEC-055   # aptitud informativa: se retira la guarda ningun_recurso_no_apto
+  - ADR-0031  # la escolta se reserva como unidades completas
 
 # -----------------------------------------------------------------------------
 # Estados de progreso. Una sola dimensión con transiciones controladas.
@@ -72,15 +75,17 @@ estados:
     nombre_negocio: Asignado
     availability: v1
     descripcion: >-
-      Unidad + custodios asignados con disponibilidad verificada (ADR 24: dos
-      recursos de AI27; la `patrulla` es la `unidad` en su rol de escolta).
+      Escolta reservada: una o más `unidades` (paquetes vehículo + custodios)
+      reservadas en una sola escritura atómica (ADR 31). La aptitud es
+      informativa y no condiciona la asignación en V1 (DEC-055).
 
   - token: APTO_PARA_SALIDA
     nombre_negocio: Apto para salida
     availability: v1
     descripcion: >-
-      Nuevo (DEC-005 #2). Guarda de entrada: ningún recurso "no apto".
-      `No apto para salida` es una guarda, no un estado.
+      Nuevo (DEC-005 #2). OPCIONAL (DEC-043 #1): el viaje puede arrancar sin
+      pasar por él, saltando de `ASIGNADO` a `EN_EMBARQUE` o a `EN_TRANSITO`.
+      En V1 no hay guarda de aptitud que lo bloquee (DEC-055).
 
   - token: EN_EMBARQUE
     nombre_negocio: En embarque
@@ -182,16 +187,27 @@ transiciones:
   - de: APROBADO
     a: ASIGNADO
     disparador: operador
-    guarda: unidad_y_custodios_aptos_y_reservados   # escritura atómica, ADR 24
+    guarda: escolta_reservada               # reserva atómica de la escolta (ADR 31). La aptitud NO gatea en V1 (DEC-055)
   - de: APROBADO
     a: CANCELADO
     disparador: cliente
 
   # --- Preparación de salida ---
+  # APTO_PARA_SALIDA es OPCIONAL (DEC-043 #1): el viaje puede saltar de ASIGNADO
+  # directo a EN_EMBARQUE o a EN_TRANSITO sin pasar por él. La guarda de aptitud
+  # `ningun_recurso_no_apto` se retiró: en V1 la aptitud es informativa y no
+  # bloquea (DEC-055).
   - de: ASIGNADO
     a: APTO_PARA_SALIDA
     disparador: operador
-    guarda: ningun_recurso_no_apto          # DEC-005 #2
+  - de: ASIGNADO
+    a: EN_EMBARQUE
+    disparador: operador
+    nota: apto_para_salida_opcional         # DEC-043 #1: APTO_PARA_SALIDA no es obligatorio
+  - de: ASIGNADO
+    a: EN_TRANSITO
+    disparador: operador
+    nota: apto_para_salida_opcional         # DEC-043 #1: arranque sin APTO_PARA_SALIDA
   - de: ASIGNADO
     a: RECHAZADO_POR_CLIENTE
     disparador: cliente                     # DEC-005 #7

@@ -27,6 +27,11 @@ cd "$RAIZ"
 # mismo binario.
 OASDIFF="go run github.com/oasdiff/oasdiff"
 REDOCLY="npx --yes @redocly/cli@1.25.11"
+VERSION="${VERSION:-$(cat VERSION)}"
+# Ruta absoluta del tool de gate de rupturas (D4): autoriza SOLO las rupturas
+# declaradas en rompimientos/${VERSION}.yaml, y SOLO mientras VERSION las nombre.
+GATE_DIR="$RAIZ/tools/breaking-gate"
+ROMPIMIENTOS_DIR="$RAIZ/rompimientos"
 
 SERVICIOS=(identidad catalogos operacion bff reportes)
 
@@ -92,12 +97,22 @@ for s in "${SERVICIOS[@]}"; do
   abs_actual="$(cd "$(dirname "$actual")" && pwd)/$(basename "$actual")"
   # `--fail-on ERR` es lo que hace que oasdiff salga distinto de cero ante un
   # cambio incompatible; sin él, el diff se imprimiría y el script daría verde.
-  if ( cd tools/oasdiff && $OASDIFF breaking "$abs_prev" "$abs_actual" --format text --fail-on ERR ); then
+  salida_oas="$WORK/$s.oasdiff.txt"
+  if ( cd tools/oasdiff && $OASDIFF breaking "$abs_prev" "$abs_actual" --format text --fail-on ERR ) >"$salida_oas" 2>&1; then
+    cat "$salida_oas"
     echo "        compatible"
   else
-    echo "        INCOMPATIBLE (arriba el detalle). Sube la versión o publica un"
-    echo "        release de gracia (expand/contract)."
-    fallos=1
+    cat "$salida_oas"
+    # D4: una ruptura puede ser INTENCIONAL y estar declarada en la allowlist de
+    # esta versión. El gate lee la salida de oasdiff y sólo autoriza lo listado;
+    # cualquier ruptura no declarada mantiene el fallo.
+    if ( cd "$GATE_DIR" && go run . -tipo openapi -servicio "$s" -version "$VERSION" -rompimientos "$ROMPIMIENTOS_DIR" ) <"$salida_oas"; then
+      echo "        INCOMPATIBLE pero DECLARADO en rompimientos/$VERSION.yaml (ruptura intencional)."
+    else
+      echo "        INCOMPATIBLE y NO declarado. Sube la versión, declara la ruptura con su"
+      echo "        fuente en rompimientos/$VERSION.yaml, o publica un release de gracia."
+      fallos=1
+    fi
   fi
 done
 

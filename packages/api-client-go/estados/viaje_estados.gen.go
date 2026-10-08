@@ -59,6 +59,8 @@ var transicionesViaje = []transicion{
 	{De: EstadoAprobado, A: EstadoAsignado},
 	{De: EstadoAprobado, A: EstadoCancelado},
 	{De: EstadoAsignado, A: EstadoAptoParaSalida},
+	{De: EstadoAsignado, A: EstadoEnEmbarque},
+	{De: EstadoAsignado, A: EstadoEnTransito},
 	{De: EstadoAsignado, A: EstadoRechazadoPorCliente},
 	{De: EstadoAsignado, A: EstadoCancelado},
 	{De: EstadoAptoParaSalida, A: EstadoEnEmbarque},
