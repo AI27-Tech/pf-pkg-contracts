@@ -1,7 +1,7 @@
 {
   "name": "@ai27-tech/contracts",
-  "version": "0.1.0-tracer.4",
-  "description": "Tipos y clientes TypeScript generados desde pf-pkg-contracts (tracer v0.1.0-tracer.4). Generado, no editado a mano.",
+  "version": "0.1.0-tracer.5",
+  "description": "Tipos y clientes TypeScript generados desde pf-pkg-contracts (tracer v0.1.0-tracer.5). Generado, no editado a mano.",
   "license": "UNLICENSED",
   "private": false,
   "type": "module",
