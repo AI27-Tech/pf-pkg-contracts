@@ -3,6 +3,52 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-13 [tracer.5] — superficie de vehículos de catalogos (E5-T1)
+
+**Resumen:** Se completa en el contrato de `catalogos` la superficie de
+vehículos que E5-T1 (AI27-73) necesita: lectura por lote (C4), respuesta
+versionada (C6) y escritura administrativa POST/PATCH (C7), más la lectura
+vigente-a-una-fecha (C9). Todos los cambios son **aditivos** (ninguno rompe a los
+consumidores de `tracer.4`). Preparado en `AI27-73/E5-T1-registro-de-unidades`;
+el Lead publica el tag `v0.1.0-tracer.5`. Esta ola comparte versión con el
+cambio de segundo factor de identidad (abajo); al mergear ambas ramas se
+reconcilia `VERSION`/`info.version`.
+
+**Cambios (tres commits temáticos):**
+- **C6 — respuesta versionada** (`contracts/openapi/catalogos.yaml`): al esquema
+  `Vehiculo` se agregan `version` (entero ≥1) y `vigencia_desde`/`vigencia_hasta`.
+  **Opcionales** por evolución expand/contract: no rompen a `tracer.4`; el
+  servicio los llena siempre. Sube `VERSION` a `0.1.0-tracer.5` y alinea
+  `packages/api-client-ts/package.json`.
+- **C4 — lectura por lote** (`catalogos.yaml`): `listarVehiculos` acepta el query
+  param `ids` (separado por coma, `style: form, explode: false`), mutuamente
+  excluyente con `cursor`; respuesta `400` nueva. Evita el patrón N+1 de los
+  consumidores.
+- **C7 — escritura administrativa** (`catalogos.yaml`): `POST /api/v1/vehiculos`
+  (`crearVehiculo`) y `PATCH /api/v1/vehiculos/{id}` (`actualizarVehiculo`), con
+  los esquemas `VehiculoEntrada` y `VehiculoCambios`. El PATCH crea una nueva
+  versión y emite `catalogo.actualizado` en la misma transacción (P17), sin
+  sobrescribir. Incluye `GET /api/v1/vehiculos/{id}` con `?a_fecha`
+  (`obtenerVehiculo`, C9), que comparte el path nuevo.
+
+**Regenerado (contrato primero, no editado a mano):**
+- `packages/api-client-go/catalogos/catalogos.gen.go`
+- `packages/api-client-ts/src/openapi/catalogos.gen.ts`
+- Verificado con `make generate` en entorno Linux: la regeneración es
+  reproducible (sin deriva en los artefactos de `catalogos`).
+
+**Impacto:**
+- `pf-svc-catalogos`: habilita la Fase B de E5-T1 (implementar lecturas con
+  `version`, lote, y la escritura POST/PATCH con outbox). Sube su pin a
+  `v0.1.0-tracer.5`.
+- Consumidores de `tracer.4` (`operacion`, `bff`, `reportes`): sin impacto;
+  `tracer.5` es superconjunto compatible.
+
+**Notas:**
+- Decisiones abiertas para revisión: `cliente_id` requerido en `VehiculoEntrada`;
+  `cliente_id` no editable en `VehiculoCambios`; `409 Conflicto` declarado en
+  POST/PATCH sin que el modelo de datos tenga aún una restricción de unicidad.
+
 ## 2026-10-16 [tracer.5]
 
 **Resumen:** Se publica **`v0.1.0-tracer.5`** con soporte para segundo factor en la emisión de sesión.

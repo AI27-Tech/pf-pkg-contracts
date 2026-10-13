@@ -88,14 +88,47 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar vehículos de la flota de AI27 (coche o moto). */
+        /**
+         * Listar vehículos de la flota de AI27 (coche o moto).
+         * @description Sin `ids`, devuelve una página paginada por cursor. Con `ids`, devuelve la LECTURA POR LOTE de esos identificadores en un solo viaje (evita el patrón N+1 de los consumidores; E5-T1 la trata como de primera clase). `ids` y `cursor` son mutuamente excluyentes: con `ids` presente, el resultado no se pagina y `cursor_siguiente` es null.
+         */
         get: operations["listarVehiculos"];
+        put?: never;
+        /**
+         * Alta de un vehículo (crea la versión 1).
+         * @description Registra un vehículo nuevo. Crea la versión 1 y emite `catalogo.actualizado` en la misma transacción (P17). Escritura administrativa de E5 (brecha C7).
+         */
+        post: operations["crearVehiculo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vehiculos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Vehículo vigente, o vigente a una fecha.
+         * @description La lectura vigente-a-una-fecha es la que la exportación probatoria necesita (P8): devuelve la versión que regía en esa fecha, no la actual.
+         */
+        get: operations["obtenerVehiculo"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Modifica un vehículo creando una nueva versión.
+         * @description No sobrescribe: cierra la vigencia de la versión actual y crea una nueva (version+1), y emite `catalogo.actualizado` en la misma transacción (P17). La versión anterior sigue consultable con `?a_fecha`. Escritura administrativa de E5 (brecha C7).
+         */
+        patch: operations["actualizarVehiculo"];
         trace?: never;
     };
     "/api/v1/vehiculos/{id}/aptitud": {
@@ -198,6 +231,8 @@ export interface components {
         /** @description Vehículo de la flota de AI27 (ÁTOMO de catalogos). La `unidad` (paquete vehículo + custodios) NO vive aquí: es roster de `operacion` (ADR 31 §5). */
         Vehiculo: {
             id: components["schemas"]["Id"];
+            /** @description Versión de la entidad, para que el consumidor revalide su caché barato (E5-T1, brecha C6). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.4; el servicio la llena siempre. Se promoverá a requerida en una ola futura. */
+            version?: number;
             /**
              * @description Tipo de vehículo de AI27. Un coche lleva uno o dos custodios; una moto, uno (ADR 31). El `tipo` de la `unidad` del roster (patrulla|moto) se deriva de este valor en `operacion`, no se escribe aquí.
              * @enum {string}
@@ -208,6 +243,32 @@ export interface components {
             placas?: string;
             /** @enum {string} */
             estado: "activa" | "inactiva";
+            /** @description Inicio de vigencia de esta versión. Opcional por la misma evolución que `version`; sostiene la lectura `?a_fecha` (C9). */
+            vigencia_desde?: components["schemas"]["MarcaTiempo"];
+            /**
+             * Format: date-time
+             * @description Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+             */
+            vigencia_hasta?: string | null;
+        };
+        /** @description Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión. */
+        VehiculoEntrada: {
+            /** @enum {string} */
+            tipo: "coche" | "moto";
+            economico?: string;
+            placas?: string;
+            /** @enum {string} */
+            estado: "activa" | "inactiva";
+            cliente_id: components["schemas"]["Id"];
+        };
+        /** @description Cuerpo de modificación de un vehículo (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id` ni `version` (los gobierna el servidor). */
+        VehiculoCambios: {
+            /** @enum {string} */
+            tipo?: "coche" | "moto";
+            economico?: string;
+            placas?: string;
+            /** @enum {string} */
+            estado?: "activa" | "inactiva";
         };
         PaginaVehiculos: {
             items: components["schemas"]["Vehiculo"][];
@@ -281,6 +342,24 @@ export interface components {
         };
         /** @description El recurso no existe o no es visible dentro del alcance del llamante. */
         NoEncontrado: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description La petición no cumple el contrato (validación de cuerpo o parámetros). */
+        SolicitudInvalida: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description La acción choca con el estado actual del recurso (p. ej. una transición de estado no permitida por `contracts/estados/`). */
+        Conflicto: {
             headers: {
                 [name: string]: unknown;
             };
@@ -401,6 +480,8 @@ export interface operations {
         parameters: {
             query?: {
                 cursor?: components["schemas"]["Cursor"];
+                /** @description Lista de identificadores separados por coma para la lectura por lote. Mutuamente excluyente con `cursor`. */
+                ids?: components["schemas"]["Id"][];
             };
             header?: never;
             path?: never;
@@ -408,7 +489,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Página de vehículos. */
+            /** @description Página de vehículos (o el lote solicitado). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -417,8 +498,94 @@ export interface operations {
                     "application/json": components["schemas"]["PaginaVehiculos"];
                 };
             };
+            400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+        };
+    };
+    crearVehiculo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VehiculoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Vehículo creado (versión 1). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Vehiculo"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
+    obtenerVehiculo: {
+        parameters: {
+            query?: {
+                /** @description Devuelve la versión vigente a esa fecha (probatorio). */
+                a_fecha?: components["schemas"]["MarcaTiempo"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vehículo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Vehiculo"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    actualizarVehiculo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VehiculoCambios"];
+            };
+        };
+        responses: {
+            /** @description Vehículo con su nueva versión. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Vehiculo"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["Conflicto"];
         };
     };
     aptitudVehiculo: {
