@@ -27,6 +27,9 @@ type CredencialesEntrada struct {
 	// Contrasena Credencial. AI27 no la custodia: se delega a Cognito. No se registra ni se refleja en logs (E0-T3).
 	Contrasena string `json:"contrasena"`
 
+	// SegundoFactor Código del segundo factor (TOTP de 6 dígitos, WebAuthn, SMS, etc.). Opcional en V1; requerido en V2+. El IdP (Keycloak) valida el código; AI27 identidad solo lo transporta. Ver DEC-031 (ADR 13), DEC-065 (A-3) y DEC-087 (A-15).
+	SegundoFactor *string `json:"segundo_factor"`
+
 	// Usuario Identificador de acceso del sujeto (según Cognito).
 	Usuario string `json:"usuario"`
 }
