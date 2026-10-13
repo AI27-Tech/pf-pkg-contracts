@@ -22,9 +22,19 @@ cd "$RAIZ"
 
 GATE_DIR="$RAIZ/tools/breaking-gate"
 ROMP="$RAIZ/rompimientos"
-VERSION="${VERSION:-$(cat VERSION)}"
 
-gate() { ( cd "$GATE_DIR" && go run . -version "$VERSION" -rompimientos "$ROMP" "$@" ); }
+# Versión del FIXTURE de esta prueba. Los casos de abajo alimentan rupturas de
+# ejemplo tomadas de la allowlist de la ola 1 (tracer.4): el renombre de
+# /api/v1/unidades y los campos reservados de ViajeAsignado/ViajeReasignado. La
+# prueba ejercita el MECANISMO del gate (declarada pasa, no declarada falla), no
+# el contenido de la ola viva, así que fija la versión del fixture y NO hereda
+# VERSION del repo. Si heredara VERSION, al abrir una ola nueva (p. ej. tracer.5)
+# el gate buscaría rompimientos/<ola nueva>.yaml y estas rupturas de ejemplo
+# dejarían de estar declaradas, haciendo fallar la prueba por una razón ajena a
+# lo que verifica. El caso 5 usa a propósito OTRA versión para probar justo eso.
+VERSION_FIXTURE="v0.1.0-tracer.4"
+
+gate() { ( cd "$GATE_DIR" && go run . -version "$VERSION_FIXTURE" -rompimientos "$ROMP" "$@" ); }
 
 fallos=0
 ok()   { echo "    OK: $1"; }
