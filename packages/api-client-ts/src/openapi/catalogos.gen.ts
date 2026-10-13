@@ -198,6 +198,8 @@ export interface components {
         /** @description Vehículo de la flota de AI27 (ÁTOMO de catalogos). La `unidad` (paquete vehículo + custodios) NO vive aquí: es roster de `operacion` (ADR 31 §5). */
         Vehiculo: {
             id: components["schemas"]["Id"];
+            /** @description Versión de la entidad, para que el consumidor revalide su caché barato (E5-T1, brecha C6). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.4; el servicio la llena siempre. Se promoverá a requerida en una ola futura. */
+            version?: number;
             /**
              * @description Tipo de vehículo de AI27. Un coche lleva uno o dos custodios; una moto, uno (ADR 31). El `tipo` de la `unidad` del roster (patrulla|moto) se deriva de este valor en `operacion`, no se escribe aquí.
              * @enum {string}
@@ -208,6 +210,13 @@ export interface components {
             placas?: string;
             /** @enum {string} */
             estado: "activa" | "inactiva";
+            /** @description Inicio de vigencia de esta versión. Opcional por la misma evolución que `version`; sostiene la lectura `?a_fecha` (C9). */
+            vigencia_desde?: components["schemas"]["MarcaTiempo"];
+            /**
+             * Format: date-time
+             * @description Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+             */
+            vigencia_hasta?: string | null;
         };
         PaginaVehiculos: {
             items: components["schemas"]["Vehiculo"][];

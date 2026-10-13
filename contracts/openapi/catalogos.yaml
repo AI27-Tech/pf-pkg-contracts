@@ -22,7 +22,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — catalogos
-  version: 0.1.0-tracer.4
+  version: 0.1.0-tracer.5
   description: Registro maestro. Lectura para el tracer y afirmación de aptitud.
   x-ai27-servicio: catalogos
   x-ai27-capa: catalogo
@@ -292,6 +292,14 @@ components:
         vehículo + custodios) NO vive aquí: es roster de `operacion` (ADR 31 §5).
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Versión de la entidad, para que el consumidor revalide su caché
+            barato (E5-T1, brecha C6). OPCIONAL por evolución expand/contract: se
+            agrega sin romper a los consumidores de tracer.4; el servicio la llena
+            siempre. Se promoverá a requerida en una ola futura.
         tipo:
           type: string
           enum: [coche, moto]
@@ -306,6 +314,18 @@ components:
         estado:
           type: string
           enum: [activa, inactiva]
+        vigencia_desde:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          description: >-
+            Inicio de vigencia de esta versión. Opcional por la misma evolución
+            que `version`; sostiene la lectura `?a_fecha` (C9).
+        vigencia_hasta:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Fin de vigencia de esta versión, o null si es la vigente. Mismo
+            formato que `MarcaTiempo`.
 
     PaginaVehiculos:
       type: object

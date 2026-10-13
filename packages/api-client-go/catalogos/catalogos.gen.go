@@ -167,6 +167,15 @@ type Vehiculo struct {
 
 	// Tipo Tipo de vehículo de AI27. Un coche lleva uno o dos custodios; una moto, uno (ADR 31). El `tipo` de la `unidad` del roster (patrulla|moto) se deriva de este valor en `operacion`, no se escribe aquí.
 	Tipo VehiculoTipo `json:"tipo"`
+
+	// Version Versión de la entidad, para que el consumidor revalide su caché barato (E5-T1, brecha C6). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.4; el servicio la llena siempre. Se promoverá a requerida en una ola futura.
+	Version *int `json:"version,omitempty"`
+
+	// VigenciaDesde Inicio de vigencia de esta versión. Opcional por la misma evolución que `version`; sostiene la lectura `?a_fecha` (C9).
+	VigenciaDesde *MarcaTiempo `json:"vigencia_desde,omitempty"`
+
+	// VigenciaHasta Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+	VigenciaHasta *time.Time `json:"vigencia_hasta"`
 }
 
 // VehiculoEstado defines model for Vehiculo.Estado.
