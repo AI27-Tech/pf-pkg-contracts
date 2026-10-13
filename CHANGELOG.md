@@ -23,6 +23,12 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 - Campo es nullable en V1 para mitigar desincronización entre servicios
 - Keycloak ya está configurado con TOTP obligatorio en flujo directo (realm-ai27.json)
 - Todos los tipos Go y TypeScript se regeneran automáticamente desde el contrato
+- Cierre de ola (Lead): se subió `VERSION` y los seis specs OpenAPI a `0.1.0-tracer.5`
+  (los otros cinco sin cambio de forma; suben de número porque el tag versiona el
+  paquete completo), más `package.json` del cliente TS. `breaking-openapi` confirma
+  los seis compatibles con tracer.4: cambio aditivo, sin entrada en `rompimientos/`.
+  Decisión del Lead: tracer.5 se adelanta para el MFA de E4; la ola 2 (mensajería,
+  SSE, emergencias) pasa a tracer.6.
 
 ## 2026:10:08 13:36
 
