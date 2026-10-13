@@ -168,6 +168,81 @@ paths:
         "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    post:
+      operationId: crearVehiculo
+      tags: [recursos]
+      summary: Alta de un vehículo (crea la versión 1).
+      description: >-
+        Registra un vehículo nuevo. Crea la versión 1 y emite
+        `catalogo.actualizado` en la misma transacción (P17). Escritura
+        administrativa de E5 (brecha C7).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/VehiculoEntrada"}
+      responses:
+        "201":
+          description: Vehículo creado (versión 1).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Vehiculo"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/vehiculos/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerVehiculo
+      tags: [recursos]
+      summary: Vehículo vigente, o vigente a una fecha.
+      description: >-
+        La lectura vigente-a-una-fecha es la que la exportación probatoria
+        necesita (P8): devuelve la versión que regía en esa fecha, no la actual.
+      parameters:
+      - name: a_fecha
+        in: query
+        required: false
+        description: Devuelve la versión vigente a esa fecha (probatorio).
+        schema: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+      responses:
+        "200":
+          description: Vehículo.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Vehiculo"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: actualizarVehiculo
+      tags: [recursos]
+      summary: Modifica un vehículo creando una nueva versión.
+      description: >-
+        No sobrescribe: cierra la vigencia de la versión actual y crea una nueva
+        (version+1), y emite `catalogo.actualizado` en la misma transacción
+        (P17). La versión anterior sigue consultable con `?a_fecha`. Escritura
+        administrativa de E5 (brecha C7).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/VehiculoCambios"}
+      responses:
+        "200":
+          description: Vehículo con su nueva versión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Vehiculo"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
 
   /api/v1/vehiculos/{id}/aptitud:
     parameters:
@@ -344,6 +419,39 @@ components:
           description: >-
             Fin de vigencia de esta versión, o null si es la vigente. Mismo
             formato que `MarcaTiempo`.
+
+    VehiculoEntrada:
+      type: object
+      additionalProperties: false
+      required: [tipo, estado, cliente_id]
+      description: Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión.
+      properties:
+        tipo:
+          type: string
+          enum: [coche, moto]
+        economico: {type: string}
+        placas: {type: string}
+        estado:
+          type: string
+          enum: [activa, inactiva]
+        cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+
+    VehiculoCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de modificación de un vehículo (PATCH). Todos los campos son
+        opcionales; los presentes forman la nueva versión. No incluye `id` ni
+        `version` (los gobierna el servidor).
+      properties:
+        tipo:
+          type: string
+          enum: [coche, moto]
+        economico: {type: string}
+        placas: {type: string}
+        estado:
+          type: string
+          enum: [activa, inactiva]
 
     PaginaVehiculos:
       type: object
