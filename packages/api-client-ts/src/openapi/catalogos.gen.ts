@@ -88,7 +88,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar vehículos de la flota de AI27 (coche o moto). */
+        /**
+         * Listar vehículos de la flota de AI27 (coche o moto).
+         * @description Sin `ids`, devuelve una página paginada por cursor. Con `ids`, devuelve la LECTURA POR LOTE de esos identificadores en un solo viaje (evita el patrón N+1 de los consumidores; E5-T1 la trata como de primera clase). `ids` y `cursor` son mutuamente excluyentes: con `ids` presente, el resultado no se pagina y `cursor_siguiente` es null.
+         */
         get: operations["listarVehiculos"];
         put?: never;
         post?: never;
@@ -297,6 +300,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description La petición no cumple el contrato (validación de cuerpo o parámetros). */
+        SolicitudInvalida: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: never;
     requestBodies: never;
@@ -410,6 +422,8 @@ export interface operations {
         parameters: {
             query?: {
                 cursor?: components["schemas"]["Cursor"];
+                /** @description Lista de identificadores separados por coma para la lectura por lote. Mutuamente excluyente con `cursor`. */
+                ids?: components["schemas"]["Id"][];
             };
             header?: never;
             path?: never;
@@ -417,7 +431,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Página de vehículos. */
+            /** @description Página de vehículos (o el lote solicitado). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -426,6 +440,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginaVehiculos"];
                 };
             };
+            400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
         };

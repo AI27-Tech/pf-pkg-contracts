@@ -193,6 +193,9 @@ type NoEncontrado = Error
 // Prohibido defines model for Prohibido.
 type Prohibido = Error
 
+// SolicitudInvalida defines model for SolicitudInvalida.
+type SolicitudInvalida = Error
+
 // ListarClientesParams defines parameters for ListarClientes.
 type ListarClientesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -222,6 +225,9 @@ type ObtenerSlaParams struct {
 // ListarVehiculosParams defines parameters for ListarVehiculos.
 type ListarVehiculosParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Ids Lista de identificadores separados por coma para la lectura por lote. Mutuamente excluyente con `cursor`.
+	Ids *[]Id `form:"ids,omitempty" json:"ids,omitempty"`
 }
 
 // AptitudVehiculoParams defines parameters for AptitudVehiculo.
@@ -758,6 +764,22 @@ func NewListarVehiculosRequest(server string, params *ListarVehiculosParams) (*h
 
 		}
 
+		if params.Ids != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", false, "ids", runtime.ParamLocationQuery, *params.Ids); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -1037,6 +1059,7 @@ type ListarVehiculosResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *PaginaVehiculos
+	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
 }
@@ -1413,6 +1436,13 @@ func ParseListarVehiculosResponse(rsp *http.Response) (*ListarVehiculosResponse,
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest NoAutorizado

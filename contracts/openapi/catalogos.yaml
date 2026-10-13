@@ -137,17 +137,35 @@ paths:
       operationId: listarVehiculos
       tags: [recursos]
       summary: Listar vehículos de la flota de AI27 (coche o moto).
+      description: >-
+        Sin `ids`, devuelve una página paginada por cursor. Con `ids`, devuelve
+        la LECTURA POR LOTE de esos identificadores en un solo viaje (evita el
+        patrón N+1 de los consumidores; E5-T1 la trata como de primera clase).
+        `ids` y `cursor` son mutuamente excluyentes: con `ids` presente, el
+        resultado no se pagina y `cursor_siguiente` es null.
       parameters:
       - name: cursor
         in: query
         required: false
         schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      - name: ids
+        in: query
+        required: false
+        description: >-
+          Lista de identificadores separados por coma para la lectura por lote.
+          Mutuamente excluyente con `cursor`.
+        style: form
+        explode: false
+        schema:
+          type: array
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
       responses:
         "200":
-          description: Página de vehículos.
+          description: Página de vehículos (o el lote solicitado).
           content:
             application/json:
               schema: {$ref: "#/components/schemas/PaginaVehiculos"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
