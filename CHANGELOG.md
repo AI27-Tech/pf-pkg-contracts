@@ -3,6 +3,27 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-16 [tracer.5]
+
+**Resumen:** Se publica **`v0.1.0-tracer.5`** con soporte para segundo factor en la emisión de sesión.
+
+**Cambios:**
+- `contracts/openapi/identidad.yaml`:
+  - Version bumpeada: `0.1.0-tracer.4` → `0.1.0-tracer.5`
+  - `CredencialesEntrada`: agregado campo `segundo_factor` (type: string, nullable)
+  - Descripción: el OTP/TOTP es opcional en V1, requerido en V2+. Keycloak lo valida; identidad solo lo transporta.
+  - Referencias: DEC-031 (ADR 13), DEC-065 (A-3), DEC-087 (A-15)
+  
+**Impacto:**
+- Backend (`pf-svc-identidad`): puede cambiar firma de `EmitirSesion` para recibir `Credentials` con `SegundoFactor`
+- Frontend (`pf-web-frontend-client`): puede agregar campo OTP en formulario de login
+- Auditoría interna: se registra en tabla `cambio_identidad` con tipo `sesion.emitida` y flag `segundo_factor_utilizado` en detalle
+
+**Notas:**
+- Campo es nullable en V1 para mitigar desincronización entre servicios
+- Keycloak ya está configurado con TOTP obligatorio en flujo directo (realm-ai27.json)
+- Todos los tipos Go y TypeScript se regeneran automáticamente desde el contrato
+
 ## 2026:10:08 13:36
 
 **Resumen:** Se preparó (sin publicar) la **ola contractual 1**, `v0.1.0-tracer.4`,
