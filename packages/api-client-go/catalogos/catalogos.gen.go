@@ -4,6 +4,7 @@
 package catalogos
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -35,14 +36,38 @@ const (
 
 // Defines values for VehiculoEstado.
 const (
-	Activa   VehiculoEstado = "activa"
-	Inactiva VehiculoEstado = "inactiva"
+	VehiculoEstadoActiva   VehiculoEstado = "activa"
+	VehiculoEstadoInactiva VehiculoEstado = "inactiva"
 )
 
 // Defines values for VehiculoTipo.
 const (
-	Coche VehiculoTipo = "coche"
-	Moto  VehiculoTipo = "moto"
+	VehiculoTipoCoche VehiculoTipo = "coche"
+	VehiculoTipoMoto  VehiculoTipo = "moto"
+)
+
+// Defines values for VehiculoCambiosEstado.
+const (
+	VehiculoCambiosEstadoActiva   VehiculoCambiosEstado = "activa"
+	VehiculoCambiosEstadoInactiva VehiculoCambiosEstado = "inactiva"
+)
+
+// Defines values for VehiculoCambiosTipo.
+const (
+	VehiculoCambiosTipoCoche VehiculoCambiosTipo = "coche"
+	VehiculoCambiosTipoMoto  VehiculoCambiosTipo = "moto"
+)
+
+// Defines values for VehiculoEntradaEstado.
+const (
+	Activa   VehiculoEntradaEstado = "activa"
+	Inactiva VehiculoEntradaEstado = "inactiva"
+)
+
+// Defines values for VehiculoEntradaTipo.
+const (
+	Coche VehiculoEntradaTipo = "coche"
+	Moto  VehiculoEntradaTipo = "moto"
 )
 
 // Aptitud Afirmación de aptitud administrativa, INFORMATIVA en V1 (DEC-055). `apto=false` no reserva ni bloquea; informa a `operacion`, que decide dentro de su transacción de asignación y asigna igual. `catalogos` devuelve `apto` true/false; el estado "desconocido" NO existe aquí, lo calcula el consumidor cuando no hay respuesta o el dato está obsoleto.
@@ -167,6 +192,15 @@ type Vehiculo struct {
 
 	// Tipo Tipo de vehículo de AI27. Un coche lleva uno o dos custodios; una moto, uno (ADR 31). El `tipo` de la `unidad` del roster (patrulla|moto) se deriva de este valor en `operacion`, no se escribe aquí.
 	Tipo VehiculoTipo `json:"tipo"`
+
+	// Version Versión de la entidad, para que el consumidor revalide su caché barato (E5-T1, brecha C6). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.4; el servicio la llena siempre. Se promoverá a requerida en una ola futura.
+	Version *int `json:"version,omitempty"`
+
+	// VigenciaDesde Inicio de vigencia de esta versión. Opcional por la misma evolución que `version`; sostiene la lectura `?a_fecha` (C9).
+	VigenciaDesde *MarcaTiempo `json:"vigencia_desde,omitempty"`
+
+	// VigenciaHasta Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+	VigenciaHasta *time.Time `json:"vigencia_hasta"`
 }
 
 // VehiculoEstado defines model for Vehiculo.Estado.
@@ -174,6 +208,39 @@ type VehiculoEstado string
 
 // VehiculoTipo Tipo de vehículo de AI27. Un coche lleva uno o dos custodios; una moto, uno (ADR 31). El `tipo` de la `unidad` del roster (patrulla|moto) se deriva de este valor en `operacion`, no se escribe aquí.
 type VehiculoTipo string
+
+// VehiculoCambios Cuerpo de modificación de un vehículo (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id` ni `version` (los gobierna el servidor).
+type VehiculoCambios struct {
+	Economico *string                `json:"economico,omitempty"`
+	Estado    *VehiculoCambiosEstado `json:"estado,omitempty"`
+	Placas    *string                `json:"placas,omitempty"`
+	Tipo      *VehiculoCambiosTipo   `json:"tipo,omitempty"`
+}
+
+// VehiculoCambiosEstado defines model for VehiculoCambios.Estado.
+type VehiculoCambiosEstado string
+
+// VehiculoCambiosTipo defines model for VehiculoCambios.Tipo.
+type VehiculoCambiosTipo string
+
+// VehiculoEntrada Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión.
+type VehiculoEntrada struct {
+	// ClienteId Identificador único (UUID). Nunca un correlativo expuesto.
+	ClienteId Id                    `json:"cliente_id"`
+	Economico *string               `json:"economico,omitempty"`
+	Estado    VehiculoEntradaEstado `json:"estado"`
+	Placas    *string               `json:"placas,omitempty"`
+	Tipo      VehiculoEntradaTipo   `json:"tipo"`
+}
+
+// VehiculoEntradaEstado defines model for VehiculoEntrada.Estado.
+type VehiculoEntradaEstado string
+
+// VehiculoEntradaTipo defines model for VehiculoEntrada.Tipo.
+type VehiculoEntradaTipo string
+
+// Conflicto defines model for Conflicto.
+type Conflicto = Error
 
 // NoAutorizado defines model for NoAutorizado.
 type NoAutorizado = Error
@@ -183,6 +250,9 @@ type NoEncontrado = Error
 
 // Prohibido defines model for Prohibido.
 type Prohibido = Error
+
+// SolicitudInvalida defines model for SolicitudInvalida.
+type SolicitudInvalida = Error
 
 // ListarClientesParams defines parameters for ListarClientes.
 type ListarClientesParams struct {
@@ -213,6 +283,15 @@ type ObtenerSlaParams struct {
 // ListarVehiculosParams defines parameters for ListarVehiculos.
 type ListarVehiculosParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Ids Lista de identificadores separados por coma para la lectura por lote. Mutuamente excluyente con `cursor`.
+	Ids *[]Id `form:"ids,omitempty" json:"ids,omitempty"`
+}
+
+// ObtenerVehiculoParams defines parameters for ObtenerVehiculo.
+type ObtenerVehiculoParams struct {
+	// AFecha Devuelve la versión vigente a esa fecha (probatorio).
+	AFecha *MarcaTiempo `form:"a_fecha,omitempty" json:"a_fecha,omitempty"`
 }
 
 // AptitudVehiculoParams defines parameters for AptitudVehiculo.
@@ -220,6 +299,12 @@ type AptitudVehiculoParams struct {
 	// ClienteId Cliente para cuyo contrato/SLA se evalúa la aptitud.
 	ClienteId Id `form:"cliente_id" json:"cliente_id"`
 }
+
+// CrearVehiculoJSONRequestBody defines body for CrearVehiculo for application/json ContentType.
+type CrearVehiculoJSONRequestBody = VehiculoEntrada
+
+// ActualizarVehiculoJSONRequestBody defines body for ActualizarVehiculo for application/json ContentType.
+type ActualizarVehiculoJSONRequestBody = VehiculoCambios
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -315,6 +400,19 @@ type ClientInterface interface {
 	// ListarVehiculos request
 	ListarVehiculos(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// CrearVehiculoWithBody request with any body
+	CrearVehiculoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearVehiculo(ctx context.Context, body CrearVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerVehiculo request
+	ObtenerVehiculo(ctx context.Context, id Id, params *ObtenerVehiculoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActualizarVehiculoWithBody request with any body
+	ActualizarVehiculoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ActualizarVehiculo(ctx context.Context, id Id, body ActualizarVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AptitudVehiculo request
 	AptitudVehiculo(ctx context.Context, id Id, params *AptitudVehiculoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
@@ -393,6 +491,66 @@ func (c *Client) ObtenerSla(ctx context.Context, id Id, params *ObtenerSlaParams
 
 func (c *Client) ListarVehiculos(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarVehiculosRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearVehiculoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearVehiculoRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearVehiculo(ctx context.Context, body CrearVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearVehiculoRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerVehiculo(ctx context.Context, id Id, params *ObtenerVehiculoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerVehiculoRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarVehiculoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarVehiculoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarVehiculo(ctx context.Context, id Id, body ActualizarVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarVehiculoRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -749,6 +907,22 @@ func NewListarVehiculosRequest(server string, params *ListarVehiculosParams) (*h
 
 		}
 
+		if params.Ids != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", false, "ids", runtime.ParamLocationQuery, *params.Ids); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -756,6 +930,149 @@ func NewListarVehiculosRequest(server string, params *ListarVehiculosParams) (*h
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewCrearVehiculoRequest calls the generic CrearVehiculo builder with application/json body
+func NewCrearVehiculoRequest(server string, body CrearVehiculoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearVehiculoRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCrearVehiculoRequestWithBody generates requests for CrearVehiculo with any type of body
+func NewCrearVehiculoRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/vehiculos")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewObtenerVehiculoRequest generates requests for ObtenerVehiculo
+func NewObtenerVehiculoRequest(server string, id Id, params *ObtenerVehiculoParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/vehiculos/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.AFecha != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "a_fecha", runtime.ParamLocationQuery, *params.AFecha); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActualizarVehiculoRequest calls the generic ActualizarVehiculo builder with application/json body
+func NewActualizarVehiculoRequest(server string, id Id, body ActualizarVehiculoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewActualizarVehiculoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewActualizarVehiculoRequestWithBody generates requests for ActualizarVehiculo with any type of body
+func NewActualizarVehiculoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/vehiculos/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -875,6 +1192,19 @@ type ClientWithResponsesInterface interface {
 
 	// ListarVehiculosWithResponse request
 	ListarVehiculosWithResponse(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*ListarVehiculosResponse, error)
+
+	// CrearVehiculoWithBodyWithResponse request with any body
+	CrearVehiculoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearVehiculoResponse, error)
+
+	CrearVehiculoWithResponse(ctx context.Context, body CrearVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearVehiculoResponse, error)
+
+	// ObtenerVehiculoWithResponse request
+	ObtenerVehiculoWithResponse(ctx context.Context, id Id, params *ObtenerVehiculoParams, reqEditors ...RequestEditorFn) (*ObtenerVehiculoResponse, error)
+
+	// ActualizarVehiculoWithBodyWithResponse request with any body
+	ActualizarVehiculoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarVehiculoResponse, error)
+
+	ActualizarVehiculoWithResponse(ctx context.Context, id Id, body ActualizarVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarVehiculoResponse, error)
 
 	// AptitudVehiculoWithResponse request
 	AptitudVehiculoWithResponse(ctx context.Context, id Id, params *AptitudVehiculoParams, reqEditors ...RequestEditorFn) (*AptitudVehiculoResponse, error)
@@ -1028,6 +1358,7 @@ type ListarVehiculosResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *PaginaVehiculos
+	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
 }
@@ -1042,6 +1373,82 @@ func (r ListarVehiculosResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ListarVehiculosResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearVehiculoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Vehiculo
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearVehiculoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearVehiculoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerVehiculoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Vehiculo
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerVehiculoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerVehiculoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ActualizarVehiculoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Vehiculo
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r ActualizarVehiculoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActualizarVehiculoResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1133,6 +1540,49 @@ func (c *ClientWithResponses) ListarVehiculosWithResponse(ctx context.Context, p
 		return nil, err
 	}
 	return ParseListarVehiculosResponse(rsp)
+}
+
+// CrearVehiculoWithBodyWithResponse request with arbitrary body returning *CrearVehiculoResponse
+func (c *ClientWithResponses) CrearVehiculoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearVehiculoResponse, error) {
+	rsp, err := c.CrearVehiculoWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearVehiculoResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearVehiculoWithResponse(ctx context.Context, body CrearVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearVehiculoResponse, error) {
+	rsp, err := c.CrearVehiculo(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearVehiculoResponse(rsp)
+}
+
+// ObtenerVehiculoWithResponse request returning *ObtenerVehiculoResponse
+func (c *ClientWithResponses) ObtenerVehiculoWithResponse(ctx context.Context, id Id, params *ObtenerVehiculoParams, reqEditors ...RequestEditorFn) (*ObtenerVehiculoResponse, error) {
+	rsp, err := c.ObtenerVehiculo(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerVehiculoResponse(rsp)
+}
+
+// ActualizarVehiculoWithBodyWithResponse request with arbitrary body returning *ActualizarVehiculoResponse
+func (c *ClientWithResponses) ActualizarVehiculoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarVehiculoResponse, error) {
+	rsp, err := c.ActualizarVehiculoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarVehiculoResponse(rsp)
+}
+
+func (c *ClientWithResponses) ActualizarVehiculoWithResponse(ctx context.Context, id Id, body ActualizarVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarVehiculoResponse, error) {
+	rsp, err := c.ActualizarVehiculo(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarVehiculoResponse(rsp)
 }
 
 // AptitudVehiculoWithResponse request returning *AptitudVehiculoResponse
@@ -1405,6 +1855,13 @@ func ParseListarVehiculosResponse(rsp *http.Response) (*ListarVehiculosResponse,
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest NoAutorizado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -1418,6 +1875,154 @@ func ParseListarVehiculosResponse(rsp *http.Response) (*ListarVehiculosResponse,
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearVehiculoResponse parses an HTTP response from a CrearVehiculoWithResponse call
+func ParseCrearVehiculoResponse(rsp *http.Response) (*CrearVehiculoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearVehiculoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Vehiculo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerVehiculoResponse parses an HTTP response from a ObtenerVehiculoWithResponse call
+func ParseObtenerVehiculoResponse(rsp *http.Response) (*ObtenerVehiculoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerVehiculoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Vehiculo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActualizarVehiculoResponse parses an HTTP response from a ActualizarVehiculoWithResponse call
+func ParseActualizarVehiculoResponse(rsp *http.Response) (*ActualizarVehiculoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActualizarVehiculoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Vehiculo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
