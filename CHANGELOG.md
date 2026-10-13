@@ -3,6 +3,31 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-13 [tracer.6] — cierre de ola (VERSION + specs + paquete TS)
+
+**Resumen:** Se publica **`v0.1.0-tracer.6`**, que cierra la ola de la superficie
+de vehículos de `catalogos` (E5-T1, AI27-73). El cambio de forma lo hizo Gonzalo
+en el commit anterior; esta entrada corrige el número de ola y cierra la
+publicación.
+
+**Contexto (por qué tracer.6 y no tracer.5):** el commit de E5-T1 subía `VERSION`
+a `tracer.5`, pero `tracer.5` ya se había consumido en el MFA de identidad
+(entrada siguiente). El cambio de vehículos quedó encima de `tracer.5` sin bump
+real. Esta ola lo publica como **tracer.6**. Decisión del Lead: tracer.6 se
+adelanta para E5-T1; la ola 2 (mensajería, SSE, emergencias) pasa a tracer.7.
+
+**Cambios:**
+- `VERSION`: `0.1.0-tracer.5` → `0.1.0-tracer.6`.
+- Los seis specs OpenAPI a `0.1.0-tracer.6` (solo `catalogos` cambió de forma; los
+  otros cinco suben de número porque el tag versiona el paquete completo).
+- `packages/api-client-ts/package.json`: `version` y descripción a tracer.6.
+
+**Compatibilidad:** `make breaking-openapi` confirma los seis specs **compatibles**
+con tracer.5. Todo el cambio de E5-T1 es aditivo (rutas nuevas, campos
+opcionales): **no** hay entrada en `rompimientos/`. `generate` no modificó ningún
+artefacto generado (reproducible). `make verify` y `make test-breaking-gate` en
+verde.
+
 ## 2026-10-13 [tracer.5] — superficie de vehículos de catalogos (E5-T1)
 
 **Resumen:** Se completa en el contrato de `catalogos` la superficie de
