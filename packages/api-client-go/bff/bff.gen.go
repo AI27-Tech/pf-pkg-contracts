@@ -52,6 +52,33 @@ type CredencialesEntrada struct {
 // Cursor Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato.
 type Cursor = string
 
+// DescargaViaje Expediente de exportación de un viaje. Lo compone `bff` leyendo de `operacion`. No contiene cuenta espejo ni `clave_amago` (no existen en el modelo V1, DEC-009/DEC-039).
+type DescargaViaje struct {
+	// Auditoria Auditoría relevante del viaje (sin exponer todo el detalle interno).
+	Auditoria []RegistroAuditoriaDescarga `json:"auditoria"`
+
+	// Bitacora Histórico de bitácora del viaje, ordenado por tiempo (append-only).
+	Bitacora []EntradaBitacoraDescarga `json:"bitacora"`
+
+	// Ficha Ficha técnica del viaje tal como la expone `operacion` (E1-T5).
+	Ficha FichaTecnicaDescarga `json:"ficha"`
+
+	// GeneradoEn Momento en que `bff` compuso el expediente.
+	GeneradoEn MarcaTiempo `json:"generado_en"`
+
+	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.
+	ViajeId Id `json:"viaje_id"`
+}
+
+// EntradaBitacoraDescarga defines model for EntradaBitacoraDescarga.
+type EntradaBitacoraDescarga struct {
+	Autor string `json:"autor"`
+	Texto string `json:"texto"`
+
+	// Ts Instante en UTC, RFC 3339.
+	Ts MarcaTiempo `json:"ts"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	// Codigo Código de máquina, estable y en snake_case. Los consumidores ramifican sobre este valor, no sobre `mensaje`.
@@ -65,6 +92,24 @@ type Error struct {
 
 	// Mensaje Descripción legible para diagnóstico. No es contrato de UI.
 	Mensaje string `json:"mensaje"`
+}
+
+// FichaTecnicaDescarga Ficha técnica del viaje tal como la expone `operacion` (E1-T5).
+type FichaTecnicaDescarga struct {
+	// ClienteId Opcional; mismo formato que `Id`. null si no aplica.
+	ClienteId *openapi_types.UUID `json:"cliente_id"`
+	Destinos  []struct {
+		Nombre      string  `json:"nombre"`
+		NumeroEnvio *string `json:"numero_envio,omitempty"`
+	} `json:"destinos"`
+
+	// Estado Token de estado del viaje (ADR 19).
+	Estado string `json:"estado"`
+
+	// FechaHoraServicio Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+	FechaHoraServicio *time.Time `json:"fecha_hora_servicio"`
+	Origen            string     `json:"origen"`
+	TipoServicio      *string    `json:"tipo_servicio,omitempty"`
 }
 
 // HitoCliente Hito de progreso presentado al cliente. `bff` colapsa el bucle multi-parada en un hito legible (mapeo estado→hito, E2-T2); no expone el enum completo de estados.
@@ -106,6 +151,15 @@ type PaginaViajesResumen struct {
 // RefrescoEntrada defines model for RefrescoEntrada.
 type RefrescoEntrada struct {
 	RefreshToken string `json:"refresh_token"`
+}
+
+// RegistroAuditoriaDescarga defines model for RegistroAuditoriaDescarga.
+type RegistroAuditoriaDescarga struct {
+	Actor   string `json:"actor"`
+	Entidad string `json:"entidad"`
+
+	// Ts Instante en UTC, RFC 3339.
+	Ts MarcaTiempo `json:"ts"`
 }
 
 // Sesion defines model for Sesion.
@@ -274,6 +328,9 @@ type ClientInterface interface {
 
 	// SeguirViaje request
 	SeguirViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DescargarViaje request
+	DescargarViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) CerrarSesion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -374,6 +431,18 @@ func (c *Client) CrearViaje(ctx context.Context, body CrearViajeJSONRequestBody,
 
 func (c *Client) SeguirViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSeguirViajeRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DescargarViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDescargarViajeRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -630,6 +699,40 @@ func NewSeguirViajeRequest(server string, id Id) (*http.Request, error) {
 	return req, nil
 }
 
+// NewDescargarViajeRequest generates requests for DescargarViaje
+func NewDescargarViajeRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/descarga", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -696,6 +799,9 @@ type ClientWithResponsesInterface interface {
 
 	// SeguirViajeWithResponse request
 	SeguirViajeWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*SeguirViajeResponse, error)
+
+	// DescargarViajeWithResponse request
+	DescargarViajeWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*DescargarViajeResponse, error)
 }
 
 type CerrarSesionResponse struct {
@@ -841,6 +947,31 @@ func (r SeguirViajeResponse) StatusCode() int {
 	return 0
 }
 
+type DescargarViajeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DescargaViaje
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r DescargarViajeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DescargarViajeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // CerrarSesionWithResponse request returning *CerrarSesionResponse
 func (c *ClientWithResponses) CerrarSesionWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*CerrarSesionResponse, error) {
 	rsp, err := c.CerrarSesion(ctx, reqEditors...)
@@ -917,6 +1048,15 @@ func (c *ClientWithResponses) SeguirViajeWithResponse(ctx context.Context, id Id
 		return nil, err
 	}
 	return ParseSeguirViajeResponse(rsp)
+}
+
+// DescargarViajeWithResponse request returning *DescargarViajeResponse
+func (c *ClientWithResponses) DescargarViajeWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*DescargarViajeResponse, error) {
+	rsp, err := c.DescargarViaje(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDescargarViajeResponse(rsp)
 }
 
 // ParseCerrarSesionResponse parses an HTTP response from a CerrarSesionWithResponse call
@@ -1139,6 +1279,53 @@ func ParseSeguirViajeResponse(rsp *http.Response) (*SeguirViajeResponse, error) 
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDescargarViajeResponse parses an HTTP response from a DescargarViajeWithResponse call
+func ParseDescargarViajeResponse(rsp *http.Response) (*DescargarViajeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DescargarViajeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DescargaViaje
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado

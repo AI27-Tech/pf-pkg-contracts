@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.7
+  version: 0.1.0-tracer.8
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -35,6 +35,11 @@ tags:
 - name: sesion
   description: Sesión propia del llamante (singular).
 - name: viajes
+- name: descarga
+  description: >-
+    Descarga del expediente de UN viaje para usuarios internos (E6-T3 / DEC-022
+    #7). `bff` compone leyendo de `operacion` (fuente exacta y actual), no de
+    `reportes` (analítico, eventualmente consistente).
 
 paths:
   /api/v1/sesion:
@@ -156,6 +161,43 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/ViajeSeguimiento"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  # ---------------------------------------------------------------------------
+  # Descarga del expediente de UN viaje (E6-T3 / E6-HU-026). Solo usuarios
+  # internos en V1 (DEC-022 #7). `bff` compone el expediente leyendo de
+  # `operacion` (fuente exacta y actual), NUNCA de `reportes` (analítico y
+  # eventualmente consistente). Autorización por mínimo privilegio: un operativo
+  # solo descarga viajes de su alcance; un administrador, más ampliamente — el
+  # rechazo por alcance ocurre antes de componer dato alguno. Cada descarga deja
+  # un registro de auditoría (actor, viaje, momento). El expediente SOLO serializa
+  # campos contratados de V1: no existe representación para cuenta espejo ni
+  # `clave_amago` (DEC-009/DEC-039). Es descarga de UN viaje: la exportación de
+  # listados es V2 (DEC-023), por eso no hay ruta de lote.
+  # ---------------------------------------------------------------------------
+  /api/v1/viajes/{id}/descarga:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: descargarViaje
+      tags: [descarga]
+      summary: Descargar el expediente de un viaje (solo interno).
+      description: >-
+        Compone ficha técnica, histórico de bitácora y auditoría relevante del
+        viaje en un expediente de exportación. Audiencia interna; un operativo
+        fuera de su alcance recibe 403 antes de componer nada. Un viaje
+        inexistente o fuera de alcance devuelve 404.
+      responses:
+        "200":
+          description: Expediente del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DescargaViaje"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
 components:
@@ -291,3 +333,80 @@ components:
         incidencias:
           type: array
           items: {$ref: "#/components/schemas/IncidenciaCurada"}
+
+    # --- Descarga del expediente de UN viaje (E6-T3). Composición de ficha +
+    #     bitácora + auditoría relevante, leída de `operacion`. Solo campos
+    #     contratados de V1: sin cuenta espejo ni `clave_amago` (DEC-009/039). ---
+    DescargaViaje:
+      type: object
+      additionalProperties: false
+      required: [viaje_id, ficha, bitacora, auditoria, generado_en]
+      description: >-
+        Expediente de exportación de un viaje. Lo compone `bff` leyendo de
+        `operacion`. No contiene cuenta espejo ni `clave_amago` (no existen en
+        el modelo V1, DEC-009/DEC-039).
+      properties:
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        ficha:
+          $ref: "#/components/schemas/FichaTecnicaDescarga"
+        bitacora:
+          type: array
+          description: Histórico de bitácora del viaje, ordenado por tiempo (append-only).
+          items: {$ref: "#/components/schemas/EntradaBitacoraDescarga"}
+        auditoria:
+          type: array
+          description: >-
+            Auditoría relevante del viaje (sin exponer todo el detalle interno).
+          items: {$ref: "#/components/schemas/RegistroAuditoriaDescarga"}
+        generado_en:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          description: Momento en que `bff` compuso el expediente.
+
+    FichaTecnicaDescarga:
+      type: object
+      additionalProperties: false
+      required: [estado, origen, destinos]
+      description: Ficha técnica del viaje tal como la expone `operacion` (E1-T5).
+      properties:
+        estado:
+          type: string
+          description: Token de estado del viaje (ADR 19).
+        cliente_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Opcional; mismo formato que `Id`. null si no aplica.
+        origen: {type: string}
+        destinos:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [nombre]
+            properties:
+              nombre: {type: string}
+              numero_envio: {type: string}
+        fecha_hora_servicio:
+          type: string
+          format: date-time
+          nullable: true
+          description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+        tipo_servicio: {type: string}
+
+    EntradaBitacoraDescarga:
+      type: object
+      additionalProperties: false
+      required: [texto, autor, ts]
+      properties:
+        texto: {type: string}
+        autor: {type: string}
+        ts: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    RegistroAuditoriaDescarga:
+      type: object
+      additionalProperties: false
+      required: [entidad, actor, ts]
+      properties:
+        entidad: {type: string}
+        actor: {type: string}
+        ts: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}

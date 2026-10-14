@@ -22,7 +22,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — catalogos
-  version: 0.1.0-tracer.7
+  version: 0.1.0-tracer.8
   description: Registro maestro. Lectura para el tracer y afirmación de aptitud.
   x-ai27-servicio: catalogos
   x-ai27-capa: catalogo
@@ -40,6 +40,11 @@ tags:
 - name: contratos
 - name: recursos
   description: Vehículos (átomos coche/moto) y custodios — los átomos de AI27 (ADR 31).
+- name: catalogos-tipo
+  description: >-
+    Catálogos de tipo de V1 (listas de valores administrables): tipos de
+    servicio/monitoreo, líneas de transporte, tipos de unidad, tipos de custodia
+    y zonas de riesgo como lista (sin geometría; E5-T3 / DEC-017).
 
 paths:
   /api/v1/clientes:
@@ -97,6 +102,33 @@ paths:
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
+  /api/v1/contratos:
+    post:
+      operationId: crearContrato
+      tags: [contratos]
+      summary: Alta de un contrato (crea la versión 1).
+      description: >-
+        Registra un contrato nuevo para un cliente. Crea la versión 1 y emite
+        `catalogo.actualizado` en la misma transacción (P17). Escritura
+        administrativa de E5 (E5-T4), mismo patrón de versionado que vehículos y
+        custodios. En V1 el contrato es informativo (DEC-022 #4): no condiciona
+        ningún flujo de E1.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ContratoEntrada"}
+      responses:
+        "201":
+          description: Contrato creado (versión 1).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Contrato"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
   /api/v1/contratos/{id}:
     parameters:
     - name: id
@@ -124,6 +156,56 @@ paths:
               schema: {$ref: "#/components/schemas/Contrato"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: actualizarContrato
+      tags: [contratos]
+      summary: Modifica un contrato creando una nueva versión.
+      description: >-
+        No sobrescribe: cierra la vigencia de la versión actual y crea una nueva
+        (version+1), y emite `catalogo.actualizado` en la misma transacción
+        (P17). La versión anterior sigue consultable con `?a_fecha` (P8).
+        Escritura administrativa de E5 (E5-T4).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ContratoCambios"}
+      responses:
+        "200":
+          description: Contrato con su nueva versión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Contrato"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/sla:
+    post:
+      operationId: crearSla
+      tags: [contratos]
+      summary: Alta de un SLA de contrato (crea la versión 1).
+      description: >-
+        Registra el SLA de un contrato. Crea la versión 1 y emite
+        `catalogo.actualizado` en la misma transacción (P17). En V1 el SLA es
+        INFORMATIVO (DEC-022 #4 / DEC-025): se registra, no se vigila ni alerta;
+        no condiciona ningún flujo de E1.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SlaEntrada"}
+      responses:
+        "201":
+          description: SLA creado (versión 1).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Sla"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
 
   /api/v1/sla/{id}:
     parameters:
@@ -148,6 +230,30 @@ paths:
               schema: {$ref: "#/components/schemas/Sla"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: actualizarSla
+      tags: [contratos]
+      summary: Modifica un SLA creando una nueva versión.
+      description: >-
+        No sobrescribe: cierra la vigencia de la versión actual y crea una nueva
+        (version+1), y emite `catalogo.actualizado` en la misma transacción
+        (P17). La versión anterior sigue consultable con `?a_fecha` (P8).
+        Escritura administrativa de E5 (E5-T4).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SlaCambios"}
+      responses:
+        "200":
+          description: SLA con su nueva versión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Sla"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
 
   /api/v1/vehiculos:
     get:
@@ -298,19 +404,112 @@ paths:
       operationId: listarCustodios
       tags: [recursos]
       summary: Listar custodios (personas de AI27 que viajan en la unidad).
+      description: >-
+        Sin `ids`, devuelve una página paginada por cursor. Con `ids`, devuelve
+        la LECTURA POR LOTE de esos identificadores en un solo viaje (evita el
+        patrón N+1 de los consumidores; misma semántica de primera clase que
+        vehículos en E5-T1). `ids` y `cursor` son mutuamente excluyentes: con
+        `ids` presente, el resultado no se pagina y `cursor_siguiente` es null.
       parameters:
       - name: cursor
         in: query
         required: false
         schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      - name: ids
+        in: query
+        required: false
+        description: >-
+          Lista de identificadores separados por coma para la lectura por lote.
+          Mutuamente excluyente con `cursor`.
+        style: form
+        explode: false
+        schema:
+          type: array
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
       responses:
         "200":
-          description: Página de custodios.
+          description: Página de custodios (o el lote solicitado).
           content:
             application/json:
               schema: {$ref: "#/components/schemas/PaginaCustodios"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    post:
+      operationId: crearCustodio
+      tags: [recursos]
+      summary: Alta de un custodio (crea la versión 1).
+      description: >-
+        Registra un custodio nuevo. Crea la versión 1 y emite
+        `catalogo.actualizado` en la misma transacción (P17). Escritura
+        administrativa de E5 (E5-T2), mismo patrón que vehículos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CustodioEntrada"}
+      responses:
+        "201":
+          description: Custodio creado (versión 1).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Custodio"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/custodios/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerCustodio
+      tags: [recursos]
+      summary: Custodio vigente, o vigente a una fecha.
+      description: >-
+        La lectura vigente-a-una-fecha es la que la exportación probatoria
+        necesita (P8): devuelve la versión que regía en esa fecha, no la actual.
+      parameters:
+      - name: a_fecha
+        in: query
+        required: false
+        description: Devuelve la versión vigente a esa fecha (probatorio).
+        schema: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+      responses:
+        "200":
+          description: Custodio.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Custodio"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: actualizarCustodio
+      tags: [recursos]
+      summary: Modifica un custodio creando una nueva versión.
+      description: >-
+        No sobrescribe: cierra la vigencia de la versión actual y crea una nueva
+        (version+1), y emite `catalogo.actualizado` en la misma transacción
+        (P17). La versión anterior sigue consultable con `?a_fecha`. Escritura
+        administrativa de E5 (E5-T2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CustodioCambios"}
+      responses:
+        "200":
+          description: Custodio con su nueva versión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Custodio"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
 
   /api/v1/custodios/{id}/aptitud:
     parameters:
@@ -339,6 +538,107 @@ paths:
               schema: {$ref: "#/components/schemas/Aptitud"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  # ---------------------------------------------------------------------------
+  # Catálogos de tipo (E5-T3). Un ÚNICO recurso parametrizado por `{tipo}` para
+  # las cinco listas de valores de V1 (opción A): comparten forma (código,
+  # etiqueta, estado, versión), así que no se declaran cinco recursos casi
+  # idénticos. Agregar una lista futura es un valor más del enum `TipoCatalogo`,
+  # no una ruta nueva. `zona_riesgo` entra SOLO como lista de valores (sin
+  # geometría); cuando V2 agregue geometría, se gradúa a su propio recurso
+  # (ADR 5 / DEC-017). Mismo patrón versión-en-outbox (`catalogo.actualizado`,
+  # P17) que vehículos, custodios, contratos y SLA.
+  # ---------------------------------------------------------------------------
+  /api/v1/catalogos-tipo/{tipo}:
+    parameters:
+    - name: tipo
+      in: path
+      required: true
+      description: Cuál de las listas de valores de V1 se consulta o administra.
+      schema: {$ref: "#/components/schemas/TipoCatalogo"}
+    get:
+      operationId: listarValoresCatalogo
+      tags: [catalogos-tipo]
+      summary: Listar los valores de un catálogo de tipo (lectura por lote).
+      description: >-
+        Devuelve los valores vigentes del catálogo `{tipo}`. Lectura de primera
+        clase para los consumidores (evita N+1). Cada valor trae su `version`
+        para revalidación barata de caché.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de valores del catálogo.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaValoresCatalogo"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    post:
+      operationId: crearValorCatalogo
+      tags: [catalogos-tipo]
+      summary: Alta de un valor en un catálogo de tipo (crea la versión 1).
+      description: >-
+        Registra un valor nuevo en el catálogo `{tipo}`. Crea la versión 1 y
+        emite `catalogo.actualizado` en la misma transacción (P17). Escritura
+        administrativa de E5 (E5-T3).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ValorCatalogoEntrada"}
+      responses:
+        "201":
+          description: Valor creado (versión 1).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ValorCatalogo"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/catalogos-tipo/{tipo}/{id}:
+    parameters:
+    - name: tipo
+      in: path
+      required: true
+      schema: {$ref: "#/components/schemas/TipoCatalogo"}
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    patch:
+      operationId: actualizarValorCatalogo
+      tags: [catalogos-tipo]
+      summary: Modifica o desactiva un valor de catálogo (crea una nueva versión).
+      description: >-
+        No sobrescribe: cierra la vigencia de la versión actual y crea una nueva
+        (version+1), y emite `catalogo.actualizado` en la misma transacción
+        (P17). Desactivar un valor es cambiar su `estado` por esta misma ruta;
+        no rompe los registros históricos que ya lo usaban (siguen apuntando a la
+        versión que regía entonces, P8).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ValorCatalogoCambios"}
+      responses:
+        "200":
+          description: Valor con su nueva versión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ValorCatalogo"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
 
 components:
   schemas:
@@ -375,6 +675,14 @@ components:
       required: [id, cliente_id, vigencia_desde]
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Versión de la entidad, para revalidación barata de caché (E5-T4,
+            misma brecha C6 que vehículos y custodios). OPCIONAL por evolución
+            expand/contract: se agrega sin romper a los consumidores de tracer.6;
+            el servicio la llena siempre.
         cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         vigencia_desde: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
         vigencia_hasta:
@@ -382,16 +690,69 @@ components:
           format: date-time
           nullable: true
           description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+
+    ContratoEntrada:
+      type: object
+      additionalProperties: false
+      required: [cliente_id]
+      description: Cuerpo de alta de un contrato (POST). El servicio asigna id y versión.
+      properties:
+        cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        descripcion:
+          type: string
+          description: Descripción del contrato (informativo en V1, DEC-022 #4).
+
+    ContratoCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de modificación de un contrato (PATCH). Todos los campos son
+        opcionales; los presentes forman la nueva versión. No incluye `id`,
+        `version` ni `cliente_id`.
+      properties:
+        descripcion:
+          type: string
+
     Sla:
       type: object
       additionalProperties: false
       required: [id, contrato_id]
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Versión de la entidad, para revalidación barata de caché (E5-T4).
+            OPCIONAL por evolución expand/contract: se agrega sin romper a los
+            consumidores de tracer.6; el servicio la llena siempre. Se promoverá a
+            requerida en una ola futura.
         contrato_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         descripcion:
           type: string
           description: Compromiso informativo en V1 (DEC-022 #4).
+
+    SlaEntrada:
+      type: object
+      additionalProperties: false
+      required: [contrato_id]
+      description: Cuerpo de alta de un SLA (POST). El servicio asigna id y versión.
+      properties:
+        contrato_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        descripcion:
+          type: string
+          description: Compromiso informativo en V1 (DEC-022 #4).
+
+    SlaCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de modificación de un SLA (PATCH). Todos los campos son
+        opcionales; los presentes forman la nueva versión. No incluye `id`,
+        `version` ni `contrato_id` (los gobierna el servidor).
+      properties:
+        descripcion:
+          type: string
 
     Vehiculo:
       type: object
@@ -486,13 +847,86 @@ components:
       type: object
       additionalProperties: false
       required: [id, nombre, estado]
+      description: >-
+        Custodio de AI27 (ÁTOMO de catalogos, persona). Puede además ser un
+        usuario de `identidad`: dos registros, dos dueños, una referencia por
+        identificador (`usuario_id`), NUNCA una FK entre schemas (P1). Datos
+        personales (nombre, teléfono).
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Versión de la entidad, para que el consumidor revalide su caché
+            barato (E5-T2, misma brecha C6 que vehículos). OPCIONAL por evolución
+            expand/contract: se agrega sin romper a los consumidores de tracer.6;
+            el servicio la llena siempre. Se promoverá a requerida en una ola
+            futura.
         nombre: {type: string}
         telefono: {type: string}
         estado:
           type: string
           enum: [activo, inactivo]
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Referencia OPCIONAL al usuario de `identidad` cuando el custodio
+            también tiene acceso al sistema. Es un IDENTIFICADOR, no una FK entre
+            schemas (P1): el consumidor resuelve el usuario contra `identidad`,
+            `catalogos` nunca hace JOIN. null si el custodio no es usuario.
+        vigencia_desde:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          description: >-
+            Inicio de vigencia de esta versión. Opcional por la misma evolución
+            que `version`; sostiene la lectura `?a_fecha` (C9).
+        vigencia_hasta:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Fin de vigencia de esta versión, o null si es la vigente. Mismo
+            formato que `MarcaTiempo`.
+
+    CustodioEntrada:
+      type: object
+      additionalProperties: false
+      required: [nombre, estado]
+      description: Cuerpo de alta de un custodio (POST). El servicio asigna id y versión.
+      properties:
+        nombre: {type: string}
+        telefono: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Referencia opcional al usuario de `identidad` (identificador, no FK).
+            null u omitido si el custodio no es usuario del sistema.
+
+    CustodioCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de modificación de un custodio (PATCH). Todos los campos son
+        opcionales; los presentes forman la nueva versión. No incluye `id` ni
+        `version` (los gobierna el servidor).
+      properties:
+        nombre: {type: string}
+        telefono: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Referencia opcional al usuario de `identidad` (identificador, no FK).
 
     PaginaCustodios:
       type: object
@@ -523,3 +957,90 @@ components:
           type: array
           description: Motivos de no aptitud, cuando `apto=false`.
           items: {type: string}
+
+    # --- Catálogos de tipo (E5-T3). Cinco listas de valores de V1 bajo un solo
+    #     recurso parametrizado por `tipo` (opción A). `tipos_unidad` incluye
+    #     `Patrulla` (la unidad en su rol de escolta, ADR 31). `zonas_riesgo`
+    #     entra SOLO como lista de valores (sin geometría, DEC-017). ---
+    TipoCatalogo:
+      type: string
+      description: >-
+        Cuál de los catálogos de tipo de V1 se consulta o administra. Agregar
+        una lista futura es un valor más de este enum, no una ruta nueva.
+      enum:
+        - tipos_servicio
+        - lineas_transporte
+        - tipos_unidad
+        - tipos_custodia
+        - zonas_riesgo
+
+    ValorCatalogo:
+      type: object
+      additionalProperties: false
+      required: [id, codigo, etiqueta, estado]
+      description: >-
+        Un valor de un catálogo de tipo. Forma común a las cinco listas: código
+        estable, etiqueta legible, estado administrativo y versión. Sin geometría
+        (incluso para `zonas_riesgo`, que en V1 es solo lista de valores).
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Versión del valor, para revalidación barata de caché (E5-T3). OPCIONAL
+            por evolución expand/contract; el servicio la llena siempre.
+        codigo:
+          type: string
+          description: Código estable del valor (máquina). No se traduce.
+        etiqueta:
+          type: string
+          description: Etiqueta legible del valor (presentación).
+        estado:
+          type: string
+          enum: [activo, inactivo]
+          description: >-
+            Estado administrativo. Desactivar un valor (`inactivo`) no rompe los
+            registros históricos que ya lo usaban (P8).
+
+    ValorCatalogoEntrada:
+      type: object
+      additionalProperties: false
+      required: [codigo, etiqueta, estado]
+      description: >-
+        Cuerpo de alta de un valor de catálogo (POST). El servicio asigna id y
+        versión. El `tipo` viaja en la ruta, no en el cuerpo.
+      properties:
+        codigo: {type: string}
+        etiqueta: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+
+    ValorCatalogoCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de modificación de un valor de catálogo (PATCH). Todos los campos
+        son opcionales; los presentes forman la nueva versión. Desactivar es
+        enviar `estado: inactivo`. No incluye `id` ni `version` (los gobierna el
+        servidor), ni el `tipo` (va en la ruta).
+      properties:
+        codigo: {type: string}
+        etiqueta: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+
+    PaginaValoresCatalogo:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/ValorCatalogo"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.

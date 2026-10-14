@@ -3,6 +3,65 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-14 Sprint 3: superficie de catálogos, estadías y descarga
+
+**Resumen:** Se agrega la superficie contractual (OpenAPI) de cinco historias
+técnicas del Sprint 3: custodios versionados (AI27-74), contratos/SLA versionados
+(AI27-76) y catálogos de tipo (AI27-75) en `catalogos`; estadías (AI27-14) en
+`operacion`; y descarga del expediente de un viaje (AI27-80) en `bff`. Todo
+aditivo. Rama `feat/contract-changes-for-sprint`, sobre `tracer.7`.
+
+**Contexto:** el cierre de la ola —bump de `VERSION` a la siguiente prerelease
+(p. ej. `tracer.8`), `info.version` de los specs y manifiesto— es un paso aparte;
+**esta entrada aún no corresponde a un tag publicado** (de ahí `[sin publicar]`).
+Decisiones base: ADR 31, ADR 5/DEC-017, DEC-055, DEC-022 #4/DEC-025, DEC-013/
+DEC-038, DEC-009/DEC-039, DEC-022 #7/DEC-023; propiedades P1/P8/P17.
+
+**Cambios:**
+- `catalogos.yaml` — **AI27-74 (E5-T2):** `Custodio` suma `version`,
+  `vigencia_desde`/`vigencia_hasta` y `usuario_id` (referencia a `identidad` por
+  identificador, no FK — P1), todos opcionales; `listarCustodios` acepta `ids`
+  (lote); rutas nuevas `GET /custodios/{id}?a_fecha`, `POST /custodios`,
+  `PATCH /custodios/{id}`; esquemas `CustodioEntrada`/`CustodioCambios`.
+- `catalogos.yaml` — **AI27-76 (E5-T4):** `version` opcional en `Contrato` y
+  `Sla`; rutas nuevas `POST`/`PATCH /contratos` y `/sla`; esquemas
+  `ContratoEntrada`/`ContratoCambios`/`SlaEntrada`/`SlaCambios`. Informativos en
+  V1 (DEC-022 #4/DEC-025): no condicionan ningún flujo de E1.
+- `catalogos.yaml` — **AI27-75 (E5-T3):** recurso único parametrizado
+  `GET`/`POST /catalogos-tipo/{tipo}` y `PATCH /catalogos-tipo/{tipo}/{id}`; tag
+  `catalogos-tipo`; `TipoCatalogo` (`tipos_servicio`, `lineas_transporte`,
+  `tipos_unidad`, `tipos_custodia`, `zonas_riesgo`), `ValorCatalogo` y entrada/
+  cambios/página. `zonas_riesgo` solo como lista (sin geometría, DEC-017);
+  desactivar = `PATCH estado: inactivo`.
+- `operacion.yaml` — **AI27-14 (E1-T6):** sub-recurso de estadías
+  `GET`/`POST /viajes/{id}/estadias` y `PATCH /viajes/{id}/estadias/{eid}`
+  (409 `estadia_ya_cerrada`); tag `estadias`; `MotivoEstadia`,
+  `EjeAutorizacionEstadia`, `Estadia` (inicio + cierre), entrada/cierre/página.
+  Sin clasificación `prolongada` ni umbral (DEC-038). **No** toca
+  `contracts/estados/`: `EstadoViaje` intacto.
+- `bff.yaml` — **AI27-80 (E6-T3):** `GET /viajes/{id}/descarga` (`descargarViaje`,
+  solo interno); tag `descarga`; `DescargaViaje` + `FichaTecnicaDescarga` +
+  `EntradaBitacoraDescarga` + `RegistroAuditoriaDescarga`. Un solo viaje (sin
+  lote, DEC-023); sin cuenta espejo ni `clave_amago` (DEC-009/039).
+- Clientes Go y TS de `catalogos`, `operacion` y `bff` regenerados desde las
+  fuentes anteriores.
+
+**Compatibilidad:** aditivo (campos opcionales, rutas y esquemas nuevos). Sin
+entrada en `rompimientos/`. `redocly lint` en verde para los tres specs. El gate
+completo (`check-reproducible`, `breaking-openapi`, `buf breaking`,
+`contract-tests`) queda **pendiente de CI**. No se tocaron eventos ni estados.
+
+**Archivos:**
+- `contracts/openapi/catalogos.yaml`,
+  `packages/api-client-go/catalogos/catalogos.gen.go`,
+  `packages/api-client-ts/src/openapi/catalogos.gen.ts`
+- `contracts/openapi/operacion.yaml`,
+  `packages/api-client-go/operacion/operacion.gen.go`,
+  `packages/api-client-ts/src/openapi/operacion.gen.ts`
+- `contracts/openapi/bff.yaml`,
+  `packages/api-client-go/bff/bff.gen.go`,
+  `packages/api-client-ts/src/openapi/bff.gen.ts`
+
 ## 2026-10-14 [tracer.7] — ola contractual 2: conversación de `mensajeria`
 
 **Resumen:** Se publica la superficie que destraba el scaffold de
