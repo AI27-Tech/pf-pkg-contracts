@@ -115,6 +115,9 @@ type Contrato struct {
 	// Id Identificador único (UUID). Nunca un correlativo expuesto.
 	Id Id `json:"id"`
 
+	// Version Versión de la entidad, para revalidación barata de caché (E5-T4, misma brecha C6 que vehículos y custodios). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.6; el servicio la llena siempre. Se promoverá a requerida en una ola futura.
+	Version *int `json:"version,omitempty"`
+
 	// VigenciaDesde Instante en UTC, RFC 3339.
 	VigenciaDesde MarcaTiempo `json:"vigencia_desde"`
 
@@ -122,10 +125,24 @@ type Contrato struct {
 	VigenciaHasta *time.Time `json:"vigencia_hasta"`
 }
 
+// ContratoCambios Cuerpo de modificación de un contrato (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id`, `version` ni `cliente_id` (reasignar de cliente no es una edición normal).
+type ContratoCambios struct {
+	Descripcion *string `json:"descripcion,omitempty"`
+}
+
+// ContratoEntrada Cuerpo de alta de un contrato (POST). El servicio asigna id y versión.
+type ContratoEntrada struct {
+	// ClienteId Identificador único (UUID). Nunca un correlativo expuesto.
+	ClienteId Id `json:"cliente_id"`
+
+	// Descripcion Descripción del contrato (informativo en V1, DEC-022
+	Descripcion *string `json:"descripcion,omitempty"`
+}
+
 // Cursor Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato.
 type Cursor = string
 
-// Custodio Custodio de AI27 (ÁTOMO de catalogos, persona). Puede además ser un usuario de `identidad`: dos registros, dos dueños, una referencia por identificador (`usuario_id`), NUNCA una FK entre schemas (P1). Datos personales (nombre, teléfono): alcance del aviso de privacidad LFPDPPP (catalogos.md (e)); pendiente legal, no bloquea el contrato.
+// Custodio Custodio de AI27 (ÁTOMO de catalogos, persona). Puede además ser un usuario de `identidad`: dos registros, dos dueños, una referencia por identificador (`usuario_id`), NUNCA una FK entre schemas (P1). Datos personales (nombre, teléfono).
 type Custodio struct {
 	Estado CustodioEstado `json:"estado"`
 
@@ -228,6 +245,23 @@ type Sla struct {
 
 	// Id Identificador único (UUID). Nunca un correlativo expuesto.
 	Id Id `json:"id"`
+
+	// Version Versión de la entidad, para revalidación barata de caché (E5-T4). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.6; el servicio la llena siempre. Se promoverá a requerida en una ola futura.
+	Version *int `json:"version,omitempty"`
+}
+
+// SlaCambios Cuerpo de modificación de un SLA (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id`, `version` ni `contrato_id` (los gobierna el servidor).
+type SlaCambios struct {
+	Descripcion *string `json:"descripcion,omitempty"`
+}
+
+// SlaEntrada Cuerpo de alta de un SLA (POST). El servicio asigna id y versión.
+type SlaEntrada struct {
+	// ContratoId Identificador único (UUID). Nunca un correlativo expuesto.
+	ContratoId Id `json:"contrato_id"`
+
+	// Descripcion Compromiso informativo en V1 (DEC-022
+	Descripcion *string `json:"descripcion,omitempty"`
 }
 
 // Vehiculo Vehículo de la flota de AI27 (ÁTOMO de catalogos). La `unidad` (paquete vehículo + custodios) NO vive aquí: es roster de `operacion` (ADR 31 §5).
@@ -359,11 +393,23 @@ type AptitudVehiculoParams struct {
 	ClienteId Id `form:"cliente_id" json:"cliente_id"`
 }
 
+// CrearContratoJSONRequestBody defines body for CrearContrato for application/json ContentType.
+type CrearContratoJSONRequestBody = ContratoEntrada
+
+// ActualizarContratoJSONRequestBody defines body for ActualizarContrato for application/json ContentType.
+type ActualizarContratoJSONRequestBody = ContratoCambios
+
 // CrearCustodioJSONRequestBody defines body for CrearCustodio for application/json ContentType.
 type CrearCustodioJSONRequestBody = CustodioEntrada
 
 // ActualizarCustodioJSONRequestBody defines body for ActualizarCustodio for application/json ContentType.
 type ActualizarCustodioJSONRequestBody = CustodioCambios
+
+// CrearSlaJSONRequestBody defines body for CrearSla for application/json ContentType.
+type CrearSlaJSONRequestBody = SlaEntrada
+
+// ActualizarSlaJSONRequestBody defines body for ActualizarSla for application/json ContentType.
+type ActualizarSlaJSONRequestBody = SlaCambios
 
 // CrearVehiculoJSONRequestBody defines body for CrearVehiculo for application/json ContentType.
 type CrearVehiculoJSONRequestBody = VehiculoEntrada
@@ -450,8 +496,18 @@ type ClientInterface interface {
 	// ObtenerCliente request
 	ObtenerCliente(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// CrearContratoWithBody request with any body
+	CrearContratoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearContrato(ctx context.Context, body CrearContratoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ObtenerContrato request
 	ObtenerContrato(ctx context.Context, id Id, params *ObtenerContratoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActualizarContratoWithBody request with any body
+	ActualizarContratoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ActualizarContrato(ctx context.Context, id Id, body ActualizarContratoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListarCustodios request
 	ListarCustodios(ctx context.Context, params *ListarCustodiosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -472,8 +528,18 @@ type ClientInterface interface {
 	// AptitudCustodio request
 	AptitudCustodio(ctx context.Context, id Id, params *AptitudCustodioParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// CrearSlaWithBody request with any body
+	CrearSlaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearSla(ctx context.Context, body CrearSlaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ObtenerSla request
 	ObtenerSla(ctx context.Context, id Id, params *ObtenerSlaParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActualizarSlaWithBody request with any body
+	ActualizarSlaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ActualizarSla(ctx context.Context, id Id, body ActualizarSlaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListarVehiculos request
 	ListarVehiculos(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -519,8 +585,56 @@ func (c *Client) ObtenerCliente(ctx context.Context, id Id, reqEditors ...Reques
 	return c.Client.Do(req)
 }
 
+func (c *Client) CrearContratoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearContratoRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearContrato(ctx context.Context, body CrearContratoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearContratoRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ObtenerContrato(ctx context.Context, id Id, params *ObtenerContratoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewObtenerContratoRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarContratoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarContratoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarContrato(ctx context.Context, id Id, body ActualizarContratoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarContratoRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -615,8 +729,56 @@ func (c *Client) AptitudCustodio(ctx context.Context, id Id, params *AptitudCust
 	return c.Client.Do(req)
 }
 
+func (c *Client) CrearSlaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearSlaRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearSla(ctx context.Context, body CrearSlaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearSlaRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ObtenerSla(ctx context.Context, id Id, params *ObtenerSlaParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewObtenerSlaRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarSlaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarSlaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarSla(ctx context.Context, id Id, body ActualizarSlaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarSlaRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -794,6 +956,46 @@ func NewObtenerClienteRequest(server string, id Id) (*http.Request, error) {
 	return req, nil
 }
 
+// NewCrearContratoRequest calls the generic CrearContrato builder with application/json body
+func NewCrearContratoRequest(server string, body CrearContratoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearContratoRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCrearContratoRequestWithBody generates requests for CrearContrato with any type of body
+func NewCrearContratoRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/contratos")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewObtenerContratoRequest generates requests for ObtenerContrato
 func NewObtenerContratoRequest(server string, id Id, params *ObtenerContratoParams) (*http.Request, error) {
 	var err error
@@ -846,6 +1048,53 @@ func NewObtenerContratoRequest(server string, id Id, params *ObtenerContratoPara
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewActualizarContratoRequest calls the generic ActualizarContrato builder with application/json body
+func NewActualizarContratoRequest(server string, id Id, body ActualizarContratoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewActualizarContratoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewActualizarContratoRequestWithBody generates requests for ActualizarContrato with any type of body
+func NewActualizarContratoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/contratos/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -1110,6 +1359,46 @@ func NewAptitudCustodioRequest(server string, id Id, params *AptitudCustodioPara
 	return req, nil
 }
 
+// NewCrearSlaRequest calls the generic CrearSla builder with application/json body
+func NewCrearSlaRequest(server string, body CrearSlaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearSlaRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCrearSlaRequestWithBody generates requests for CrearSla with any type of body
+func NewCrearSlaRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sla")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewObtenerSlaRequest generates requests for ObtenerSla
 func NewObtenerSlaRequest(server string, id Id, params *ObtenerSlaParams) (*http.Request, error) {
 	var err error
@@ -1162,6 +1451,53 @@ func NewObtenerSlaRequest(server string, id Id, params *ObtenerSlaParams) (*http
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewActualizarSlaRequest calls the generic ActualizarSla builder with application/json body
+func NewActualizarSlaRequest(server string, id Id, body ActualizarSlaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewActualizarSlaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewActualizarSlaRequestWithBody generates requests for ActualizarSla with any type of body
+func NewActualizarSlaRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sla/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -1475,8 +1811,18 @@ type ClientWithResponsesInterface interface {
 	// ObtenerClienteWithResponse request
 	ObtenerClienteWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerClienteResponse, error)
 
+	// CrearContratoWithBodyWithResponse request with any body
+	CrearContratoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearContratoResponse, error)
+
+	CrearContratoWithResponse(ctx context.Context, body CrearContratoJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearContratoResponse, error)
+
 	// ObtenerContratoWithResponse request
 	ObtenerContratoWithResponse(ctx context.Context, id Id, params *ObtenerContratoParams, reqEditors ...RequestEditorFn) (*ObtenerContratoResponse, error)
+
+	// ActualizarContratoWithBodyWithResponse request with any body
+	ActualizarContratoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarContratoResponse, error)
+
+	ActualizarContratoWithResponse(ctx context.Context, id Id, body ActualizarContratoJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarContratoResponse, error)
 
 	// ListarCustodiosWithResponse request
 	ListarCustodiosWithResponse(ctx context.Context, params *ListarCustodiosParams, reqEditors ...RequestEditorFn) (*ListarCustodiosResponse, error)
@@ -1497,8 +1843,18 @@ type ClientWithResponsesInterface interface {
 	// AptitudCustodioWithResponse request
 	AptitudCustodioWithResponse(ctx context.Context, id Id, params *AptitudCustodioParams, reqEditors ...RequestEditorFn) (*AptitudCustodioResponse, error)
 
+	// CrearSlaWithBodyWithResponse request with any body
+	CrearSlaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearSlaResponse, error)
+
+	CrearSlaWithResponse(ctx context.Context, body CrearSlaJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearSlaResponse, error)
+
 	// ObtenerSlaWithResponse request
 	ObtenerSlaWithResponse(ctx context.Context, id Id, params *ObtenerSlaParams, reqEditors ...RequestEditorFn) (*ObtenerSlaResponse, error)
+
+	// ActualizarSlaWithBodyWithResponse request with any body
+	ActualizarSlaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarSlaResponse, error)
+
+	ActualizarSlaWithResponse(ctx context.Context, id Id, body ActualizarSlaJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarSlaResponse, error)
 
 	// ListarVehiculosWithResponse request
 	ListarVehiculosWithResponse(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*ListarVehiculosResponse, error)
@@ -1568,6 +1924,32 @@ func (r ObtenerClienteResponse) StatusCode() int {
 	return 0
 }
 
+type CrearContratoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Contrato
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearContratoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearContratoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ObtenerContratoResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -1586,6 +1968,32 @@ func (r ObtenerContratoResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ObtenerContratoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ActualizarContratoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Contrato
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r ActualizarContratoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActualizarContratoResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1717,6 +2125,32 @@ func (r AptitudCustodioResponse) StatusCode() int {
 	return 0
 }
 
+type CrearSlaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Sla
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearSlaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearSlaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ObtenerSlaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -1735,6 +2169,32 @@ func (r ObtenerSlaResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ObtenerSlaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ActualizarSlaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Sla
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r ActualizarSlaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActualizarSlaResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1884,6 +2344,23 @@ func (c *ClientWithResponses) ObtenerClienteWithResponse(ctx context.Context, id
 	return ParseObtenerClienteResponse(rsp)
 }
 
+// CrearContratoWithBodyWithResponse request with arbitrary body returning *CrearContratoResponse
+func (c *ClientWithResponses) CrearContratoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearContratoResponse, error) {
+	rsp, err := c.CrearContratoWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearContratoResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearContratoWithResponse(ctx context.Context, body CrearContratoJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearContratoResponse, error) {
+	rsp, err := c.CrearContrato(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearContratoResponse(rsp)
+}
+
 // ObtenerContratoWithResponse request returning *ObtenerContratoResponse
 func (c *ClientWithResponses) ObtenerContratoWithResponse(ctx context.Context, id Id, params *ObtenerContratoParams, reqEditors ...RequestEditorFn) (*ObtenerContratoResponse, error) {
 	rsp, err := c.ObtenerContrato(ctx, id, params, reqEditors...)
@@ -1891,6 +2368,23 @@ func (c *ClientWithResponses) ObtenerContratoWithResponse(ctx context.Context, i
 		return nil, err
 	}
 	return ParseObtenerContratoResponse(rsp)
+}
+
+// ActualizarContratoWithBodyWithResponse request with arbitrary body returning *ActualizarContratoResponse
+func (c *ClientWithResponses) ActualizarContratoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarContratoResponse, error) {
+	rsp, err := c.ActualizarContratoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarContratoResponse(rsp)
+}
+
+func (c *ClientWithResponses) ActualizarContratoWithResponse(ctx context.Context, id Id, body ActualizarContratoJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarContratoResponse, error) {
+	rsp, err := c.ActualizarContrato(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarContratoResponse(rsp)
 }
 
 // ListarCustodiosWithResponse request returning *ListarCustodiosResponse
@@ -1954,6 +2448,23 @@ func (c *ClientWithResponses) AptitudCustodioWithResponse(ctx context.Context, i
 	return ParseAptitudCustodioResponse(rsp)
 }
 
+// CrearSlaWithBodyWithResponse request with arbitrary body returning *CrearSlaResponse
+func (c *ClientWithResponses) CrearSlaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearSlaResponse, error) {
+	rsp, err := c.CrearSlaWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearSlaResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearSlaWithResponse(ctx context.Context, body CrearSlaJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearSlaResponse, error) {
+	rsp, err := c.CrearSla(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearSlaResponse(rsp)
+}
+
 // ObtenerSlaWithResponse request returning *ObtenerSlaResponse
 func (c *ClientWithResponses) ObtenerSlaWithResponse(ctx context.Context, id Id, params *ObtenerSlaParams, reqEditors ...RequestEditorFn) (*ObtenerSlaResponse, error) {
 	rsp, err := c.ObtenerSla(ctx, id, params, reqEditors...)
@@ -1961,6 +2472,23 @@ func (c *ClientWithResponses) ObtenerSlaWithResponse(ctx context.Context, id Id,
 		return nil, err
 	}
 	return ParseObtenerSlaResponse(rsp)
+}
+
+// ActualizarSlaWithBodyWithResponse request with arbitrary body returning *ActualizarSlaResponse
+func (c *ClientWithResponses) ActualizarSlaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarSlaResponse, error) {
+	rsp, err := c.ActualizarSlaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarSlaResponse(rsp)
+}
+
+func (c *ClientWithResponses) ActualizarSlaWithResponse(ctx context.Context, id Id, body ActualizarSlaJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarSlaResponse, error) {
+	rsp, err := c.ActualizarSla(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarSlaResponse(rsp)
 }
 
 // ListarVehiculosWithResponse request returning *ListarVehiculosResponse
@@ -2104,6 +2632,60 @@ func ParseObtenerClienteResponse(rsp *http.Response) (*ObtenerClienteResponse, e
 	return response, nil
 }
 
+// ParseCrearContratoResponse parses an HTTP response from a CrearContratoWithResponse call
+func ParseCrearContratoResponse(rsp *http.Response) (*CrearContratoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearContratoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Contrato
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseObtenerContratoResponse parses an HTTP response from a ObtenerContratoWithResponse call
 func ParseObtenerContratoResponse(rsp *http.Response) (*ObtenerContratoResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -2138,6 +2720,60 @@ func ParseObtenerContratoResponse(rsp *http.Response) (*ObtenerContratoResponse,
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActualizarContratoResponse parses an HTTP response from a ActualizarContratoWithResponse call
+func ParseActualizarContratoResponse(rsp *http.Response) (*ActualizarContratoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActualizarContratoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Contrato
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
@@ -2379,6 +3015,60 @@ func ParseAptitudCustodioResponse(rsp *http.Response) (*AptitudCustodioResponse,
 	return response, nil
 }
 
+// ParseCrearSlaResponse parses an HTTP response from a CrearSlaWithResponse call
+func ParseCrearSlaResponse(rsp *http.Response) (*CrearSlaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearSlaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Sla
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseObtenerSlaResponse parses an HTTP response from a ObtenerSlaWithResponse call
 func ParseObtenerSlaResponse(rsp *http.Response) (*ObtenerSlaResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -2413,6 +3103,60 @@ func ParseObtenerSlaResponse(rsp *http.Response) (*ObtenerSlaResponse, error) {
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActualizarSlaResponse parses an HTTP response from a ActualizarSlaWithResponse call
+func ParseActualizarSlaResponse(rsp *http.Response) (*ActualizarSlaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActualizarSlaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Sla
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

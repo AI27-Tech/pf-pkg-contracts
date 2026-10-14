@@ -80,6 +80,33 @@ paths:
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
+  /api/v1/contratos:
+    post:
+      operationId: crearContrato
+      tags: [contratos]
+      summary: Alta de un contrato (crea la versión 1).
+      description: >-
+        Registra un contrato nuevo para un cliente. Crea la versión 1 y emite
+        `catalogo.actualizado` en la misma transacción (P17). Escritura
+        administrativa de E5 (E5-T4), mismo patrón de versionado que vehículos y
+        custodios. En V1 el contrato es informativo (DEC-022 #4): no condiciona
+        ningún flujo de E1.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ContratoEntrada"}
+      responses:
+        "201":
+          description: Contrato creado (versión 1).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Contrato"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
   /api/v1/contratos/{id}:
     parameters:
     - name: id
@@ -107,6 +134,56 @@ paths:
               schema: {$ref: "#/components/schemas/Contrato"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: actualizarContrato
+      tags: [contratos]
+      summary: Modifica un contrato creando una nueva versión.
+      description: >-
+        No sobrescribe: cierra la vigencia de la versión actual y crea una nueva
+        (version+1), y emite `catalogo.actualizado` en la misma transacción
+        (P17). La versión anterior sigue consultable con `?a_fecha` (P8).
+        Escritura administrativa de E5 (E5-T4).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ContratoCambios"}
+      responses:
+        "200":
+          description: Contrato con su nueva versión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Contrato"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/sla:
+    post:
+      operationId: crearSla
+      tags: [contratos]
+      summary: Alta de un SLA de contrato (crea la versión 1).
+      description: >-
+        Registra el SLA de un contrato. Crea la versión 1 y emite
+        `catalogo.actualizado` en la misma transacción (P17). En V1 el SLA es
+        INFORMATIVO (DEC-022 #4 / DEC-025): se registra, no se vigila ni alerta;
+        no condiciona ningún flujo de E1.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SlaEntrada"}
+      responses:
+        "201":
+          description: SLA creado (versión 1).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Sla"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
 
   /api/v1/sla/{id}:
     parameters:
@@ -131,6 +208,30 @@ paths:
               schema: {$ref: "#/components/schemas/Sla"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: actualizarSla
+      tags: [contratos]
+      summary: Modifica un SLA creando una nueva versión.
+      description: >-
+        No sobrescribe: cierra la vigencia de la versión actual y crea una nueva
+        (version+1), y emite `catalogo.actualizado` en la misma transacción
+        (P17). La versión anterior sigue consultable con `?a_fecha` (P8).
+        Escritura administrativa de E5 (E5-T4).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SlaCambios"}
+      responses:
+        "200":
+          description: SLA con su nueva versión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Sla"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
 
   /api/v1/vehiculos:
     get:
@@ -451,6 +552,14 @@ components:
       required: [id, cliente_id, vigencia_desde]
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Versión de la entidad, para revalidación barata de caché (E5-T4,
+            misma brecha C6 que vehículos y custodios). OPCIONAL por evolución
+            expand/contract: se agrega sin romper a los consumidores de tracer.6;
+            el servicio la llena siempre.
         cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         vigencia_desde: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
         vigencia_hasta:
@@ -458,16 +567,69 @@ components:
           format: date-time
           nullable: true
           description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+
+    ContratoEntrada:
+      type: object
+      additionalProperties: false
+      required: [cliente_id]
+      description: Cuerpo de alta de un contrato (POST). El servicio asigna id y versión.
+      properties:
+        cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        descripcion:
+          type: string
+          description: Descripción del contrato (informativo en V1, DEC-022 #4).
+
+    ContratoCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de modificación de un contrato (PATCH). Todos los campos son
+        opcionales; los presentes forman la nueva versión. No incluye `id`,
+        `version` ni `cliente_id`.
+      properties:
+        descripcion:
+          type: string
+
     Sla:
       type: object
       additionalProperties: false
       required: [id, contrato_id]
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Versión de la entidad, para revalidación barata de caché (E5-T4).
+            OPCIONAL por evolución expand/contract: se agrega sin romper a los
+            consumidores de tracer.6; el servicio la llena siempre. Se promoverá a
+            requerida en una ola futura.
         contrato_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         descripcion:
           type: string
           description: Compromiso informativo en V1 (DEC-022 #4).
+
+    SlaEntrada:
+      type: object
+      additionalProperties: false
+      required: [contrato_id]
+      description: Cuerpo de alta de un SLA (POST). El servicio asigna id y versión.
+      properties:
+        contrato_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        descripcion:
+          type: string
+          description: Compromiso informativo en V1 (DEC-022 #4).
+
+    SlaCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de modificación de un SLA (PATCH). Todos los campos son
+        opcionales; los presentes forman la nueva versión. No incluye `id`,
+        `version` ni `contrato_id` (los gobierna el servidor).
+      properties:
+        descripcion:
+          type: string
 
     Vehiculo:
       type: object

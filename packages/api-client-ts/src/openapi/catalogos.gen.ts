@@ -40,6 +40,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/contratos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Alta de un contrato (crea la versión 1).
+         * @description Registra un contrato nuevo para un cliente. Crea la versión 1 y emite `catalogo.actualizado` en la misma transacción (P17). Escritura administrativa de E5 (E5-T4), mismo patrón de versionado que vehículos y custodios. En V1 el contrato es informativo (DEC-022 #4): no condiciona ningún flujo de E1.
+         */
+        post: operations["crearContrato"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contratos/{id}": {
         parameters: {
             query?: never;
@@ -56,6 +76,30 @@ export interface paths {
         get: operations["obtenerContrato"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modifica un contrato creando una nueva versión.
+         * @description No sobrescribe: cierra la vigencia de la versión actual y crea una nueva (version+1), y emite `catalogo.actualizado` en la misma transacción (P17). La versión anterior sigue consultable con `?a_fecha` (P8). Escritura administrativa de E5 (E5-T4).
+         */
+        patch: operations["actualizarContrato"];
+        trace?: never;
+    };
+    "/api/v1/sla": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Alta de un SLA de contrato (crea la versión 1).
+         * @description Registra el SLA de un contrato. Crea la versión 1 y emite `catalogo.actualizado` en la misma transacción (P17). En V1 el SLA es INFORMATIVO (DEC-022 #4 / DEC-025): se registra, no se vigila ni alerta; no condiciona ningún flujo de E1.
+         */
+        post: operations["crearSla"];
         delete?: never;
         options?: never;
         head?: never;
@@ -78,7 +122,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Modifica un SLA creando una nueva versión.
+         * @description No sobrescribe: cierra la vigencia de la versión actual y crea una nueva (version+1), y emite `catalogo.actualizado` en la misma transacción (P17). La versión anterior sigue consultable con `?a_fecha` (P8). Escritura administrativa de E5 (E5-T4).
+         */
+        patch: operations["actualizarSla"];
         trace?: never;
     };
     "/api/v1/vehiculos": {
@@ -161,7 +209,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Listar custodios (personas de A que viajan en la unidad).
+         * Listar custodios (personas de AI27 que viajan en la unidad).
          * @description Sin `ids`, devuelve una página paginada por cursor. Con `ids`, devuelve la LECTURA POR LOTE de esos identificadores en un solo viaje (evita el patrón N+1 de los consumidores; misma semántica de primera clase que vehículos en E5-T1). `ids` y `cursor` son mutuamente excluyentes: con `ids` presente, el resultado no se pagina y `cursor_siguiente` es null.
          */
         get: operations["listarCustodios"];
@@ -247,6 +295,8 @@ export interface components {
         };
         Contrato: {
             id: components["schemas"]["Id"];
+            /** @description Versión de la entidad, para revalidación barata de caché (E5-T4, misma brecha C6 que vehículos y custodios). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.6; el servicio la llena siempre. Se promoverá a requerida en una ola futura. */
+            version?: number;
             cliente_id: components["schemas"]["Id"];
             vigencia_desde: components["schemas"]["MarcaTiempo"];
             /**
@@ -255,10 +305,32 @@ export interface components {
              */
             vigencia_hasta?: string | null;
         };
+        /** @description Cuerpo de alta de un contrato (POST). El servicio asigna id y versión. */
+        ContratoEntrada: {
+            cliente_id: components["schemas"]["Id"];
+            /** @description Descripción del contrato (informativo en V1, DEC-022 */
+            descripcion?: string;
+        };
+        /** @description Cuerpo de modificación de un contrato (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id`, `version` ni `cliente_id` (reasignar de cliente no es una edición normal). */
+        ContratoCambios: {
+            descripcion?: string;
+        };
         Sla: {
             id: components["schemas"]["Id"];
+            /** @description Versión de la entidad, para revalidación barata de caché (E5-T4). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.6; el servicio la llena siempre. Se promoverá a requerida en una ola futura. */
+            version?: number;
             contrato_id: components["schemas"]["Id"];
             /** @description Compromiso informativo en V1 (DEC-022 */
+            descripcion?: string;
+        };
+        /** @description Cuerpo de alta de un SLA (POST). El servicio asigna id y versión. */
+        SlaEntrada: {
+            contrato_id: components["schemas"]["Id"];
+            /** @description Compromiso informativo en V1 (DEC-022 */
+            descripcion?: string;
+        };
+        /** @description Cuerpo de modificación de un SLA (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id`, `version` ni `contrato_id` (los gobierna el servidor). */
+        SlaCambios: {
             descripcion?: string;
         };
         /** @description Vehículo de la flota de AI27 (ÁTOMO de catalogos). La `unidad` (paquete vehículo + custodios) NO vive aquí: es roster de `operacion` (ADR 31 §5). */
@@ -308,7 +380,7 @@ export interface components {
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
-        /** @description Custodio de AI27 (ÁTOMO de catalogos, persona). Puede además ser un usuario de `identidad`: dos registros, dos dueños, una referencia por identificador (`usuario_id`), NUNCA una FK entre schemas (P1). Datos personales (nombre, teléfono): alcance del aviso de privacidad LFPDPPP (catalogos.md (e)); pendiente legal, no bloquea el contrato. */
+        /** @description Custodio de AI27 (ÁTOMO de catalogos, persona). Puede además ser un usuario de `identidad`: dos registros, dos dueños, una referencia por identificador (`usuario_id`), NUNCA una FK entre schemas (P1). Datos personales (nombre, teléfono). */
         Custodio: {
             id: components["schemas"]["Id"];
             /** @description Versión de la entidad, para que el consumidor revalide su caché barato (E5-T2, misma brecha C6 que vehículos). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.6; el servicio la llena siempre. Se promoverá a requerida en una ola futura. */
@@ -495,6 +567,34 @@ export interface operations {
             404: components["responses"]["NoEncontrado"];
         };
     };
+    crearContrato: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContratoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Contrato creado (versión 1). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contrato"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
     obtenerContrato: {
         parameters: {
             query?: {
@@ -522,6 +622,64 @@ export interface operations {
             404: components["responses"]["NoEncontrado"];
         };
     };
+    actualizarContrato: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContratoCambios"];
+            };
+        };
+        responses: {
+            /** @description Contrato con su nueva versión. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contrato"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
+    crearSla: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SlaEntrada"];
+            };
+        };
+        responses: {
+            /** @description SLA creado (versión 1). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sla"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
     obtenerSla: {
         parameters: {
             query?: {
@@ -546,6 +704,36 @@ export interface operations {
             };
             401: components["responses"]["NoAutorizado"];
             404: components["responses"]["NoEncontrado"];
+        };
+    };
+    actualizarSla: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SlaCambios"];
+            };
+        };
+        responses: {
+            /** @description SLA con su nueva versión. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sla"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["Conflicto"];
         };
     };
     listarVehiculos: {
