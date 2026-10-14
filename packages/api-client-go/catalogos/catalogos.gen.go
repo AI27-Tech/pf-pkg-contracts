@@ -34,6 +34,18 @@ const (
 	CustodioEstadoInactivo CustodioEstado = "inactivo"
 )
 
+// Defines values for CustodioCambiosEstado.
+const (
+	CustodioCambiosEstadoActivo   CustodioCambiosEstado = "activo"
+	CustodioCambiosEstadoInactivo CustodioCambiosEstado = "inactivo"
+)
+
+// Defines values for CustodioEntradaEstado.
+const (
+	CustodioEntradaEstadoActivo   CustodioEntradaEstado = "activo"
+	CustodioEntradaEstadoInactivo CustodioEntradaEstado = "inactivo"
+)
+
 // Defines values for VehiculoEstado.
 const (
 	VehiculoEstadoActiva   VehiculoEstado = "activa"
@@ -113,7 +125,7 @@ type Contrato struct {
 // Cursor Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato.
 type Cursor = string
 
-// Custodio defines model for Custodio.
+// Custodio Custodio de AI27 (ÁTOMO de catalogos, persona). Puede además ser un usuario de `identidad`: dos registros, dos dueños, una referencia por identificador (`usuario_id`), NUNCA una FK entre schemas (P1). Datos personales (nombre, teléfono): alcance del aviso de privacidad LFPDPPP (catalogos.md (e)); pendiente legal, no bloquea el contrato.
 type Custodio struct {
 	Estado CustodioEstado `json:"estado"`
 
@@ -121,10 +133,48 @@ type Custodio struct {
 	Id       Id      `json:"id"`
 	Nombre   string  `json:"nombre"`
 	Telefono *string `json:"telefono,omitempty"`
+
+	// UsuarioId Referencia OPCIONAL al usuario de `identidad` cuando el custodio también tiene acceso al sistema. Es un IDENTIFICADOR, no una FK entre schemas (P1): el consumidor resuelve el usuario contra `identidad`, `catalogos` nunca hace JOIN. null si el custodio no es usuario.
+	UsuarioId *openapi_types.UUID `json:"usuario_id"`
+
+	// Version Versión de la entidad, para que el consumidor revalide su caché barato (E5-T2, misma brecha C6 que vehículos). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.6; el servicio la llena siempre. Se promoverá a requerida en una ola futura.
+	Version *int `json:"version,omitempty"`
+
+	// VigenciaDesde Inicio de vigencia de esta versión. Opcional por la misma evolución que `version`; sostiene la lectura `?a_fecha` (C9).
+	VigenciaDesde *MarcaTiempo `json:"vigencia_desde,omitempty"`
+
+	// VigenciaHasta Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+	VigenciaHasta *time.Time `json:"vigencia_hasta"`
 }
 
 // CustodioEstado defines model for Custodio.Estado.
 type CustodioEstado string
+
+// CustodioCambios Cuerpo de modificación de un custodio (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id` ni `version` (los gobierna el servidor).
+type CustodioCambios struct {
+	Estado   *CustodioCambiosEstado `json:"estado,omitempty"`
+	Nombre   *string                `json:"nombre,omitempty"`
+	Telefono *string                `json:"telefono,omitempty"`
+
+	// UsuarioId Referencia opcional al usuario de `identidad` (identificador, no FK).
+	UsuarioId *openapi_types.UUID `json:"usuario_id"`
+}
+
+// CustodioCambiosEstado defines model for CustodioCambios.Estado.
+type CustodioCambiosEstado string
+
+// CustodioEntrada Cuerpo de alta de un custodio (POST). El servicio asigna id y versión.
+type CustodioEntrada struct {
+	Estado   CustodioEntradaEstado `json:"estado"`
+	Nombre   string                `json:"nombre"`
+	Telefono *string               `json:"telefono,omitempty"`
+
+	// UsuarioId Referencia opcional al usuario de `identidad` (identificador, no FK). null u omitido si el custodio no es usuario del sistema.
+	UsuarioId *openapi_types.UUID `json:"usuario_id"`
+}
+
+// CustodioEntradaEstado defines model for CustodioEntrada.Estado.
+type CustodioEntradaEstado string
 
 // Error defines model for Error.
 type Error struct {
@@ -268,6 +318,15 @@ type ObtenerContratoParams struct {
 // ListarCustodiosParams defines parameters for ListarCustodios.
 type ListarCustodiosParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Ids Lista de identificadores separados por coma para la lectura por lote. Mutuamente excluyente con `cursor`.
+	Ids *[]Id `form:"ids,omitempty" json:"ids,omitempty"`
+}
+
+// ObtenerCustodioParams defines parameters for ObtenerCustodio.
+type ObtenerCustodioParams struct {
+	// AFecha Devuelve la versión vigente a esa fecha (probatorio).
+	AFecha *MarcaTiempo `form:"a_fecha,omitempty" json:"a_fecha,omitempty"`
 }
 
 // AptitudCustodioParams defines parameters for AptitudCustodio.
@@ -299,6 +358,12 @@ type AptitudVehiculoParams struct {
 	// ClienteId Cliente para cuyo contrato/SLA se evalúa la aptitud.
 	ClienteId Id `form:"cliente_id" json:"cliente_id"`
 }
+
+// CrearCustodioJSONRequestBody defines body for CrearCustodio for application/json ContentType.
+type CrearCustodioJSONRequestBody = CustodioEntrada
+
+// ActualizarCustodioJSONRequestBody defines body for ActualizarCustodio for application/json ContentType.
+type ActualizarCustodioJSONRequestBody = CustodioCambios
 
 // CrearVehiculoJSONRequestBody defines body for CrearVehiculo for application/json ContentType.
 type CrearVehiculoJSONRequestBody = VehiculoEntrada
@@ -391,6 +456,19 @@ type ClientInterface interface {
 	// ListarCustodios request
 	ListarCustodios(ctx context.Context, params *ListarCustodiosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// CrearCustodioWithBody request with any body
+	CrearCustodioWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearCustodio(ctx context.Context, body CrearCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerCustodio request
+	ObtenerCustodio(ctx context.Context, id Id, params *ObtenerCustodioParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActualizarCustodioWithBody request with any body
+	ActualizarCustodioWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ActualizarCustodio(ctx context.Context, id Id, body ActualizarCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AptitudCustodio request
 	AptitudCustodio(ctx context.Context, id Id, params *AptitudCustodioParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -455,6 +533,66 @@ func (c *Client) ObtenerContrato(ctx context.Context, id Id, params *ObtenerCont
 
 func (c *Client) ListarCustodios(ctx context.Context, params *ListarCustodiosParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarCustodiosRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearCustodioWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearCustodioRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearCustodio(ctx context.Context, body CrearCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearCustodioRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerCustodio(ctx context.Context, id Id, params *ObtenerCustodioParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerCustodioRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarCustodioWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarCustodioRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarCustodio(ctx context.Context, id Id, body ActualizarCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarCustodioRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -750,6 +888,22 @@ func NewListarCustodiosRequest(server string, params *ListarCustodiosParams) (*h
 
 		}
 
+		if params.Ids != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", false, "ids", runtime.ParamLocationQuery, *params.Ids); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -757,6 +911,149 @@ func NewListarCustodiosRequest(server string, params *ListarCustodiosParams) (*h
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewCrearCustodioRequest calls the generic CrearCustodio builder with application/json body
+func NewCrearCustodioRequest(server string, body CrearCustodioJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearCustodioRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCrearCustodioRequestWithBody generates requests for CrearCustodio with any type of body
+func NewCrearCustodioRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/custodios")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewObtenerCustodioRequest generates requests for ObtenerCustodio
+func NewObtenerCustodioRequest(server string, id Id, params *ObtenerCustodioParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/custodios/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.AFecha != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "a_fecha", runtime.ParamLocationQuery, *params.AFecha); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActualizarCustodioRequest calls the generic ActualizarCustodio builder with application/json body
+func NewActualizarCustodioRequest(server string, id Id, body ActualizarCustodioJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewActualizarCustodioRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewActualizarCustodioRequestWithBody generates requests for ActualizarCustodio with any type of body
+func NewActualizarCustodioRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/custodios/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -1184,6 +1481,19 @@ type ClientWithResponsesInterface interface {
 	// ListarCustodiosWithResponse request
 	ListarCustodiosWithResponse(ctx context.Context, params *ListarCustodiosParams, reqEditors ...RequestEditorFn) (*ListarCustodiosResponse, error)
 
+	// CrearCustodioWithBodyWithResponse request with any body
+	CrearCustodioWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearCustodioResponse, error)
+
+	CrearCustodioWithResponse(ctx context.Context, body CrearCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearCustodioResponse, error)
+
+	// ObtenerCustodioWithResponse request
+	ObtenerCustodioWithResponse(ctx context.Context, id Id, params *ObtenerCustodioParams, reqEditors ...RequestEditorFn) (*ObtenerCustodioResponse, error)
+
+	// ActualizarCustodioWithBodyWithResponse request with any body
+	ActualizarCustodioWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarCustodioResponse, error)
+
+	ActualizarCustodioWithResponse(ctx context.Context, id Id, body ActualizarCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarCustodioResponse, error)
+
 	// AptitudCustodioWithResponse request
 	AptitudCustodioWithResponse(ctx context.Context, id Id, params *AptitudCustodioParams, reqEditors ...RequestEditorFn) (*AptitudCustodioResponse, error)
 
@@ -1286,6 +1596,7 @@ type ListarCustodiosResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *PaginaCustodios
+	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
 }
@@ -1300,6 +1611,82 @@ func (r ListarCustodiosResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ListarCustodiosResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearCustodioResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Custodio
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearCustodioResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearCustodioResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerCustodioResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Custodio
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerCustodioResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerCustodioResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ActualizarCustodioResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Custodio
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r ActualizarCustodioResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActualizarCustodioResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1513,6 +1900,49 @@ func (c *ClientWithResponses) ListarCustodiosWithResponse(ctx context.Context, p
 		return nil, err
 	}
 	return ParseListarCustodiosResponse(rsp)
+}
+
+// CrearCustodioWithBodyWithResponse request with arbitrary body returning *CrearCustodioResponse
+func (c *ClientWithResponses) CrearCustodioWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearCustodioResponse, error) {
+	rsp, err := c.CrearCustodioWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearCustodioResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearCustodioWithResponse(ctx context.Context, body CrearCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearCustodioResponse, error) {
+	rsp, err := c.CrearCustodio(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearCustodioResponse(rsp)
+}
+
+// ObtenerCustodioWithResponse request returning *ObtenerCustodioResponse
+func (c *ClientWithResponses) ObtenerCustodioWithResponse(ctx context.Context, id Id, params *ObtenerCustodioParams, reqEditors ...RequestEditorFn) (*ObtenerCustodioResponse, error) {
+	rsp, err := c.ObtenerCustodio(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerCustodioResponse(rsp)
+}
+
+// ActualizarCustodioWithBodyWithResponse request with arbitrary body returning *ActualizarCustodioResponse
+func (c *ClientWithResponses) ActualizarCustodioWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarCustodioResponse, error) {
+	rsp, err := c.ActualizarCustodioWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarCustodioResponse(rsp)
+}
+
+func (c *ClientWithResponses) ActualizarCustodioWithResponse(ctx context.Context, id Id, body ActualizarCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarCustodioResponse, error) {
+	rsp, err := c.ActualizarCustodio(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarCustodioResponse(rsp)
 }
 
 // AptitudCustodioWithResponse request returning *AptitudCustodioResponse
@@ -1735,6 +2165,13 @@ func ParseListarCustodiosResponse(rsp *http.Response) (*ListarCustodiosResponse,
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest NoAutorizado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -1748,6 +2185,154 @@ func ParseListarCustodiosResponse(rsp *http.Response) (*ListarCustodiosResponse,
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearCustodioResponse parses an HTTP response from a CrearCustodioWithResponse call
+func ParseCrearCustodioResponse(rsp *http.Response) (*CrearCustodioResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearCustodioResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Custodio
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerCustodioResponse parses an HTTP response from a ObtenerCustodioWithResponse call
+func ParseObtenerCustodioResponse(rsp *http.Response) (*ObtenerCustodioResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerCustodioResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Custodio
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActualizarCustodioResponse parses an HTTP response from a ActualizarCustodioWithResponse call
+func ParseActualizarCustodioResponse(rsp *http.Response) (*ActualizarCustodioResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActualizarCustodioResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Custodio
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

@@ -160,14 +160,47 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar custodios (personas de AI27 que viajan en la unidad). */
+        /**
+         * Listar custodios (personas de A que viajan en la unidad).
+         * @description Sin `ids`, devuelve una página paginada por cursor. Con `ids`, devuelve la LECTURA POR LOTE de esos identificadores en un solo viaje (evita el patrón N+1 de los consumidores; misma semántica de primera clase que vehículos en E5-T1). `ids` y `cursor` son mutuamente excluyentes: con `ids` presente, el resultado no se pagina y `cursor_siguiente` es null.
+         */
         get: operations["listarCustodios"];
+        put?: never;
+        /**
+         * Alta de un custodio (crea la versión 1).
+         * @description Registra un custodio nuevo. Crea la versión 1 y emite `catalogo.actualizado` en la misma transacción (P17). Escritura administrativa de E5 (E5-T2), mismo patrón que vehículos.
+         */
+        post: operations["crearCustodio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/custodios/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Custodio vigente, o vigente a una fecha.
+         * @description La lectura vigente-a-una-fecha es la que la exportación probatoria necesita (P8): devuelve la versión que regía en esa fecha, no la actual.
+         */
+        get: operations["obtenerCustodio"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Modifica un custodio creando una nueva versión.
+         * @description No sobrescribe: cierra la vigencia de la versión actual y crea una nueva (version+1), y emite `catalogo.actualizado` en la misma transacción (P17). La versión anterior sigue consultable con `?a_fecha`. Escritura administrativa de E5 (E5-T2).
+         */
+        patch: operations["actualizarCustodio"];
         trace?: never;
     };
     "/api/v1/custodios/{id}/aptitud": {
@@ -275,12 +308,51 @@ export interface components {
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
+        /** @description Custodio de AI27 (ÁTOMO de catalogos, persona). Puede además ser un usuario de `identidad`: dos registros, dos dueños, una referencia por identificador (`usuario_id`), NUNCA una FK entre schemas (P1). Datos personales (nombre, teléfono): alcance del aviso de privacidad LFPDPPP (catalogos.md (e)); pendiente legal, no bloquea el contrato. */
         Custodio: {
             id: components["schemas"]["Id"];
+            /** @description Versión de la entidad, para que el consumidor revalide su caché barato (E5-T2, misma brecha C6 que vehículos). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.6; el servicio la llena siempre. Se promoverá a requerida en una ola futura. */
+            version?: number;
             nombre: string;
             telefono?: string;
             /** @enum {string} */
             estado: "activo" | "inactivo";
+            /**
+             * Format: uuid
+             * @description Referencia OPCIONAL al usuario de `identidad` cuando el custodio también tiene acceso al sistema. Es un IDENTIFICADOR, no una FK entre schemas (P1): el consumidor resuelve el usuario contra `identidad`, `catalogos` nunca hace JOIN. null si el custodio no es usuario.
+             */
+            usuario_id?: string | null;
+            /** @description Inicio de vigencia de esta versión. Opcional por la misma evolución que `version`; sostiene la lectura `?a_fecha` (C9). */
+            vigencia_desde?: components["schemas"]["MarcaTiempo"];
+            /**
+             * Format: date-time
+             * @description Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+             */
+            vigencia_hasta?: string | null;
+        };
+        /** @description Cuerpo de alta de un custodio (POST). El servicio asigna id y versión. */
+        CustodioEntrada: {
+            nombre: string;
+            telefono?: string;
+            /** @enum {string} */
+            estado: "activo" | "inactivo";
+            /**
+             * Format: uuid
+             * @description Referencia opcional al usuario de `identidad` (identificador, no FK). null u omitido si el custodio no es usuario del sistema.
+             */
+            usuario_id?: string | null;
+        };
+        /** @description Cuerpo de modificación de un custodio (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id` ni `version` (los gobierna el servidor). */
+        CustodioCambios: {
+            nombre?: string;
+            telefono?: string;
+            /** @enum {string} */
+            estado?: "activo" | "inactivo";
+            /**
+             * Format: uuid
+             * @description Referencia opcional al usuario de `identidad` (identificador, no FK).
+             */
+            usuario_id?: string | null;
         };
         PaginaCustodios: {
             items: components["schemas"]["Custodio"][];
@@ -619,6 +691,8 @@ export interface operations {
         parameters: {
             query?: {
                 cursor?: components["schemas"]["Cursor"];
+                /** @description Lista de identificadores separados por coma para la lectura por lote. Mutuamente excluyente con `cursor`. */
+                ids?: components["schemas"]["Id"][];
             };
             header?: never;
             path?: never;
@@ -626,7 +700,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Página de custodios. */
+            /** @description Página de custodios (o el lote solicitado). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -635,8 +709,94 @@ export interface operations {
                     "application/json": components["schemas"]["PaginaCustodios"];
                 };
             };
+            400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+        };
+    };
+    crearCustodio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustodioEntrada"];
+            };
+        };
+        responses: {
+            /** @description Custodio creado (versión 1). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Custodio"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
+    obtenerCustodio: {
+        parameters: {
+            query?: {
+                /** @description Devuelve la versión vigente a esa fecha (probatorio). */
+                a_fecha?: components["schemas"]["MarcaTiempo"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Custodio. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Custodio"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    actualizarCustodio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustodioCambios"];
+            };
+        };
+        responses: {
+            /** @description Custodio con su nueva versión. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Custodio"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["Conflicto"];
         };
     };
     aptitudCustodio: {

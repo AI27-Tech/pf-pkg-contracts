@@ -281,19 +281,112 @@ paths:
       operationId: listarCustodios
       tags: [recursos]
       summary: Listar custodios (personas de AI27 que viajan en la unidad).
+      description: >-
+        Sin `ids`, devuelve una página paginada por cursor. Con `ids`, devuelve
+        la LECTURA POR LOTE de esos identificadores en un solo viaje (evita el
+        patrón N+1 de los consumidores; misma semántica de primera clase que
+        vehículos en E5-T1). `ids` y `cursor` son mutuamente excluyentes: con
+        `ids` presente, el resultado no se pagina y `cursor_siguiente` es null.
       parameters:
       - name: cursor
         in: query
         required: false
         schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      - name: ids
+        in: query
+        required: false
+        description: >-
+          Lista de identificadores separados por coma para la lectura por lote.
+          Mutuamente excluyente con `cursor`.
+        style: form
+        explode: false
+        schema:
+          type: array
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
       responses:
         "200":
-          description: Página de custodios.
+          description: Página de custodios (o el lote solicitado).
           content:
             application/json:
               schema: {$ref: "#/components/schemas/PaginaCustodios"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    post:
+      operationId: crearCustodio
+      tags: [recursos]
+      summary: Alta de un custodio (crea la versión 1).
+      description: >-
+        Registra un custodio nuevo. Crea la versión 1 y emite
+        `catalogo.actualizado` en la misma transacción (P17). Escritura
+        administrativa de E5 (E5-T2), mismo patrón que vehículos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CustodioEntrada"}
+      responses:
+        "201":
+          description: Custodio creado (versión 1).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Custodio"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/custodios/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerCustodio
+      tags: [recursos]
+      summary: Custodio vigente, o vigente a una fecha.
+      description: >-
+        La lectura vigente-a-una-fecha es la que la exportación probatoria
+        necesita (P8): devuelve la versión que regía en esa fecha, no la actual.
+      parameters:
+      - name: a_fecha
+        in: query
+        required: false
+        description: Devuelve la versión vigente a esa fecha (probatorio).
+        schema: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+      responses:
+        "200":
+          description: Custodio.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Custodio"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: actualizarCustodio
+      tags: [recursos]
+      summary: Modifica un custodio creando una nueva versión.
+      description: >-
+        No sobrescribe: cierra la vigencia de la versión actual y crea una nueva
+        (version+1), y emite `catalogo.actualizado` en la misma transacción
+        (P17). La versión anterior sigue consultable con `?a_fecha`. Escritura
+        administrativa de E5 (E5-T2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CustodioCambios"}
+      responses:
+        "200":
+          description: Custodio con su nueva versión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Custodio"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
 
   /api/v1/custodios/{id}/aptitud:
     parameters:
@@ -469,13 +562,86 @@ components:
       type: object
       additionalProperties: false
       required: [id, nombre, estado]
+      description: >-
+        Custodio de AI27 (ÁTOMO de catalogos, persona). Puede además ser un
+        usuario de `identidad`: dos registros, dos dueños, una referencia por
+        identificador (`usuario_id`), NUNCA una FK entre schemas (P1). Datos
+        personales (nombre, teléfono).
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Versión de la entidad, para que el consumidor revalide su caché
+            barato (E5-T2, misma brecha C6 que vehículos). OPCIONAL por evolución
+            expand/contract: se agrega sin romper a los consumidores de tracer.6;
+            el servicio la llena siempre. Se promoverá a requerida en una ola
+            futura.
         nombre: {type: string}
         telefono: {type: string}
         estado:
           type: string
           enum: [activo, inactivo]
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Referencia OPCIONAL al usuario de `identidad` cuando el custodio
+            también tiene acceso al sistema. Es un IDENTIFICADOR, no una FK entre
+            schemas (P1): el consumidor resuelve el usuario contra `identidad`,
+            `catalogos` nunca hace JOIN. null si el custodio no es usuario.
+        vigencia_desde:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          description: >-
+            Inicio de vigencia de esta versión. Opcional por la misma evolución
+            que `version`; sostiene la lectura `?a_fecha` (C9).
+        vigencia_hasta:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Fin de vigencia de esta versión, o null si es la vigente. Mismo
+            formato que `MarcaTiempo`.
+
+    CustodioEntrada:
+      type: object
+      additionalProperties: false
+      required: [nombre, estado]
+      description: Cuerpo de alta de un custodio (POST). El servicio asigna id y versión.
+      properties:
+        nombre: {type: string}
+        telefono: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Referencia opcional al usuario de `identidad` (identificador, no FK).
+            null u omitido si el custodio no es usuario del sistema.
+
+    CustodioCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de modificación de un custodio (PATCH). Todos los campos son
+        opcionales; los presentes forman la nueva versión. No incluye `id` ni
+        `version` (los gobierna el servidor).
+      properties:
+        nombre: {type: string}
+        telefono: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Referencia opcional al usuario de `identidad` (identificador, no FK).
 
     PaginaCustodios:
       type: object
