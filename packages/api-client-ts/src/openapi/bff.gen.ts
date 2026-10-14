@@ -94,6 +94,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/viajes/{id}/descarga": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Descargar el expediente de un viaje (solo interno).
+         * @description Compone ficha técnica, histórico de bitácora y auditoría relevante del viaje en un expediente de exportación. Audiencia interna; un operativo fuera de su alcance recibe 403 antes de componer nada. Un viaje inexistente o fuera de alcance devuelve 404.
+         */
+        get: operations["descargarViaje"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -166,6 +188,48 @@ export interface components {
                 obsoleto: boolean;
             } | null;
             incidencias: components["schemas"]["IncidenciaCurada"][];
+        };
+        /** @description Expediente de exportación de un viaje. Lo compone `bff` leyendo de `operacion`. No contiene cuenta espejo ni `clave_amago` (no existen en el modelo V1, DEC-009/DEC-039). */
+        DescargaViaje: {
+            viaje_id: components["schemas"]["Id"];
+            ficha: components["schemas"]["FichaTecnicaDescarga"];
+            /** @description Histórico de bitácora del viaje, ordenado por tiempo (append-only). */
+            bitacora: components["schemas"]["EntradaBitacoraDescarga"][];
+            /** @description Auditoría relevante del viaje (sin exponer todo el detalle interno). */
+            auditoria: components["schemas"]["RegistroAuditoriaDescarga"][];
+            /** @description Momento en que `bff` compuso el expediente. */
+            generado_en: components["schemas"]["MarcaTiempo"];
+        };
+        /** @description Ficha técnica del viaje tal como la expone `operacion` (E1-T5). */
+        FichaTecnicaDescarga: {
+            /** @description Token de estado del viaje (ADR 19). */
+            estado: string;
+            /**
+             * Format: uuid
+             * @description Opcional; mismo formato que `Id`. null si no aplica.
+             */
+            cliente_id?: string | null;
+            origen: string;
+            destinos: {
+                nombre: string;
+                numero_envio?: string;
+            }[];
+            /**
+             * Format: date-time
+             * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+             */
+            fecha_hora_servicio?: string | null;
+            tipo_servicio?: string;
+        };
+        EntradaBitacoraDescarga: {
+            texto: string;
+            autor: string;
+            ts: components["schemas"]["MarcaTiempo"];
+        };
+        RegistroAuditoriaDescarga: {
+            entidad: string;
+            actor: string;
+            ts: components["schemas"]["MarcaTiempo"];
         };
         /**
          * Format: uuid
@@ -392,6 +456,31 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    descargarViaje: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Expediente del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DescargaViaje"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
