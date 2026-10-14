@@ -111,17 +111,121 @@ tipos:
   - tipo: catalogo.actualizado
     version: 1
     productor: catalogos
-    consumidores_durables: [operacion]
+    consumidores_durables: [operacion, mensajeria]
     # El agregado es la entrada de catálogo (`entidad` + `entidad_id`), no el
     # viaje: el orden de `catalogo.*` es por entrada, no por viaje.
     agregado: entidad + entidad_id
     sensibilidad: amplia
 
+  # --- Ola contractual 2 (`tracer.7`): sujeto y RBAC de `identidad` ---------
+  # Fuente de la proyección de pool de `mensajeria` (identidad.md (g)).
+  - tipo: sujeto.desactivado
+    version: 1
+    productor: identidad
+    consumidores_durables: [catalogos, mensajeria, reportes]
+    agregado: sujeto_id
+    sensibilidad: amplia
+
+  - tipo: rol.asignado
+    version: 1
+    productor: identidad
+    consumidores_durables: [mensajeria, reportes]
+    agregado: sujeto_id
+    sensibilidad: amplia
+
+  - tipo: rol.revocado
+    version: 1
+    productor: identidad
+    consumidores_durables: [mensajeria, reportes]
+    agregado: sujeto_id
+    sensibilidad: amplia
+
+  # --- Ola contractual 2 (`tracer.7`): conversación de `mensajeria` ---------
+  # Superficie RESTRINGIDA: viajan envueltos en `SobreVivo` por el tema
+  # restringido (ADR 28; mensajeria.md (g)).
+  - tipo: conversacion.abierta
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime, reportes]
+    agregado: conversacion_id
+    sensibilidad: restringida
+
+  - tipo: conversacion.enrutada
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime, reportes]
+    agregado: conversacion_id
+    sensibilidad: restringida
+
+  - tipo: conversacion.reclamada
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime]
+    agregado: conversacion_id
+    sensibilidad: restringida
+
+  - tipo: conversacion.liberada
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime]
+    agregado: conversacion_id
+    sensibilidad: restringida
+
+  - tipo: conversacion.transferida
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime, reportes]
+    agregado: conversacion_id
+    sensibilidad: restringida
+
+  - tipo: conversacion.atendida
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime, reportes]
+    agregado: conversacion_id
+    sensibilidad: restringida
+
+  - tipo: conversacion.cerrada
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime, reportes]
+    agregado: conversacion_id
+    sensibilidad: restringida
+
+  - tipo: mensaje.creado
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime, reportes]
+    agregado: conversacion_id
+    sensibilidad: restringida
+
+  - tipo: recibo.entregado
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime]
+    agregado: conversacion_id
+    sensibilidad: restringida
+
+  - tipo: recibo.leido
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime]
+    agregado: conversacion_id
+    sensibilidad: restringida
+
+  - tipo: membresia.cambiada
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime]
+    agregado: bandeja_id
+    sensibilidad: restringida
+
 # Familias DECLARADAS FUERA del tracer. No entran al fanout de ninguna cola,
 # tema ni clave de orden de V1 (ADR 20). Se declaran para que una versión futura
 # las agregue explícitamente, no por omisión.
 fuera_del_tracer:
-  # Superficie restringida (E3/E7): entra en releases posteriores compatibles.
-  - [conversacion, bandeja, emergencia]
+  # Superficie restringida pendiente: bandeja (revisión de colección) y
+  # emergencia (E7) entran en `tracer.8`.
+  - [bandeja, emergencia]
   # Telemetría/tracking: V2, fuera de todo tema, cola y clave de orden de V1.
   - [sin_senal, telemetria, push]

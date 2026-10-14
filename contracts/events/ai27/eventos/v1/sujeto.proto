@@ -1,0 +1,40 @@
+// Eventos de ciclo de vida y RBAC del sujeto, publicados por `identidad`
+// (identidad.md (g)). Ola contractual 2, `tracer.7`. Superficie AMPLIA:
+// identificadores y rol, sin datos personales. Orden por agregado = sujeto_id.
+//
+// Su consumidor principal es `mensajeria`, que recalcula la membresía efectiva
+// de pool y publica `membresia.cambiada` si cambia (mensajeria.md (g)).
+//
+// El ALCANCE por `cliente`/`unidad` no viaja aquí: su evento tiene nombre y
+// forma pendientes (identidad.md (g), DEC-045, DEC-053 #3).
+syntax = "proto3";
+
+package ai27.eventos.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1;eventosv1";
+
+// sujeto.desactivado — al comprometer la desactivación del sujeto.
+message SujetoDesactivado {
+  string sujeto_id = 1;
+  string tenant_id = 2;
+  google.protobuf.Timestamp desactivado_en = 3;
+}
+
+// rol.asignado — al comprometer la asignación de un rol a un sujeto.
+message RolAsignado {
+  string sujeto_id = 1;
+  string tenant_id = 2;
+  // Identificador canónico del rol (enum `Rol` de _comunes.yaml, DEC-053).
+  string rol = 3;
+  google.protobuf.Timestamp asignado_en = 4;
+}
+
+// rol.revocado — al comprometer la revocación de un rol de un sujeto.
+message RolRevocado {
+  string sujeto_id = 1;
+  string tenant_id = 2;
+  string rol = 3;
+  google.protobuf.Timestamp revocado_en = 4;
+}

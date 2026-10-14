@@ -1,0 +1,123 @@
+// Eventos de la conversación de negocio, publicados por `mensajeria`
+// (mensajeria.md (g); Addendum de conversación §9). Ola contractual 2,
+// `tracer.7`.
+//
+// Superficie RESTRINGIDA: viajan por el tema restringido envueltos en
+// `SobreVivo` (sobre_vivo.proto), que lleva la audiencia explícita para
+// `realtime`. Ningún cuerpo de mensaje viaja por el tema amplio.
+//
+// Orden por agregado = conversacion_id, salvo `membresia.cambiada`, cuyo
+// agregado es la bandeja. No existe clave global (ADR 29).
+//
+// `actor_real` NO viaja en estos eventos: queda en la auditoría local de
+// `mensajeria` (Addendum §11). El cliente solo ve `alias_mostrado`.
+syntax = "proto3";
+
+package ai27.eventos.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1;eventosv1";
+
+// conversacion.abierta — al crear la conversación del viaje (dirigida por
+// `viaje.mensajeria_habilitada`, no por petición del cliente).
+message ConversacionAbierta {
+  string conversacion_id = 1;
+  string viaje_id = 2;
+  string cliente_id = 3;
+  google.protobuf.Timestamp abierta_en = 4;
+}
+
+// conversacion.enrutada — al comprometer la ruta activa a una bandeja.
+message ConversacionEnrutada {
+  string conversacion_id = 1;
+  string bandeja_id = 2;
+  google.protobuf.Timestamp enrutada_en = 3;
+}
+
+// conversacion.reclamada — al abrir un reclamo. Suprime trabajos de
+// notificación pendientes (Addendum §10).
+message ConversacionReclamada {
+  string conversacion_id = 1;
+  string reclamo_id = 2;
+  string responsable_id = 3;
+  // Versión del reclamo resultante (concurrencia optimista).
+  int64 version_reclamo = 4;
+  google.protobuf.Timestamp reclamada_en = 5;
+}
+
+// conversacion.liberada — al cerrar el reclamo y devolver la conversación al pool.
+message ConversacionLiberada {
+  string conversacion_id = 1;
+  string reclamo_id = 2;
+  int64 version_reclamo = 3;
+  google.protobuf.Timestamp liberada_en = 4;
+}
+
+// conversacion.transferida — al cerrar un reclamo y abrir el siguiente en una
+// sola transacción.
+message ConversacionTransferida {
+  string conversacion_id = 1;
+  string reclamo_anterior_id = 2;
+  string reclamo_id = 3;
+  string responsable_id = 4;
+  int64 version_reclamo = 5;
+  google.protobuf.Timestamp transferida_en = 6;
+}
+
+// conversacion.atendida — el responsable reconoció o respondió el trabajo.
+message ConversacionAtendida {
+  string conversacion_id = 1;
+  string responsable_id = 2;
+  google.protobuf.Timestamp atendida_en = 3;
+}
+
+// conversacion.cerrada — al cerrar la conversación.
+message ConversacionCerrada {
+  string conversacion_id = 1;
+  google.protobuf.Timestamp cerrada_en = 2;
+}
+
+// mensaje.creado — al comprometer el mensaje (misma transacción que el outbox).
+// Agregado = conversacion_id; `secuencia` es el orden canónico.
+message MensajeCreado {
+  string conversacion_id = 1;
+  string mensaje_id = 2;
+  int64 secuencia = 3;
+  // Audiencia de dominio del autor: `Cliente` | `Interno` (DEC-054).
+  string audiencia_autor = 4;
+  string alias_mostrado = 5;
+  string cuerpo = 6;
+  repeated string adjuntos_ids = 7;
+  google.protobuf.Timestamp creado_en = 8;
+}
+
+// recibo.entregado — al avanzar el cursor de entrega de un participante.
+message ReciboEntregado {
+  string conversacion_id = 1;
+  string sujeto_id = 2;
+  int64 hasta_secuencia = 3;
+  google.protobuf.Timestamp registrado_en = 4;
+}
+
+// recibo.leido — al avanzar el cursor de lectura de un participante.
+message ReciboLeido {
+  string conversacion_id = 1;
+  string sujeto_id = 2;
+  int64 hasta_secuencia = 3;
+  google.protobuf.Timestamp registrado_en = 4;
+}
+
+// membresia.cambiada — al cambiar la membresía efectiva de un sujeto en el pool
+// de una bandeja. `realtime` detiene el fanout futuro al sujeto removido
+// (Addendum §7). Prioridad de aplicación alta. Agregado = bandeja_id.
+message MembresiaCambiada {
+  string bandeja_id = 1;
+  string sujeto_id = 2;
+  // true si el sujeto queda como miembro efectivo; false si se removió.
+  bool vigente = 3;
+  // Versión de la membresía de la bandeja tras el cambio; es la
+  // `audience_version` que llevan los sobres vivos posteriores.
+  int64 version_membresia = 4;
+  google.protobuf.Timestamp cambiada_en = 5;
+}

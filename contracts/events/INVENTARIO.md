@@ -1,4 +1,4 @@
-# Inventario contractual de eventos — tracer `v0.1.0-tracer.4`
+# Inventario contractual de eventos — tracer `v0.1.0-tracer.7`
 
 > **La tabla de abajo es prosa; el dato legible por máquina es
 > `contracts/events/registro.tipos.yaml`.** Desde `tracer.2` el registro es un
@@ -19,8 +19,9 @@ Reglas que este inventario materializa:
 - Una familia con nombre o parámetros **no aprobados** no aparece aquí y no
   puede entrar al fanout. Un tipo/versión ausente del registro se rechaza antes
   del fanout y, si llega a un consumidor, se trata como evento venenoso.
-- El tracer usa **sólo la superficie amplia**. La superficie restringida
-  (conversación, bandeja, emergencia) es de E3/E7 y **no** entra en `tracer.2`.
+- La superficie amplia lleva metadatos no sensibles. Desde `tracer.7` la
+  superficie restringida incluye la conversación (E3); bandeja y emergencia
+  (E7) siguen fuera.
 
 ## Familias del tracer
 
@@ -37,7 +38,21 @@ Reglas que este inventario materializa:
 | `viaje.cerrado` | 1 | `operacion` | `mensajeria`, `reportes` | `viaje_id` | amplia |
 | `viaje.acceso_revocado` | 1 | `operacion` | `mensajeria`, `realtime` | `viaje_id` | amplia |
 | `sesion.revocada` | 1 | `identidad` | `bff`, `operacion`, `catalogos`, `reportes`, `mensajeria`, `realtime` | `sesion_id` | amplia |
-| `catalogo.actualizado` | 1 | `catalogos` | `operacion` | `entidad` + `entidad_id` | amplia |
+| `catalogo.actualizado` | 1 | `catalogos` | `operacion`, `mensajeria` | `entidad` + `entidad_id` | amplia |
+| `sujeto.desactivado` | 1 | `identidad` | `catalogos`, `mensajeria`, `reportes` | `sujeto_id` | amplia |
+| `rol.asignado` | 1 | `identidad` | `mensajeria`, `reportes` | `sujeto_id` | amplia |
+| `rol.revocado` | 1 | `identidad` | `mensajeria`, `reportes` | `sujeto_id` | amplia |
+| `conversacion.abierta` | 1 | `mensajeria` | `realtime`, `reportes` | `conversacion_id` | restringida |
+| `conversacion.enrutada` | 1 | `mensajeria` | `realtime`, `reportes` | `conversacion_id` | restringida |
+| `conversacion.reclamada` | 1 | `mensajeria` | `realtime` | `conversacion_id` | restringida |
+| `conversacion.liberada` | 1 | `mensajeria` | `realtime` | `conversacion_id` | restringida |
+| `conversacion.transferida` | 1 | `mensajeria` | `realtime`, `reportes` | `conversacion_id` | restringida |
+| `conversacion.atendida` | 1 | `mensajeria` | `realtime`, `reportes` | `conversacion_id` | restringida |
+| `conversacion.cerrada` | 1 | `mensajeria` | `realtime`, `reportes` | `conversacion_id` | restringida |
+| `mensaje.creado` | 1 | `mensajeria` | `realtime`, `reportes` | `conversacion_id` | restringida |
+| `recibo.entregado` | 1 | `mensajeria` | `realtime` | `conversacion_id` | restringida |
+| `recibo.leido` | 1 | `mensajeria` | `realtime` | `conversacion_id` | restringida |
+| `membresia.cambiada` | 1 | `mensajeria` | `realtime` | `bandeja_id` | restringida |
 
 ## Notas por familia
 
@@ -49,12 +64,22 @@ Reglas que este inventario materializa:
   consumidor difunde internamente a todas sus réplicas antes de acusar (E0-T4).
   El corte total respeta los 30 segundos de ADR 26.
 - **`catalogo.actualizado`** — Efecto idempotente (invalida caché). Reentregar
-  sólo vuelve a invalidar.
+  sólo vuelve a invalidar. Desde `tracer.7` también lo consume `mensajeria`
+  (caché de cliente para la lectura por lote).
+- **`sujeto.desactivado`, `rol.asignado`, `rol.revocado`** (`tracer.7`) —
+  Publicados por `identidad`. Son la fuente de la proyección de pool de
+  `mensajeria`. El alcance por `cliente`/`unidad` NO viaja aquí: su evento
+  sigue pendiente (identidad.md (g), DEC-045).
+- **Conversación (`conversacion.*`, `mensaje.*`, `recibo.*`,
+  `membresia.cambiada`)** (`tracer.7`) — Superficie **restringida**. Viajan por
+  el tema restringido envueltos en `SobreVivo` (`sobre_vivo.proto`), que lleva
+  `cursor_dominio`, `audience_version` y `target_sujeto_ids` (ADR 28 §4).
+  `actor_real` no viaja: queda en la auditoría local de `mensajeria`.
 
-## Fuera del tracer (declarado, NO incluido en `tracer.2`)
+## Fuera del tracer (declarado, NO incluido en `tracer.7`)
 
-Las familias de conversación, bandeja y emergencia (E3/E7) pertenecen a la
-**superficie restringida** y se incorporan en releases posteriores compatibles.
+Las familias de **bandeja** (revisión de colección) y **emergencia** (E7)
+pertenecen a la superficie restringida y entran en `tracer.8`.
 Los eventos de telemetría/tracking (`sin_senal.*`, `telemetria.*`,
 `push.*`) son **V2** y no forman parte de ningún tema, cola ni clave de orden de
 V1 (ADR 20).
