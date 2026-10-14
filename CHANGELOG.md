@@ -3,6 +3,59 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-14 [tracer.7] — ola contractual 2: conversación de `mensajeria`
+
+**Resumen:** Se publica la superficie que destraba el scaffold de
+`pf-svc-mensajeria` (prompt 07): su spec OpenAPI, los eventos de conversación
+sobre la superficie restringida, el sobre vivo con audiencia explícita, los
+eventos de sujeto/RBAC de `identidad` y la lectura por lote de clientes en
+`catalogos`. Es la ola que DEC-065 llamaba `tracer.5` (renumerada por DEC-087).
+
+**Contexto:** el Lead decidió el 2026-10-14 partir la ola 2: conversación en
+`tracer.7`; bootstrap/catch-up de bandeja y emergencia en `tracer.8`, porque la
+arquitectura todavía no congela sus rutas ni nombres (mensajeria.md (f), (l)).
+También decidió un sobre aparte para el tema restringido (no ampliar `Sobre`) y
+que M6 (eventos de `identidad`) y la lectura por lote de `catalogos` entren aquí.
+
+**Cambios:**
+- `contracts/openapi/mensajeria.yaml` (nuevo): bandeja/trabajo, conversaciones,
+  mensajes con `antes_de`/`despues_de` y envío idempotente por
+  `client_message_id`, reclamo/liberación/transferencia con versión esperada
+  (409 `conflicto_version_reclamo`), recibos, atendida, intención de subida de
+  adjuntos y auditoría. Sin plantillas (DEC-023).
+- `contracts/events/.../sobre_vivo.proto` (nuevo): `SobreVivo` con
+  `cursor_dominio`, `audience_version` y `target_sujeto_ids` (ADR 28 §4).
+- `contracts/events/.../conversacion.proto` (nuevo): `conversacion.abierta`,
+  `.enrutada`, `.reclamada`, `.liberada`, `.transferida`, `.atendida`,
+  `.cerrada`; `mensaje.creado`; `recibo.entregado`/`.leido`;
+  `membresia.cambiada`. Sensibilidad **restringida**.
+- `contracts/events/.../sujeto.proto` (nuevo): `sujeto.desactivado`,
+  `rol.asignado`, `rol.revocado` de `identidad`. Superficie amplia.
+- `catalogos.yaml`: `listarClientes` acepta `ids` (lectura por lote), mismo
+  patrón que `listarVehiculos`. Aditivo.
+- Registro e `INVENTARIO.md`: 14 tipos nuevos; `mensajeria` pasa a consumir
+  `catalogo.actualizado`.
+- Tooling: `mensajeria` entra a la lista de servicios de `generar.sh`,
+  `breaking-openapi.sh`, `lint-openapi`, `check-tags.sh` y al consumidor limpio
+  de `contract-tests.sh` (con aserciones de valor sobre sensibilidad);
+  `check-registro` reconoce `SobreVivo` como envoltura.
+- `VERSION`, los seis specs y el paquete TS a `0.1.0-tracer.7`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` compatible con `tracer.6`
+en los seis specs; `buf breaking` contra el tag `v0.1.0-tracer.6` compatible.
+Sin entrada en `rompimientos/`.
+
+**Notas (brechas declaradas, no inventadas):**
+- `usuario.desactivado` (nombre de `mensajeria.md` (g)) se publicó como
+  `sujeto.desactivado`, el nombre del productor (`identidad.md` (g)).
+- El alcance por `cliente` del `ejecutivo` no viaja en ningún evento: su forma
+  está pendiente (DEC-045). Sin él, el pool se calcula solo por rol.
+- "Datos de contacto" del cliente no tienen forma definida en ninguna fuente;
+  no se agregaron. V1 no notifica al cliente (DEC-023), así que no bloquean.
+- oapi-codegen genera `SecuenciaMensaje` y `VersionReclamo` como **alias** de
+  `int64`: el contrato no impide convertirlos. Los tipos distintos sin
+  conversión los declara el módulo `mensajeria` (prompt 07).
+
 ## 2026-10-13 [tracer.6] — cierre de ola (VERSION + specs + paquete TS)
 
 **Resumen:** Se publica **`v0.1.0-tracer.6`**, que cierra la ola de la superficie

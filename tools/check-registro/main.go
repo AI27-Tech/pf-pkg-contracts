@@ -52,9 +52,10 @@ type source struct {
 	Tipos   []tipoEvento `yaml:"tipos"`
 }
 
-// sobreEnvoltura es el mensaje que envuelve a todos los demás: no es un tipo de
-// evento y por tanto no puede estar en el registro.
-const sobreEnvoltura = "Sobre"
+// envolturas son los mensajes que envuelven a los demás (`Sobre` del tema amplio
+// y `SobreVivo` del tema restringido, ADR 28): no son tipos de evento y por
+// tanto no pueden estar en el registro.
+var envolturas = map[string]bool{"Sobre": true, "SobreVivo": true}
 
 // mensajeProto extrae un mensaje de nivel superior de un archivo .proto.
 var reMensaje = regexp.MustCompile(`(?m)^message\s+([A-Za-z0-9_]+)\s*\{`)
@@ -118,7 +119,7 @@ func main() {
 
 	var sinRegistro []string
 	for nombre := range msgs {
-		if nombre == sobreEnvoltura {
+		if envolturas[nombre] {
 			continue
 		}
 		if _, ok := porMensaje[nombre]; !ok {

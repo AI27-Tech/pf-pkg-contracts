@@ -257,6 +257,9 @@ type SolicitudInvalida = Error
 // ListarClientesParams defines parameters for ListarClientes.
 type ListarClientesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Ids Lista de identificadores separados por coma para la lectura por lote. Mutuamente excluyente con `cursor`.
+	Ids *[]Id `form:"ids,omitempty" json:"ids,omitempty"`
 }
 
 // ObtenerContratoParams defines parameters for ObtenerContrato.
@@ -598,6 +601,22 @@ func NewListarClientesRequest(server string, params *ListarClientesParams) (*htt
 		if params.Cursor != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Ids != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", false, "ids", runtime.ParamLocationQuery, *params.Ids); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -1214,6 +1233,7 @@ type ListarClientesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *PaginaClientes
+	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
 }
@@ -1614,6 +1634,13 @@ func ParseListarClientesResponse(rsp *http.Response) (*ListarClientesResponse, e
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest NoAutorizado

@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar clientes (expediente comercial), por alcance interno. */
+        /**
+         * Listar clientes (expediente comercial), por alcance interno.
+         * @description Sin `ids`, devuelve una página paginada por cursor. Con `ids`, devuelve la LECTURA POR LOTE de esos clientes (consumidor: `mensajeria`, con caché invalidada por `catalogo.actualizado`). `ids` y `cursor` son mutuamente excluyentes: con `ids`, `cursor_siguiente` es null.
+         */
         get: operations["listarClientes"];
         put?: never;
         post?: never;
@@ -322,6 +325,15 @@ export interface components {
         MarcaTiempo: string;
     };
     responses: {
+        /** @description La petición no cumple el contrato (validación de cuerpo o parámetros). */
+        SolicitudInvalida: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Token ausente, inválido, expirado o con sesión revocada (fallo cerrado). */
         NoAutorizado: {
             headers: {
@@ -342,15 +354,6 @@ export interface components {
         };
         /** @description El recurso no existe o no es visible dentro del alcance del llamante. */
         NoEncontrado: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["Error"];
-            };
-        };
-        /** @description La petición no cumple el contrato (validación de cuerpo o parámetros). */
-        SolicitudInvalida: {
             headers: {
                 [name: string]: unknown;
             };
@@ -379,6 +382,8 @@ export interface operations {
         parameters: {
             query?: {
                 cursor?: components["schemas"]["Cursor"];
+                /** @description Lista de identificadores separados por coma para la lectura por lote. Mutuamente excluyente con `cursor`. */
+                ids?: components["schemas"]["Id"][];
             };
             header?: never;
             path?: never;
@@ -386,7 +391,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Página de clientes. */
+            /** @description Página de clientes (o el lote solicitado). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -395,6 +400,7 @@ export interface operations {
                     "application/json": components["schemas"]["PaginaClientes"];
                 };
             };
+            400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
         };

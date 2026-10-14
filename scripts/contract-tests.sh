@@ -102,6 +102,7 @@ import (
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/estados"
 	eventosv1 "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/identidad"
+	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/mensajeria"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/operacion"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/registro"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/reportes"
@@ -176,6 +177,30 @@ func main() {
 	if c, err := reportes.NewClient("https://api.ai27.tech"); err != nil || c == nil {
 		panic("reportes.NewClient debe construir un cliente")
 	}
+	if c, err := mensajeria.NewClient("https://api.ai27.tech"); err != nil || c == nil {
+		panic("mensajeria.NewClient debe construir un cliente")
+	}
+
+	// Ola 2 (tracer.7): la conversación viaja por la superficie RESTRINGIDA y
+	// el sobre vivo lleva su audiencia explícita (ADR 28). Se comprueba el
+	// VALOR: un mensaje.creado marcado como amplio expondría cuerpos por el
+	// tema amplio.
+	if t, ok := registro.PorTipo["mensaje.creado"]; !ok || t.Sensibilidad != registro.SensibilidadRestringida || t.Productor != "mensajeria" {
+		panic("mensaje.creado debe estar registrado como restringido, producido por mensajeria")
+	}
+	if t := registro.PorTipo["sesion.revocada"]; t.Sensibilidad != registro.SensibilidadAmplia {
+		panic("sesion.revocada sigue siendo superficie amplia")
+	}
+	if !registro.EsConsumidorDurable("rol.asignado", "mensajeria") {
+		panic("mensajeria consume rol.asignado para su proyección de pool")
+	}
+	_ = eventosv1.SobreVivo{
+		Sobre:           &eventosv1.Sobre{Tipo: "mensaje.creado", Sensibilidad: eventosv1.Sensibilidad_SENSIBILIDAD_RESTRINGIDA},
+		CursorDominio:   "1",
+		AudienceVersion: 1,
+		TargetSujetoIds: []string{"s-1"},
+	}
+	_ = eventosv1.MensajeCreado{ConversacionId: "c-1", Secuencia: 1}
 
 	// Un viaje del contrato. operacion.EstadoViaje y estados.EstadoViaje son
 	// enums-data distintos por diseño (oapi-codegen genera su propio), pero deben

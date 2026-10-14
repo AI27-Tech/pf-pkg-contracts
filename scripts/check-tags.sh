@@ -56,6 +56,7 @@ PAQUETES=(
   operacion
   bff
   reportes
+  mensajeria
   eventos
   estados
   registro
