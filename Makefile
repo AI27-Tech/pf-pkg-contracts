@@ -52,7 +52,7 @@ lint-events: ## buf lint sobre contracts/events
 .PHONY: lint-openapi
 lint-openapi: ## Valida cada spec de OpenAPI (bundle + lint con $ref resueltos)
 	@tmp="$$(mktemp -d)"; \
-	for s in identidad catalogos operacion bff reportes; do \
+	for s in identidad catalogos operacion bff reportes mensajeria; do \
 	  echo "bundle + redocly lint $$s"; \
 	  $(REDOCLY) bundle contracts/openapi/$$s.yaml -o "$$tmp/$$s.bundle.yaml" >/dev/null || { rm -rf "$$tmp"; exit 1; }; \
 	  $(REDOCLY) lint "$$tmp/$$s.bundle.yaml" || { rm -rf "$$tmp"; exit 1; }; \
