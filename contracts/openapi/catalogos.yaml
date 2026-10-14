@@ -40,6 +40,11 @@ tags:
 - name: contratos
 - name: recursos
   description: Vehículos (átomos coche/moto) y custodios — los átomos de AI27 (ADR 31).
+- name: catalogos-tipo
+  description: >-
+    Catálogos de tipo de V1 (listas de valores administrables): tipos de
+    servicio/monitoreo, líneas de transporte, tipos de unidad, tipos de custodia
+    y zonas de riesgo como lista (sin geometría; E5-T3 / DEC-017).
 
 paths:
   /api/v1/clientes:
@@ -517,6 +522,107 @@ paths:
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
+  # ---------------------------------------------------------------------------
+  # Catálogos de tipo (E5-T3). Un ÚNICO recurso parametrizado por `{tipo}` para
+  # las cinco listas de valores de V1 (opción A): comparten forma (código,
+  # etiqueta, estado, versión), así que no se declaran cinco recursos casi
+  # idénticos. Agregar una lista futura es un valor más del enum `TipoCatalogo`,
+  # no una ruta nueva. `zona_riesgo` entra SOLO como lista de valores (sin
+  # geometría); cuando V2 agregue geometría, se gradúa a su propio recurso
+  # (ADR 5 / DEC-017). Mismo patrón versión-en-outbox (`catalogo.actualizado`,
+  # P17) que vehículos, custodios, contratos y SLA.
+  # ---------------------------------------------------------------------------
+  /api/v1/catalogos-tipo/{tipo}:
+    parameters:
+    - name: tipo
+      in: path
+      required: true
+      description: Cuál de las listas de valores de V1 se consulta o administra.
+      schema: {$ref: "#/components/schemas/TipoCatalogo"}
+    get:
+      operationId: listarValoresCatalogo
+      tags: [catalogos-tipo]
+      summary: Listar los valores de un catálogo de tipo (lectura por lote).
+      description: >-
+        Devuelve los valores vigentes del catálogo `{tipo}`. Lectura de primera
+        clase para los consumidores (evita N+1). Cada valor trae su `version`
+        para revalidación barata de caché.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de valores del catálogo.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaValoresCatalogo"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    post:
+      operationId: crearValorCatalogo
+      tags: [catalogos-tipo]
+      summary: Alta de un valor en un catálogo de tipo (crea la versión 1).
+      description: >-
+        Registra un valor nuevo en el catálogo `{tipo}`. Crea la versión 1 y
+        emite `catalogo.actualizado` en la misma transacción (P17). Escritura
+        administrativa de E5 (E5-T3).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ValorCatalogoEntrada"}
+      responses:
+        "201":
+          description: Valor creado (versión 1).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ValorCatalogo"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/catalogos-tipo/{tipo}/{id}:
+    parameters:
+    - name: tipo
+      in: path
+      required: true
+      schema: {$ref: "#/components/schemas/TipoCatalogo"}
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    patch:
+      operationId: actualizarValorCatalogo
+      tags: [catalogos-tipo]
+      summary: Modifica o desactiva un valor de catálogo (crea una nueva versión).
+      description: >-
+        No sobrescribe: cierra la vigencia de la versión actual y crea una nueva
+        (version+1), y emite `catalogo.actualizado` en la misma transacción
+        (P17). Desactivar un valor es cambiar su `estado` por esta misma ruta;
+        no rompe los registros históricos que ya lo usaban (siguen apuntando a la
+        versión que regía entonces, P8).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ValorCatalogoCambios"}
+      responses:
+        "200":
+          description: Valor con su nueva versión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ValorCatalogo"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
 components:
   schemas:
     Cliente:
@@ -834,3 +940,90 @@ components:
           type: array
           description: Motivos de no aptitud, cuando `apto=false`.
           items: {type: string}
+
+    # --- Catálogos de tipo (E5-T3). Cinco listas de valores de V1 bajo un solo
+    #     recurso parametrizado por `tipo` (opción A). `tipos_unidad` incluye
+    #     `Patrulla` (la unidad en su rol de escolta, ADR 31). `zonas_riesgo`
+    #     entra SOLO como lista de valores (sin geometría, DEC-017). ---
+    TipoCatalogo:
+      type: string
+      description: >-
+        Cuál de los catálogos de tipo de V1 se consulta o administra. Agregar
+        una lista futura es un valor más de este enum, no una ruta nueva.
+      enum:
+        - tipos_servicio
+        - lineas_transporte
+        - tipos_unidad
+        - tipos_custodia
+        - zonas_riesgo
+
+    ValorCatalogo:
+      type: object
+      additionalProperties: false
+      required: [id, codigo, etiqueta, estado]
+      description: >-
+        Un valor de un catálogo de tipo. Forma común a las cinco listas: código
+        estable, etiqueta legible, estado administrativo y versión. Sin geometría
+        (incluso para `zonas_riesgo`, que en V1 es solo lista de valores).
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version:
+          type: integer
+          minimum: 1
+          description: >-
+            Versión del valor, para revalidación barata de caché (E5-T3). OPCIONAL
+            por evolución expand/contract; el servicio la llena siempre.
+        codigo:
+          type: string
+          description: Código estable del valor (máquina). No se traduce.
+        etiqueta:
+          type: string
+          description: Etiqueta legible del valor (presentación).
+        estado:
+          type: string
+          enum: [activo, inactivo]
+          description: >-
+            Estado administrativo. Desactivar un valor (`inactivo`) no rompe los
+            registros históricos que ya lo usaban (P8).
+
+    ValorCatalogoEntrada:
+      type: object
+      additionalProperties: false
+      required: [codigo, etiqueta, estado]
+      description: >-
+        Cuerpo de alta de un valor de catálogo (POST). El servicio asigna id y
+        versión. El `tipo` viaja en la ruta, no en el cuerpo.
+      properties:
+        codigo: {type: string}
+        etiqueta: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+
+    ValorCatalogoCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de modificación de un valor de catálogo (PATCH). Todos los campos
+        son opcionales; los presentes forman la nueva versión. Desactivar es
+        enviar `estado: inactivo`. No incluye `id` ni `version` (los gobierna el
+        servidor), ni el `tipo` (va en la ruta).
+      properties:
+        codigo: {type: string}
+        etiqueta: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+
+    PaginaValoresCatalogo:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/ValorCatalogo"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.

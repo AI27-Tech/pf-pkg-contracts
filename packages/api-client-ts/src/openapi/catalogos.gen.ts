@@ -273,6 +273,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/catalogos-tipo/{tipo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Cuál de las listas de valores de V1 se consulta o administra. */
+                tipo: components["schemas"]["TipoCatalogo"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Listar los valores de un catálogo de tipo (lectura por lote).
+         * @description Devuelve los valores vigentes del catálogo `{tipo}`. Lectura de primera clase para los consumidores (evita N+1). Cada valor trae su `version` para revalidación barata de caché.
+         */
+        get: operations["listarValoresCatalogo"];
+        put?: never;
+        /**
+         * Alta de un valor en un catálogo de tipo (crea la versión 1).
+         * @description Registra un valor nuevo en el catálogo `{tipo}`. Crea la versión 1 y emite `catalogo.actualizado` en la misma transacción (P17). Escritura administrativa de E5 (E5-T3).
+         */
+        post: operations["crearValorCatalogo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalogos-tipo/{tipo}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tipo: components["schemas"]["TipoCatalogo"];
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modifica o desactiva un valor de catálogo (crea una nueva versión).
+         * @description No sobrescribe: cierra la vigencia de la versión actual y crea una nueva (version+1), y emite `catalogo.actualizado` en la misma transacción (P17). Desactivar un valor es cambiar su `estado` por esta misma ruta; no rompe los registros históricos que ya lo usaban (siguen apuntando a la versión que regía entonces, P8).
+         */
+        patch: operations["actualizarValorCatalogo"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -295,7 +345,7 @@ export interface components {
         };
         Contrato: {
             id: components["schemas"]["Id"];
-            /** @description Versión de la entidad, para revalidación barata de caché (E5-T4, misma brecha C6 que vehículos y custodios). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.6; el servicio la llena siempre. Se promoverá a requerida en una ola futura. */
+            /** @description Versión de la entidad, para revalidación barata de caché (E5-T4, misma brecha C6 que vehículos y custodios). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.6; el servicio la llena siempre. */
             version?: number;
             cliente_id: components["schemas"]["Id"];
             vigencia_desde: components["schemas"]["MarcaTiempo"];
@@ -311,7 +361,7 @@ export interface components {
             /** @description Descripción del contrato (informativo en V1, DEC-022 */
             descripcion?: string;
         };
-        /** @description Cuerpo de modificación de un contrato (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id`, `version` ni `cliente_id` (reasignar de cliente no es una edición normal). */
+        /** @description Cuerpo de modificación de un contrato (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id`, `version` ni `cliente_id`. */
         ContratoCambios: {
             descripcion?: string;
         };
@@ -437,6 +487,45 @@ export interface components {
             apto: boolean;
             /** @description Motivos de no aptitud, cuando `apto=false`. */
             motivos?: string[];
+        };
+        /**
+         * @description Cuál de los catálogos de tipo de V1 se consulta o administra. Agregar una lista futura es un valor más de este enum, no una ruta nueva.
+         * @enum {string}
+         */
+        TipoCatalogo: "tipos_servicio" | "lineas_transporte" | "tipos_unidad" | "tipos_custodia" | "zonas_riesgo";
+        /** @description Un valor de un catálogo de tipo. Forma común a las cinco listas: código estable, etiqueta legible, estado administrativo y versión. Sin geometría (incluso para `zonas_riesgo`, que en V1 es solo lista de valores). */
+        ValorCatalogo: {
+            id: components["schemas"]["Id"];
+            /** @description Versión del valor, para revalidación barata de caché (E5-T3). OPCIONAL por evolución expand/contract; el servicio la llena siempre. */
+            version?: number;
+            /** @description Código estable del valor (máquina). No se traduce. */
+            codigo: string;
+            /** @description Etiqueta legible del valor (presentación). */
+            etiqueta: string;
+            /**
+             * @description Estado administrativo. Desactivar un valor (`inactivo`) no rompe los registros históricos que ya lo usaban (P8).
+             * @enum {string}
+             */
+            estado: "activo" | "inactivo";
+        };
+        /** @description Cuerpo de alta de un valor de catálogo (POST). El servicio asigna id y versión. El `tipo` viaja en la ruta, no en el cuerpo. */
+        ValorCatalogoEntrada: {
+            codigo: string;
+            etiqueta: string;
+            /** @enum {string} */
+            estado: "activo" | "inactivo";
+        };
+        /** @description Cuerpo de modificación de un valor de catálogo (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. Desactivar es enviar `estado: inactivo`. No incluye `id` ni `version` (los gobierna el servidor), ni el `tipo` (va en la ruta). */
+        ValorCatalogoCambios: {
+            codigo?: string;
+            etiqueta?: string;
+            /** @enum {string} */
+            estado?: "activo" | "inactivo";
+        };
+        PaginaValoresCatalogo: {
+            items: components["schemas"]["ValorCatalogo"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
         };
         /** @description Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato. */
         Cursor: string;
@@ -1011,6 +1100,98 @@ export interface operations {
             };
             401: components["responses"]["NoAutorizado"];
             404: components["responses"]["NoEncontrado"];
+        };
+    };
+    listarValoresCatalogo: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                /** @description Cuál de las listas de valores de V1 se consulta o administra. */
+                tipo: components["schemas"]["TipoCatalogo"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de valores del catálogo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaValoresCatalogo"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    crearValorCatalogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Cuál de las listas de valores de V1 se consulta o administra. */
+                tipo: components["schemas"]["TipoCatalogo"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValorCatalogoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Valor creado (versión 1). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValorCatalogo"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
+    actualizarValorCatalogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tipo: components["schemas"]["TipoCatalogo"];
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValorCatalogoCambios"];
+            };
+        };
+        responses: {
+            /** @description Valor con su nueva versión. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValorCatalogo"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["Conflicto"];
         };
     };
 }

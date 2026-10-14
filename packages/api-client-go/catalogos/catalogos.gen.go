@@ -46,6 +46,33 @@ const (
 	CustodioEntradaEstadoInactivo CustodioEntradaEstado = "inactivo"
 )
 
+// Defines values for TipoCatalogo.
+const (
+	LineasTransporte TipoCatalogo = "lineas_transporte"
+	TiposCustodia    TipoCatalogo = "tipos_custodia"
+	TiposServicio    TipoCatalogo = "tipos_servicio"
+	TiposUnidad      TipoCatalogo = "tipos_unidad"
+	ZonasRiesgo      TipoCatalogo = "zonas_riesgo"
+)
+
+// Defines values for ValorCatalogoEstado.
+const (
+	ValorCatalogoEstadoActivo   ValorCatalogoEstado = "activo"
+	ValorCatalogoEstadoInactivo ValorCatalogoEstado = "inactivo"
+)
+
+// Defines values for ValorCatalogoCambiosEstado.
+const (
+	ValorCatalogoCambiosEstadoActivo   ValorCatalogoCambiosEstado = "activo"
+	ValorCatalogoCambiosEstadoInactivo ValorCatalogoCambiosEstado = "inactivo"
+)
+
+// Defines values for ValorCatalogoEntradaEstado.
+const (
+	Activo   ValorCatalogoEntradaEstado = "activo"
+	Inactivo ValorCatalogoEntradaEstado = "inactivo"
+)
+
 // Defines values for VehiculoEstado.
 const (
 	VehiculoEstadoActiva   VehiculoEstado = "activa"
@@ -115,7 +142,7 @@ type Contrato struct {
 	// Id Identificador único (UUID). Nunca un correlativo expuesto.
 	Id Id `json:"id"`
 
-	// Version Versión de la entidad, para revalidación barata de caché (E5-T4, misma brecha C6 que vehículos y custodios). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.6; el servicio la llena siempre. Se promoverá a requerida en una ola futura.
+	// Version Versión de la entidad, para revalidación barata de caché (E5-T4, misma brecha C6 que vehículos y custodios). OPCIONAL por evolución expand/contract: se agrega sin romper a los consumidores de tracer.6; el servicio la llena siempre.
 	Version *int `json:"version,omitempty"`
 
 	// VigenciaDesde Instante en UTC, RFC 3339.
@@ -125,7 +152,7 @@ type Contrato struct {
 	VigenciaHasta *time.Time `json:"vigencia_hasta"`
 }
 
-// ContratoCambios Cuerpo de modificación de un contrato (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id`, `version` ni `cliente_id` (reasignar de cliente no es una edición normal).
+// ContratoCambios Cuerpo de modificación de un contrato (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id`, `version` ni `cliente_id`.
 type ContratoCambios struct {
 	Descripcion *string `json:"descripcion,omitempty"`
 }
@@ -228,6 +255,13 @@ type PaginaCustodios struct {
 	Items           []Custodio `json:"items"`
 }
 
+// PaginaValoresCatalogo defines model for PaginaValoresCatalogo.
+type PaginaValoresCatalogo struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string         `json:"cursor_siguiente"`
+	Items           []ValorCatalogo `json:"items"`
+}
+
 // PaginaVehiculos defines model for PaginaVehiculos.
 type PaginaVehiculos struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
@@ -263,6 +297,50 @@ type SlaEntrada struct {
 	// Descripcion Compromiso informativo en V1 (DEC-022
 	Descripcion *string `json:"descripcion,omitempty"`
 }
+
+// TipoCatalogo Cuál de los catálogos de tipo de V1 se consulta o administra. Agregar una lista futura es un valor más de este enum, no una ruta nueva.
+type TipoCatalogo string
+
+// ValorCatalogo Un valor de un catálogo de tipo. Forma común a las cinco listas: código estable, etiqueta legible, estado administrativo y versión. Sin geometría (incluso para `zonas_riesgo`, que en V1 es solo lista de valores).
+type ValorCatalogo struct {
+	// Codigo Código estable del valor (máquina). No se traduce.
+	Codigo string `json:"codigo"`
+
+	// Estado Estado administrativo. Desactivar un valor (`inactivo`) no rompe los registros históricos que ya lo usaban (P8).
+	Estado ValorCatalogoEstado `json:"estado"`
+
+	// Etiqueta Etiqueta legible del valor (presentación).
+	Etiqueta string `json:"etiqueta"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// Version Versión del valor, para revalidación barata de caché (E5-T3). OPCIONAL por evolución expand/contract; el servicio la llena siempre.
+	Version *int `json:"version,omitempty"`
+}
+
+// ValorCatalogoEstado Estado administrativo. Desactivar un valor (`inactivo`) no rompe los registros históricos que ya lo usaban (P8).
+type ValorCatalogoEstado string
+
+// ValorCatalogoCambios Cuerpo de modificación de un valor de catálogo (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. Desactivar es enviar `estado: inactivo`. No incluye `id` ni `version` (los gobierna el servidor), ni el `tipo` (va en la ruta).
+type ValorCatalogoCambios struct {
+	Codigo   *string                     `json:"codigo,omitempty"`
+	Estado   *ValorCatalogoCambiosEstado `json:"estado,omitempty"`
+	Etiqueta *string                     `json:"etiqueta,omitempty"`
+}
+
+// ValorCatalogoCambiosEstado defines model for ValorCatalogoCambios.Estado.
+type ValorCatalogoCambiosEstado string
+
+// ValorCatalogoEntrada Cuerpo de alta de un valor de catálogo (POST). El servicio asigna id y versión. El `tipo` viaja en la ruta, no en el cuerpo.
+type ValorCatalogoEntrada struct {
+	Codigo   string                     `json:"codigo"`
+	Estado   ValorCatalogoEntradaEstado `json:"estado"`
+	Etiqueta string                     `json:"etiqueta"`
+}
+
+// ValorCatalogoEntradaEstado defines model for ValorCatalogoEntrada.Estado.
+type ValorCatalogoEntradaEstado string
 
 // Vehiculo Vehículo de la flota de AI27 (ÁTOMO de catalogos). La `unidad` (paquete vehículo + custodios) NO vive aquí: es roster de `operacion` (ADR 31 §5).
 type Vehiculo struct {
@@ -338,6 +416,11 @@ type Prohibido = Error
 // SolicitudInvalida defines model for SolicitudInvalida.
 type SolicitudInvalida = Error
 
+// ListarValoresCatalogoParams defines parameters for ListarValoresCatalogo.
+type ListarValoresCatalogoParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListarClientesParams defines parameters for ListarClientes.
 type ListarClientesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -392,6 +475,12 @@ type AptitudVehiculoParams struct {
 	// ClienteId Cliente para cuyo contrato/SLA se evalúa la aptitud.
 	ClienteId Id `form:"cliente_id" json:"cliente_id"`
 }
+
+// CrearValorCatalogoJSONRequestBody defines body for CrearValorCatalogo for application/json ContentType.
+type CrearValorCatalogoJSONRequestBody = ValorCatalogoEntrada
+
+// ActualizarValorCatalogoJSONRequestBody defines body for ActualizarValorCatalogo for application/json ContentType.
+type ActualizarValorCatalogoJSONRequestBody = ValorCatalogoCambios
 
 // CrearContratoJSONRequestBody defines body for CrearContrato for application/json ContentType.
 type CrearContratoJSONRequestBody = ContratoEntrada
@@ -490,6 +579,19 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// ListarValoresCatalogo request
+	ListarValoresCatalogo(ctx context.Context, tipo TipoCatalogo, params *ListarValoresCatalogoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CrearValorCatalogoWithBody request with any body
+	CrearValorCatalogoWithBody(ctx context.Context, tipo TipoCatalogo, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearValorCatalogo(ctx context.Context, tipo TipoCatalogo, body CrearValorCatalogoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActualizarValorCatalogoWithBody request with any body
+	ActualizarValorCatalogoWithBody(ctx context.Context, tipo TipoCatalogo, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ActualizarValorCatalogo(ctx context.Context, tipo TipoCatalogo, id Id, body ActualizarValorCatalogoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarClientes request
 	ListarClientes(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -559,6 +661,66 @@ type ClientInterface interface {
 
 	// AptitudVehiculo request
 	AptitudVehiculo(ctx context.Context, id Id, params *AptitudVehiculoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) ListarValoresCatalogo(ctx context.Context, tipo TipoCatalogo, params *ListarValoresCatalogoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarValoresCatalogoRequest(c.Server, tipo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearValorCatalogoWithBody(ctx context.Context, tipo TipoCatalogo, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearValorCatalogoRequestWithBody(c.Server, tipo, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearValorCatalogo(ctx context.Context, tipo TipoCatalogo, body CrearValorCatalogoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearValorCatalogoRequest(c.Server, tipo, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarValorCatalogoWithBody(ctx context.Context, tipo TipoCatalogo, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarValorCatalogoRequestWithBody(c.Server, tipo, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarValorCatalogo(ctx context.Context, tipo TipoCatalogo, id Id, body ActualizarValorCatalogoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarValorCatalogoRequest(c.Server, tipo, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) ListarClientes(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -871,6 +1033,163 @@ func (c *Client) AptitudVehiculo(ctx context.Context, id Id, params *AptitudVehi
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewListarValoresCatalogoRequest generates requests for ListarValoresCatalogo
+func NewListarValoresCatalogoRequest(server string, tipo TipoCatalogo, params *ListarValoresCatalogoParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "tipo", runtime.ParamLocationPath, tipo)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalogos-tipo/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCrearValorCatalogoRequest calls the generic CrearValorCatalogo builder with application/json body
+func NewCrearValorCatalogoRequest(server string, tipo TipoCatalogo, body CrearValorCatalogoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearValorCatalogoRequestWithBody(server, tipo, "application/json", bodyReader)
+}
+
+// NewCrearValorCatalogoRequestWithBody generates requests for CrearValorCatalogo with any type of body
+func NewCrearValorCatalogoRequestWithBody(server string, tipo TipoCatalogo, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "tipo", runtime.ParamLocationPath, tipo)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalogos-tipo/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewActualizarValorCatalogoRequest calls the generic ActualizarValorCatalogo builder with application/json body
+func NewActualizarValorCatalogoRequest(server string, tipo TipoCatalogo, id Id, body ActualizarValorCatalogoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewActualizarValorCatalogoRequestWithBody(server, tipo, id, "application/json", bodyReader)
+}
+
+// NewActualizarValorCatalogoRequestWithBody generates requests for ActualizarValorCatalogo with any type of body
+func NewActualizarValorCatalogoRequestWithBody(server string, tipo TipoCatalogo, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "tipo", runtime.ParamLocationPath, tipo)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalogos-tipo/%s/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
 }
 
 // NewListarClientesRequest generates requests for ListarClientes
@@ -1805,6 +2124,19 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// ListarValoresCatalogoWithResponse request
+	ListarValoresCatalogoWithResponse(ctx context.Context, tipo TipoCatalogo, params *ListarValoresCatalogoParams, reqEditors ...RequestEditorFn) (*ListarValoresCatalogoResponse, error)
+
+	// CrearValorCatalogoWithBodyWithResponse request with any body
+	CrearValorCatalogoWithBodyWithResponse(ctx context.Context, tipo TipoCatalogo, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearValorCatalogoResponse, error)
+
+	CrearValorCatalogoWithResponse(ctx context.Context, tipo TipoCatalogo, body CrearValorCatalogoJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearValorCatalogoResponse, error)
+
+	// ActualizarValorCatalogoWithBodyWithResponse request with any body
+	ActualizarValorCatalogoWithBodyWithResponse(ctx context.Context, tipo TipoCatalogo, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarValorCatalogoResponse, error)
+
+	ActualizarValorCatalogoWithResponse(ctx context.Context, tipo TipoCatalogo, id Id, body ActualizarValorCatalogoJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarValorCatalogoResponse, error)
+
 	// ListarClientesWithResponse request
 	ListarClientesWithResponse(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*ListarClientesResponse, error)
 
@@ -1874,6 +2206,85 @@ type ClientWithResponsesInterface interface {
 
 	// AptitudVehiculoWithResponse request
 	AptitudVehiculoWithResponse(ctx context.Context, id Id, params *AptitudVehiculoParams, reqEditors ...RequestEditorFn) (*AptitudVehiculoResponse, error)
+}
+
+type ListarValoresCatalogoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaValoresCatalogo
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarValoresCatalogoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarValoresCatalogoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearValorCatalogoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *ValorCatalogo
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearValorCatalogoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearValorCatalogoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ActualizarValorCatalogoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ValorCatalogo
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r ActualizarValorCatalogoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActualizarValorCatalogoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type ListarClientesResponse struct {
@@ -2326,6 +2737,49 @@ func (r AptitudVehiculoResponse) StatusCode() int {
 	return 0
 }
 
+// ListarValoresCatalogoWithResponse request returning *ListarValoresCatalogoResponse
+func (c *ClientWithResponses) ListarValoresCatalogoWithResponse(ctx context.Context, tipo TipoCatalogo, params *ListarValoresCatalogoParams, reqEditors ...RequestEditorFn) (*ListarValoresCatalogoResponse, error) {
+	rsp, err := c.ListarValoresCatalogo(ctx, tipo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarValoresCatalogoResponse(rsp)
+}
+
+// CrearValorCatalogoWithBodyWithResponse request with arbitrary body returning *CrearValorCatalogoResponse
+func (c *ClientWithResponses) CrearValorCatalogoWithBodyWithResponse(ctx context.Context, tipo TipoCatalogo, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearValorCatalogoResponse, error) {
+	rsp, err := c.CrearValorCatalogoWithBody(ctx, tipo, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearValorCatalogoResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearValorCatalogoWithResponse(ctx context.Context, tipo TipoCatalogo, body CrearValorCatalogoJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearValorCatalogoResponse, error) {
+	rsp, err := c.CrearValorCatalogo(ctx, tipo, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearValorCatalogoResponse(rsp)
+}
+
+// ActualizarValorCatalogoWithBodyWithResponse request with arbitrary body returning *ActualizarValorCatalogoResponse
+func (c *ClientWithResponses) ActualizarValorCatalogoWithBodyWithResponse(ctx context.Context, tipo TipoCatalogo, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarValorCatalogoResponse, error) {
+	rsp, err := c.ActualizarValorCatalogoWithBody(ctx, tipo, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarValorCatalogoResponse(rsp)
+}
+
+func (c *ClientWithResponses) ActualizarValorCatalogoWithResponse(ctx context.Context, tipo TipoCatalogo, id Id, body ActualizarValorCatalogoJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarValorCatalogoResponse, error) {
+	rsp, err := c.ActualizarValorCatalogo(ctx, tipo, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarValorCatalogoResponse(rsp)
+}
+
 // ListarClientesWithResponse request returning *ListarClientesResponse
 func (c *ClientWithResponses) ListarClientesWithResponse(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*ListarClientesResponse, error) {
 	rsp, err := c.ListarClientes(ctx, params, reqEditors...)
@@ -2550,6 +3004,175 @@ func (c *ClientWithResponses) AptitudVehiculoWithResponse(ctx context.Context, i
 		return nil, err
 	}
 	return ParseAptitudVehiculoResponse(rsp)
+}
+
+// ParseListarValoresCatalogoResponse parses an HTTP response from a ListarValoresCatalogoWithResponse call
+func ParseListarValoresCatalogoResponse(rsp *http.Response) (*ListarValoresCatalogoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarValoresCatalogoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaValoresCatalogo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearValorCatalogoResponse parses an HTTP response from a CrearValorCatalogoWithResponse call
+func ParseCrearValorCatalogoResponse(rsp *http.Response) (*CrearValorCatalogoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearValorCatalogoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ValorCatalogo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActualizarValorCatalogoResponse parses an HTTP response from a ActualizarValorCatalogoWithResponse call
+func ParseActualizarValorCatalogoResponse(rsp *http.Response) (*ActualizarValorCatalogoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActualizarValorCatalogoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ValorCatalogo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseListarClientesResponse parses an HTTP response from a ListarClientesWithResponse call
