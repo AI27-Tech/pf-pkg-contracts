@@ -30,7 +30,7 @@ BUNDLE_DIR="$(mktemp -d)"
 trap 'rm -rf "$BUNDLE_DIR"' EXIT
 
 # Servicios del tracer (un spec por servicio). `_comunes.yaml` no es servicio.
-SERVICIOS=(identidad catalogos operacion bff reportes)
+SERVICIOS=(identidad catalogos operacion bff reportes mensajeria)
 
 echo "==> 1/5  Estados (fuente única -> Go + TS)"
 ( cd tools/gen-estados && go run . \

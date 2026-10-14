@@ -1,0 +1,38 @@
+// Sobre del tema RESTRINGIDO para entrega viva (ADR 28 §4; Addendum §9).
+// Ola contractual 2, `tracer.7`.
+//
+// Es una envoltura aparte de `Sobre`, no un campo más de él: el tema amplio
+// conserva su sobre sin audiencia ni cursores, y solo los deltas vivos de
+// `mensajeria` llevan esta capa. Igual que `Sobre`, no es un tipo de evento y
+// no aparece en el registro.
+//
+// `mensajeria` produce todo lo de aquí. `realtime` añade su propia capa de
+// transporte (`stream_id`, `epoch`, `seq`) y NO la mezcla con estos campos.
+syntax = "proto3";
+
+package ai27.eventos.v1;
+
+import "ai27/eventos/v1/sobre.proto";
+
+option go_package = "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1;eventosv1";
+
+message SobreVivo {
+  // Metadatos comunes del evento (tipo, versión, agregado, sensibilidad
+  // RESTRINGIDA).
+  Sobre sobre = 1;
+
+  // Cursor o revisión de DOMINIO del agregado tras este cambio (p. ej. la
+  // secuencia de mensaje de la conversación). Opaco para `realtime`; el cliente
+  // lo compara con el cursor de su bootstrap (ADR 28 §2–§3). Nunca es un `seq`
+  // de transporte.
+  string cursor_dominio = 2;
+
+  // Versión de la audiencia con la que se calcularon los destinatarios. Una
+  // invalidación posterior (revocación, pérdida de alcance, remoción de
+  // membresía, reenrutamiento) prevalece sobre esta versión.
+  int64 audience_version = 3;
+
+  // Sujetos destino explícitos. `realtime` no consulta membresía ni inventa
+  // destinatarios: solo reparte a estos sujetos si siguen vigentes.
+  repeated string target_sujeto_ids = 4;
+}
