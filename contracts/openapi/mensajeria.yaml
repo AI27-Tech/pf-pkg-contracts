@@ -1,0 +1,629 @@
+# =============================================================================
+# contracts/openapi/mensajeria.yaml
+# -----------------------------------------------------------------------------
+# Superficie HTTP interna de `mensajeria` (ola contractual 2, `tracer.7`).
+# Fuente: docs/arquitectura/services/mensajeria.md (f) y el Addendum de
+# conversación de negocio y bandeja compartida (§4–§8). Lo consume `bff`, nunca
+# el navegador directo.
+#
+# La conversación es entre el cliente y una BANDEJA COMPARTIDA de AI27 atendida
+# por un pool, no entre el cliente y un operador nombrado. Solo el responsable
+# con reclamo activo responde normalmente (Addendum §4).
+#
+# FUERA de esta ola (tracer.8): las capacidades de bootstrap y catch-up de la
+# colección de bandeja y del caso de emergencia (ADR 28, rutas aún sin congelar
+# en la arquitectura) y toda la familia de emergencia (ADR 21, DEC-034).
+# Plantillas de notificación no se publican: V1 no notifica al cliente (DEC-023).
+#
+# Cursores (ADR 28): la recuperación durable de una conversación es
+# `listarMensajes?despues_de=<secuencia>`, y el estado inicial lleva
+# `ultima_secuencia`. La secuencia de mensaje es por conversación; no existe
+# secuencia global de `mensajeria` ni se confunde con el `seq` de transporte.
+# =============================================================================
+openapi: 3.0.3
+info:
+  title: AI27 — mensajeria
+  version: 0.1.0-tracer.7
+  description: >-
+    Conversación de negocio entre el cliente y la bandeja compartida de AI27:
+    enrutamiento, reclamo versionado, orden canónico de mensajes, recibos,
+    atención, adjuntos y auditoría. Consumido por `bff`.
+  x-ai27-servicio: mensajeria
+  x-ai27-capa: soporte
+  x-ai27-tracer: false
+
+servers:
+- url: /
+  description: Ruta base montada por el despliegue; los paths incluyen /api/v1.
+
+security:
+- bearerCognito: []
+
+tags:
+- name: bandejas
+- name: conversaciones
+- name: mensajes
+- name: reclamos
+- name: adjuntos
+- name: auditoria
+
+paths:
+  /api/v1/bandejas/{id}/trabajo:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    get:
+      operationId: listarTrabajoBandeja
+      tags: [bandejas]
+      summary: Listar el trabajo de una bandeja.
+      description: >-
+        Requiere MEMBRESÍA EFECTIVA en el pool de la bandeja; el rol
+        `ejecutivo` por sí solo no concede acceso a todas las bandejas
+        (Addendum §7).
+      parameters:
+      - {$ref: "#/components/parameters/CursorPagina"}
+      responses:
+        "200":
+          description: Página de conversaciones enrutadas a la bandeja.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaConversaciones"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/conversaciones:
+    get:
+      operationId: listarConversaciones
+      tags: [conversaciones]
+      summary: Listar conversaciones por alcance del llamante.
+      description: >-
+        Para el cliente, las de su tenant con acceso efectivo; para audiencia
+        interna, las de su alcance por `cliente` (DEC-045 #8).
+      parameters:
+      - {$ref: "#/components/parameters/CursorPagina"}
+      responses:
+        "200":
+          description: Página de conversaciones.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaConversaciones"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+
+  /api/v1/conversaciones/{id}:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    get:
+      operationId: obtenerConversacion
+      tags: [conversaciones]
+      summary: Detalle de una conversación (estado inicial para bootstrap).
+      description: >-
+        Poseer el UUID no autoriza (Addendum §7): sin acceso efectivo responde
+        404, igual que si no existiera. `ultima_secuencia` es el cursor de
+        dominio del bootstrap (ADR 28 §2).
+      responses:
+        "200":
+          description: Conversación.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Conversacion"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/conversaciones/{id}/mensajes:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    get:
+      operationId: listarMensajes
+      tags: [mensajes]
+      summary: Historia de mensajes por secuencia canónica.
+      description: >-
+        `antes_de` pagina la historia hacia atrás; `despues_de` es la
+        recuperación tras reconexión y cierra huecos (Addendum §9). Son
+        mutuamente excluyentes; sin ninguno, devuelve los más recientes. El
+        orden es siempre por `secuencia`, nunca por `creado_en`.
+      parameters:
+      - name: antes_de
+        in: query
+        required: false
+        description: Devuelve mensajes con secuencia menor a este valor.
+        schema: {$ref: "#/components/schemas/SecuenciaMensaje"}
+      - name: despues_de
+        in: query
+        required: false
+        description: Devuelve mensajes con secuencia mayor a este valor.
+        schema: {$ref: "#/components/schemas/SecuenciaMensaje"}
+      - name: limite
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+      responses:
+        "200":
+          description: Mensajes en orden ascendente de secuencia.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaMensajes"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    post:
+      operationId: enviarMensaje
+      tags: [mensajes]
+      summary: Enviar un mensaje (idempotente por client_message_id).
+      description: >-
+        El cliente puede enviar mientras la conversación admita escritura. Un
+        interno requiere RECLAMO ACTIVO y `version_reclamo_esperada`, salvo
+        override explícito de supervisor con `motivo_override` (Addendum §7).
+        Reintentar el mismo `client_message_id` devuelve el mensaje original
+        con 200 y nunca crea un segundo mensaje.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EnviarMensajeEntrada"}
+      responses:
+        "201":
+          description: Mensaje creado.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Mensaje"}
+        "200":
+          description: Reintento idempotente; mensaje original.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Mensaje"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            `codigo` de máquina `conflicto_version_reclamo` (otro reclamo ganó
+            o la versión cambió) o `conversacion_solo_lectura` (venció
+            `escritura_hasta`, DEC-030/DEC-041).
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/conversaciones/{id}/reclamos:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    post:
+      operationId: reclamarConversacion
+      tags: [reclamos]
+      summary: Reclamar la conversación con versión esperada.
+      description: >-
+        Dos reclamos concurrentes producen un ganador; el perdedor recibe 409
+        `conflicto_version_reclamo` (Addendum §4 punto 5).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/VersionEsperadaEntrada"}
+      responses:
+        "201":
+          description: Reclamo abierto.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Reclamo"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/conversaciones/{id}/reclamos/{rid}:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    - name: rid
+      in: path
+      required: true
+      description: Identificador del reclamo.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    delete:
+      operationId: liberarReclamo
+      tags: [reclamos]
+      summary: Liberar el reclamo y devolver el trabajo al pool.
+      description: Lo hace el responsable o un supervisor dentro de su alcance.
+      parameters:
+      - name: version_esperada
+        in: query
+        required: true
+        schema: {$ref: "#/components/schemas/VersionReclamo"}
+      responses:
+        "204": {description: Reclamo liberado.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/conversaciones/{id}/transferencias:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    post:
+      operationId: transferirConversacion
+      tags: [reclamos]
+      summary: Transferir la responsabilidad a otro miembro del pool.
+      description: >-
+        Cierra el reclamo anterior y abre el siguiente en UNA transacción: no
+        hay ventana sin responsable ni con dos (Addendum §6).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TransferenciaEntrada"}
+      responses:
+        "201":
+          description: Reclamo nuevo del responsable destino.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Reclamo"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/conversaciones/{id}/recibos/entregado:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    post:
+      operationId: registrarReciboEntregado
+      tags: [mensajes]
+      summary: Avanzar el cursor de entrega del llamante.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ReciboEntrada"}
+      responses:
+        "204": {description: Cursor avanzado (o sin cambio si ya estaba más adelante).}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/conversaciones/{id}/recibos/leido:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    post:
+      operationId: registrarReciboLeido
+      tags: [mensajes]
+      summary: Avanzar el cursor de lectura del llamante.
+      description: >-
+        Una vista incidental de un miembro no responsable no genera un "leído"
+        visible al cliente (Addendum §8).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ReciboEntrada"}
+      responses:
+        "204": {description: Cursor avanzado (o sin cambio si ya estaba más adelante).}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/conversaciones/{id}/atendida:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    post:
+      operationId: marcarAtendida
+      tags: [reclamos]
+      summary: Marcar la conversación como atendida por el responsable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/VersionEsperadaEntrada"}
+      responses:
+        "204": {description: Conversación atendida.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/conversaciones/{id}/adjuntos/intenciones-subida:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    post:
+      operationId: crearIntencionSubida
+      tags: [adjuntos]
+      summary: Intención de subida de un adjunto con autorización de vida corta.
+      description: >-
+        Los bytes no pasan por el servicio: van al almacenamiento de objetos
+        con la URL devuelta. La clave del objeto queda alcanzada por tenant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/IntencionSubidaEntrada"}
+      responses:
+        "201":
+          description: Intención creada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/IntencionSubida"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/auditoria/conversaciones/{id}:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    get:
+      operationId: listarAuditoriaConversacion
+      tags: [auditoria]
+      summary: Auditoría inmutable de una conversación.
+      description: Solo `administrador` (DEC-036; el rol Auditor no existe en V1).
+      parameters:
+      - {$ref: "#/components/parameters/CursorPagina"}
+      responses:
+        "200":
+          description: Página de registros de auditoría.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaAuditoria"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+components:
+  parameters:
+    IdRuta:
+      name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    CursorPagina:
+      name: cursor
+      in: query
+      required: false
+      description: Cursor de paginación. No es el cursor de cambios de ADR 28.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+
+  responses:
+    ConflictoVersion:
+      description: >-
+        La versión esperada del reclamo no coincide con la vigente. `codigo` de
+        máquina `conflicto_version_reclamo`.
+      content:
+        application/json:
+          schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  schemas:
+    SecuenciaMensaje:
+      type: integer
+      format: int64
+      minimum: 0
+      description: >-
+        Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una
+        versión de reclamo ni el `seq` de transporte de `realtime`.
+
+    VersionReclamo:
+      type: integer
+      format: int64
+      minimum: 0
+      description: >-
+        Versión del reclamo de la conversación (concurrencia optimista). 0 si
+        nunca se ha reclamado. No es una secuencia de mensaje.
+
+    Audiencia:
+      type: string
+      description: Audiencia de dominio del autor (DEC-054), no el claim `aud`.
+      enum: [Cliente, Interno]
+
+    EstadoConversacion:
+      type: string
+      description: >-
+        Ciclo de vida, separado del estado operativo de cola (Addendum §6).
+        `solo_lectura` tras vencer `escritura_hasta` (DEC-030, DEC-041).
+      enum: [abierta, solo_lectura, cerrada]
+
+    Conversacion:
+      type: object
+      additionalProperties: false
+      required: [id, viaje_id, cliente_id, estado, ultima_secuencia, version_reclamo, abierta_en]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        bandeja_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Bandeja de la ruta activa. Solo para audiencia Interno.
+        estado: {$ref: "#/components/schemas/EstadoConversacion"}
+        escritura_hasta:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fin de la ventana de escritura. No es fecha de purga.
+        ultima_secuencia: {$ref: "#/components/schemas/SecuenciaMensaje"}
+        version_reclamo: {$ref: "#/components/schemas/VersionReclamo"}
+        reclamo_activo:
+          allOf: [$ref: "#/components/schemas/Reclamo"]
+          nullable: true
+          description: Reclamo vigente. Solo para audiencia Interno; null si está en el pool.
+        atendida_en:
+          type: string
+          format: date-time
+          nullable: true
+        abierta_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    PaginaConversaciones:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Conversacion"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no hay más.
+
+    Mensaje:
+      type: object
+      additionalProperties: false
+      required: [id, conversacion_id, secuencia, client_message_id, audiencia_autor, alias_mostrado, cuerpo, creado_en]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        conversacion_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        secuencia: {$ref: "#/components/schemas/SecuenciaMensaje"}
+        client_message_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        audiencia_autor: {$ref: "#/components/schemas/Audiencia"}
+        alias_mostrado:
+          type: string
+          description: Identidad presentada (comercial de AI27 para el cliente).
+        actor_real:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Sujeto que escribió. Siempre se registra (Addendum §4 punto 9),
+            pero solo se entrega a audiencia Interno.
+        rol_al_enviar:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Rol"]
+          nullable: true
+          description: Rol del autor al enviar. Solo para audiencia Interno.
+        cuerpo:
+          type: string
+          description: Cuerpo del mensaje. Sin edición ni borrado en V1.
+        adjuntos_ids:
+          type: array
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        creado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    PaginaMensajes:
+      type: object
+      additionalProperties: false
+      required: [items, hay_mas]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Mensaje"}
+        hay_mas:
+          type: boolean
+          description: true si hay más mensajes en la dirección pedida.
+
+    EnviarMensajeEntrada:
+      type: object
+      additionalProperties: false
+      required: [client_message_id, cuerpo]
+      properties:
+        client_message_id:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
+          description: Generado por el cliente; clave de idempotencia del envío.
+        cuerpo:
+          type: string
+          minLength: 1
+        adjuntos_ids:
+          type: array
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version_reclamo_esperada:
+          allOf: [$ref: "#/components/schemas/VersionReclamo"]
+          description: Obligatoria para audiencia Interno.
+        motivo_override:
+          type: string
+          minLength: 1
+          description: >-
+            Override explícito de supervisor; se audita con este motivo. Ausente
+            en el envío normal.
+
+    Reclamo:
+      type: object
+      additionalProperties: false
+      required: [id, conversacion_id, responsable_id, version, abierto_en]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        conversacion_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        responsable_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version: {$ref: "#/components/schemas/VersionReclamo"}
+        abierto_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        cerrado_en:
+          type: string
+          format: date-time
+          nullable: true
+
+    VersionEsperadaEntrada:
+      type: object
+      additionalProperties: false
+      required: [version_esperada]
+      properties:
+        version_esperada: {$ref: "#/components/schemas/VersionReclamo"}
+
+    TransferenciaEntrada:
+      type: object
+      additionalProperties: false
+      required: [version_esperada, responsable_destino_id]
+      properties:
+        version_esperada: {$ref: "#/components/schemas/VersionReclamo"}
+        responsable_destino_id:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
+          description: Miembro del pool con membresía efectiva en la bandeja.
+        motivo:
+          type: string
+
+    ReciboEntrada:
+      type: object
+      additionalProperties: false
+      required: [hasta_secuencia]
+      properties:
+        hasta_secuencia: {$ref: "#/components/schemas/SecuenciaMensaje"}
+
+    IntencionSubidaEntrada:
+      type: object
+      additionalProperties: false
+      required: [tipo_medio, tamano_bytes, checksum_sha256]
+      properties:
+        tipo_medio:
+          type: string
+          description: Tipo MIME declarado.
+        tamano_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        checksum_sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+
+    IntencionSubida:
+      type: object
+      additionalProperties: false
+      required: [adjunto_id, url_subida, expira_en]
+      properties:
+        adjunto_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        url_subida:
+          type: string
+          format: uri
+          description: URL de vida corta del almacenamiento de objetos.
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    RegistroAuditoria:
+      type: object
+      additionalProperties: false
+      required: [id, conversacion_id, accion, actor_real, ocurrido_en]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        conversacion_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        accion:
+          type: string
+          description: >-
+            Código de máquina de la acción auditada (Addendum §11). El catálogo
+            de códigos no es contrato todavía.
+        actor_real: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        motivo:
+          type: string
+          nullable: true
+        ocurrido_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    PaginaAuditoria:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/RegistroAuditoria"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no hay más.

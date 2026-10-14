@@ -22,7 +22,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — catalogos
-  version: 0.1.0-tracer.6
+  version: 0.1.0-tracer.7
   description: Registro maestro. Lectura para el tracer y afirmación de aptitud.
   x-ai27-servicio: catalogos
   x-ai27-capa: catalogo
@@ -52,17 +52,34 @@ paths:
       operationId: listarClientes
       tags: [clientes]
       summary: Listar clientes (expediente comercial), por alcance interno.
+      description: >-
+        Sin `ids`, devuelve una página paginada por cursor. Con `ids`, devuelve
+        la LECTURA POR LOTE de esos clientes (consumidor: `mensajeria`, con
+        caché invalidada por `catalogo.actualizado`). `ids` y `cursor` son
+        mutuamente excluyentes: con `ids`, `cursor_siguiente` es null.
       parameters:
       - name: cursor
         in: query
         required: false
         schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      - name: ids
+        in: query
+        required: false
+        description: >-
+          Lista de identificadores separados por coma para la lectura por lote.
+          Mutuamente excluyente con `cursor`.
+        style: form
+        explode: false
+        schema:
+          type: array
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
       responses:
         "200":
-          description: Página de clientes.
+          description: Página de clientes (o el lote solicitado).
           content:
             application/json:
               schema: {$ref: "#/components/schemas/PaginaClientes"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
