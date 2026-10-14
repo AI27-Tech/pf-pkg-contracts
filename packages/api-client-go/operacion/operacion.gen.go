@@ -41,6 +41,13 @@ const (
 	SINSENAL   CondicionViaje = "SIN_SENAL"
 )
 
+// Defines values for EjeAutorizacionEstadia.
+const (
+	Antes200km   EjeAutorizacionEstadia = "antes_200km"
+	Autorizada   EjeAutorizacionEstadia = "autorizada"
+	NoAutorizada EjeAutorizacionEstadia = "no_autorizada"
+)
+
 // Defines values for EstadoViaje.
 const (
 	APROBADO            EstadoViaje = "APROBADO"
@@ -62,6 +69,18 @@ const (
 const (
 	EnAtencion IncidenciaEstado = "en_atencion"
 	Resuelta   IncidenciaEstado = "resuelta"
+)
+
+// Defines values for MotivoEstadia.
+const (
+	Alimentos           MotivoEstadia = "alimentos"
+	Combustible         MotivoEstadia = "combustible"
+	Descanso            MotivoEstadia = "descanso"
+	EsperaEntrega       MotivoEstadia = "espera_entrega"
+	Gastos              MotivoEstadia = "gastos"
+	Reten               MotivoEstadia = "reten"
+	RevisionAutoridades MotivoEstadia = "revision_autoridades"
+	Sanitario           MotivoEstadia = "sanitario"
 )
 
 // Defines values for UnidadTipo.
@@ -105,6 +124,9 @@ type AsignacionEntrada struct {
 	// UnidadesIds Identificadores de las unidades del roster que forman la escolta.
 	UnidadesIds []Id `json:"unidades_ids"`
 }
+
+// CierreEstadiaEntrada Cuerpo de cierre de una estadía (PATCH). Sin campos obligatorios: el servidor fija `cierre` al momento del registro. Cuerpo vacío válido.
+type CierreEstadiaEntrada = map[string]interface{}
 
 // CondicionAbierta defines model for CondicionAbierta.
 type CondicionAbierta struct {
@@ -150,6 +172,9 @@ type Destino struct {
 	NumeroEnvio *string `json:"numero_envio,omitempty"`
 }
 
+// EjeAutorizacionEstadia Eje de autorización de la estadía (E1-HU-008).
+type EjeAutorizacionEstadia string
+
 // EntradaBitacora defines model for EntradaBitacora.
 type EntradaBitacora struct {
 	Autor string `json:"autor"`
@@ -183,6 +208,36 @@ type Error struct {
 
 	// Mensaje Descripción legible para diagnóstico. No es contrato de UI.
 	Mensaje string `json:"mensaje"`
+}
+
+// Estadia Estadía del viaje. La DURACIÓN NO es un campo: se deriva de `inicio` y `cierre` en la lectura (DEC-038). No existe `prolongada` ni umbral en V1.
+type Estadia struct {
+	// Cierre Cierre de la estadía, o null si sigue abierta. Mismo formato que `MarcaTiempo`. La duración se deriva de `inicio` y este valor.
+	Cierre *time.Time `json:"cierre"`
+
+	// EjeAutorizacion Eje de autorización de la estadía (E1-HU-008).
+	EjeAutorizacion EjeAutorizacionEstadia `json:"eje_autorizacion"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// Inicio Instante en UTC, RFC 3339.
+	Inicio MarcaTiempo `json:"inicio"`
+
+	// Motivo Motivo de la estadía (parada). Lista cerrada de V1; se amplía por ola aditiva si el negocio lo decide.
+	Motivo MotivoEstadia `json:"motivo"`
+
+	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.
+	ViajeId Id `json:"viaje_id"`
+}
+
+// EstadiaEntrada Cuerpo de apertura de una estadía (POST). El servicio asigna id y fija `inicio` al momento del registro.
+type EstadiaEntrada struct {
+	// EjeAutorizacion Eje de autorización de la estadía (E1-HU-008).
+	EjeAutorizacion EjeAutorizacionEstadia `json:"eje_autorizacion"`
+
+	// Motivo Motivo de la estadía (parada). Lista cerrada de V1; se amplía por ola aditiva si el negocio lo decide.
+	Motivo MotivoEstadia `json:"motivo"`
 }
 
 // EstadoViaje Estado de progreso del viaje. Espejo del enum canónico de `contracts/estados/` (ADR 19). Incluye estados V2 declarados e inalcanzables en V1 (PATRULLA_EN_CAMINO).
@@ -228,6 +283,9 @@ type IncidenciaEntrada struct {
 // MarcaTiempo Instante en UTC, RFC 3339.
 type MarcaTiempo = time.Time
 
+// MotivoEstadia Motivo de la estadía (parada). Lista cerrada de V1; se amplía por ola aditiva si el negocio lo decide.
+type MotivoEstadia string
+
 // PaginaAuditoria defines model for PaginaAuditoria.
 type PaginaAuditoria struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
@@ -240,6 +298,13 @@ type PaginaBitacora struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
 	CursorSiguiente *string           `json:"cursor_siguiente"`
 	Items           []EntradaBitacora `json:"items"`
+}
+
+// PaginaEstadias defines model for PaginaEstadias.
+type PaginaEstadias struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string   `json:"cursor_siguiente"`
+	Items           []Estadia `json:"items"`
 }
 
 // PaginaUnidades defines model for PaginaUnidades.
@@ -409,6 +474,11 @@ type ListarBitacoraParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListarEstadiasParams defines parameters for ListarEstadias.
+type ListarEstadiasParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // CrearUnidadJSONRequestBody defines body for CrearUnidad for application/json ContentType.
 type CrearUnidadJSONRequestBody = UnidadEntrada
 
@@ -426,6 +496,12 @@ type AsignarRecursosJSONRequestBody = AsignacionEntrada
 
 // RegistrarEntradaBitacoraJSONRequestBody defines body for RegistrarEntradaBitacora for application/json ContentType.
 type RegistrarEntradaBitacoraJSONRequestBody = EntradaBitacoraEntrada
+
+// AbrirEstadiaJSONRequestBody defines body for AbrirEstadia for application/json ContentType.
+type AbrirEstadiaJSONRequestBody = EstadiaEntrada
+
+// CerrarEstadiaJSONRequestBody defines body for CerrarEstadia for application/json ContentType.
+type CerrarEstadiaJSONRequestBody = CierreEstadiaEntrada
 
 // FijarEtaJSONRequestBody defines body for FijarEta for application/json ContentType.
 type FijarEtaJSONRequestBody = EtaEntrada
@@ -559,6 +635,19 @@ type ClientInterface interface {
 	RegistrarEntradaBitacoraWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	RegistrarEntradaBitacora(ctx context.Context, id Id, body RegistrarEntradaBitacoraJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListarEstadias request
+	ListarEstadias(ctx context.Context, id Id, params *ListarEstadiasParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AbrirEstadiaWithBody request with any body
+	AbrirEstadiaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AbrirEstadia(ctx context.Context, id Id, body AbrirEstadiaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CerrarEstadiaWithBody request with any body
+	CerrarEstadiaWithBody(ctx context.Context, id Id, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CerrarEstadia(ctx context.Context, id Id, eid Id, body CerrarEstadiaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// FijarEtaWithBody request with any body
 	FijarEtaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -787,6 +876,66 @@ func (c *Client) RegistrarEntradaBitacoraWithBody(ctx context.Context, id Id, co
 
 func (c *Client) RegistrarEntradaBitacora(ctx context.Context, id Id, body RegistrarEntradaBitacoraJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRegistrarEntradaBitacoraRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarEstadias(ctx context.Context, id Id, params *ListarEstadiasParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarEstadiasRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AbrirEstadiaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAbrirEstadiaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AbrirEstadia(ctx context.Context, id Id, body AbrirEstadiaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAbrirEstadiaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CerrarEstadiaWithBody(ctx context.Context, id Id, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCerrarEstadiaRequestWithBody(c.Server, id, eid, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CerrarEstadia(ctx context.Context, id Id, eid Id, body CerrarEstadiaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCerrarEstadiaRequest(c.Server, id, eid, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1455,6 +1604,163 @@ func NewRegistrarEntradaBitacoraRequestWithBody(server string, id Id, contentTyp
 	return req, nil
 }
 
+// NewListarEstadiasRequest generates requests for ListarEstadias
+func NewListarEstadiasRequest(server string, id Id, params *ListarEstadiasParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/estadias", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAbrirEstadiaRequest calls the generic AbrirEstadia builder with application/json body
+func NewAbrirEstadiaRequest(server string, id Id, body AbrirEstadiaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAbrirEstadiaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewAbrirEstadiaRequestWithBody generates requests for AbrirEstadia with any type of body
+func NewAbrirEstadiaRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/estadias", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewCerrarEstadiaRequest calls the generic CerrarEstadia builder with application/json body
+func NewCerrarEstadiaRequest(server string, id Id, eid Id, body CerrarEstadiaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCerrarEstadiaRequestWithBody(server, id, eid, "application/json", bodyReader)
+}
+
+// NewCerrarEstadiaRequestWithBody generates requests for CerrarEstadia with any type of body
+func NewCerrarEstadiaRequestWithBody(server string, id Id, eid Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "eid", runtime.ParamLocationPath, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/estadias/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewFijarEtaRequest calls the generic FijarEta builder with application/json body
 func NewFijarEtaRequest(server string, id Id, body FijarEtaJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1740,6 +2046,19 @@ type ClientWithResponsesInterface interface {
 	RegistrarEntradaBitacoraWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RegistrarEntradaBitacoraResponse, error)
 
 	RegistrarEntradaBitacoraWithResponse(ctx context.Context, id Id, body RegistrarEntradaBitacoraJSONRequestBody, reqEditors ...RequestEditorFn) (*RegistrarEntradaBitacoraResponse, error)
+
+	// ListarEstadiasWithResponse request
+	ListarEstadiasWithResponse(ctx context.Context, id Id, params *ListarEstadiasParams, reqEditors ...RequestEditorFn) (*ListarEstadiasResponse, error)
+
+	// AbrirEstadiaWithBodyWithResponse request with any body
+	AbrirEstadiaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AbrirEstadiaResponse, error)
+
+	AbrirEstadiaWithResponse(ctx context.Context, id Id, body AbrirEstadiaJSONRequestBody, reqEditors ...RequestEditorFn) (*AbrirEstadiaResponse, error)
+
+	// CerrarEstadiaWithBodyWithResponse request with any body
+	CerrarEstadiaWithBodyWithResponse(ctx context.Context, id Id, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CerrarEstadiaResponse, error)
+
+	CerrarEstadiaWithResponse(ctx context.Context, id Id, eid Id, body CerrarEstadiaJSONRequestBody, reqEditors ...RequestEditorFn) (*CerrarEstadiaResponse, error)
 
 	// FijarEtaWithBodyWithResponse request with any body
 	FijarEtaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarEtaResponse, error)
@@ -2059,6 +2378,82 @@ func (r RegistrarEntradaBitacoraResponse) StatusCode() int {
 	return 0
 }
 
+type ListarEstadiasResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaEstadias
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarEstadiasResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarEstadiasResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AbrirEstadiaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Estadia
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r AbrirEstadiaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AbrirEstadiaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CerrarEstadiaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Estadia
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r CerrarEstadiaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CerrarEstadiaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type FijarEtaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2317,6 +2712,49 @@ func (c *ClientWithResponses) RegistrarEntradaBitacoraWithResponse(ctx context.C
 		return nil, err
 	}
 	return ParseRegistrarEntradaBitacoraResponse(rsp)
+}
+
+// ListarEstadiasWithResponse request returning *ListarEstadiasResponse
+func (c *ClientWithResponses) ListarEstadiasWithResponse(ctx context.Context, id Id, params *ListarEstadiasParams, reqEditors ...RequestEditorFn) (*ListarEstadiasResponse, error) {
+	rsp, err := c.ListarEstadias(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarEstadiasResponse(rsp)
+}
+
+// AbrirEstadiaWithBodyWithResponse request with arbitrary body returning *AbrirEstadiaResponse
+func (c *ClientWithResponses) AbrirEstadiaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AbrirEstadiaResponse, error) {
+	rsp, err := c.AbrirEstadiaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAbrirEstadiaResponse(rsp)
+}
+
+func (c *ClientWithResponses) AbrirEstadiaWithResponse(ctx context.Context, id Id, body AbrirEstadiaJSONRequestBody, reqEditors ...RequestEditorFn) (*AbrirEstadiaResponse, error) {
+	rsp, err := c.AbrirEstadia(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAbrirEstadiaResponse(rsp)
+}
+
+// CerrarEstadiaWithBodyWithResponse request with arbitrary body returning *CerrarEstadiaResponse
+func (c *ClientWithResponses) CerrarEstadiaWithBodyWithResponse(ctx context.Context, id Id, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CerrarEstadiaResponse, error) {
+	rsp, err := c.CerrarEstadiaWithBody(ctx, id, eid, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCerrarEstadiaResponse(rsp)
+}
+
+func (c *ClientWithResponses) CerrarEstadiaWithResponse(ctx context.Context, id Id, eid Id, body CerrarEstadiaJSONRequestBody, reqEditors ...RequestEditorFn) (*CerrarEstadiaResponse, error) {
+	rsp, err := c.CerrarEstadia(ctx, id, eid, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCerrarEstadiaResponse(rsp)
 }
 
 // FijarEtaWithBodyWithResponse request with arbitrary body returning *FijarEtaResponse
@@ -2924,6 +3362,154 @@ func ParseRegistrarEntradaBitacoraResponse(rsp *http.Response) (*RegistrarEntrad
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarEstadiasResponse parses an HTTP response from a ListarEstadiasWithResponse call
+func ParseListarEstadiasResponse(rsp *http.Response) (*ListarEstadiasResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarEstadiasResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaEstadias
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAbrirEstadiaResponse parses an HTTP response from a AbrirEstadiaWithResponse call
+func ParseAbrirEstadiaResponse(rsp *http.Response) (*AbrirEstadiaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AbrirEstadiaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Estadia
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCerrarEstadiaResponse parses an HTTP response from a CerrarEstadiaWithResponse call
+func ParseCerrarEstadiaResponse(rsp *http.Response) (*CerrarEstadiaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CerrarEstadiaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Estadia
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

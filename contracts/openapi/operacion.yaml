@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — operacion
-  version: 0.1.0-tracer.7
+  version: 0.1.0-tracer.8
   description: >-
     Progreso del viaje: creación, transiciones, asignación, bitácora,
     incidencias y auditoría. Consumido por `bff`, nunca por el frontend directo.
@@ -38,6 +38,10 @@ tags:
   description: Roster de unidades (paquetes vehículo + custodios) administrado por el jefe_operativo (ADR 31/33).
 - name: bitacora
 - name: incidencias
+- name: estadias
+  description: >-
+    Estadías del viaje (paradas durante EN_TRANSITO). Condición con datos
+    propios, NO un valor de condicion_viaje ni un estado (DEC-013/DEC-038).
 - name: auditoria
 
 paths:
@@ -446,6 +450,108 @@ paths:
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  # ---------------------------------------------------------------------------
+  # Estadías (E1-T6). Una estadía es una parada durante EN_TRANSITO (combustible,
+  # descanso, retén…). NO es un estado del viaje ni un valor de `condicion_viaje`:
+  # tiene datos propios (motivo, eje de autorización) y por eso se modela como
+  # sub-recurso del viaje, no como la condición ortogonal INCIDENCIA/SIN_SENAL.
+  # Registra INICIO y CIERRE; la duración se DERIVA de ambos en la lectura, no se
+  # persiste ni se rotula. En V1 NO hay clasificación `prolongada` ni umbral de
+  # tiempo (DEC-038): un campo así sería un umbral no aprobado implementado. El
+  # "reinicio de viaje" (DEC-013) cierra la estadía activa; no es una transición
+  # de `viaje.estado`.
+  # ---------------------------------------------------------------------------
+  /api/v1/viajes/{id}/estadias:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarEstadias
+      tags: [estadias]
+      summary: Listar estadías del viaje (ordenadas por inicio).
+      description: >-
+        Devuelve las estadías del viaje. La duración de cada una es DERIVABLE de
+        `inicio` y `cierre`; el contrato no la expone como campo persistido.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de estadías.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaEstadias"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    post:
+      operationId: abrirEstadia
+      tags: [estadias]
+      summary: Abrir una estadía (parada durante el recorrido).
+      description: >-
+        Abre una estadía con su motivo y eje de autorización. Registra `inicio`.
+        No cambia `viaje.estado` (el viaje sigue EN_TRANSITO). Varias estadías
+        del viaje son válidas a lo largo del tiempo; su coexistencia con una
+        condición INCIDENCIA también lo es (dimensiones distintas).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EstadiaEntrada"}
+      responses:
+        "201":
+          description: Estadía abierta.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Estadia"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
+  /api/v1/viajes/{id}/estadias/{eid}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    - name: eid
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    patch:
+      operationId: cerrarEstadia
+      tags: [estadias]
+      summary: Cerrar una estadía (registra el cierre).
+      description: >-
+        Registra `cierre` sobre una estadía abierta. La duración queda DERIVABLE
+        de `inicio` y `cierre`; no se captura a mano ni se rotula. No cambia
+        `viaje.estado`. El "reinicio de viaje" (DEC-013) cierra la estadía activa
+        por esta misma ruta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CierreEstadiaEntrada"}
+      responses:
+        "200":
+          description: Estadía cerrada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Estadia"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            La estadía ya está cerrada. `codigo` de máquina `estadia_ya_cerrada`.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
 
   /api/v1/viajes/{id}/auditoria:
     parameters:
@@ -867,6 +973,84 @@ components:
       required: [resolucion]
       properties:
         resolucion: {type: string}
+
+    # --- Estadías (E1-T6 / DEC-038). Inicio + cierre; la duración se DERIVA, no
+    #     se persiste. Sin clasificación `prolongada` ni umbral en V1. ---
+    MotivoEstadia:
+      type: string
+      description: >-
+        Motivo de la estadía (parada). Lista cerrada de V1; se amplía por ola
+        aditiva si el negocio lo decide.
+      enum:
+        - combustible
+        - descanso
+        - alimentos
+        - sanitario
+        - reten
+        - revision_autoridades
+        - gastos
+        - espera_entrega
+
+    EjeAutorizacionEstadia:
+      type: string
+      description: Eje de autorización de la estadía (E1-HU-008).
+      enum:
+        - autorizada
+        - no_autorizada
+        - antes_200km
+
+    Estadia:
+      type: object
+      additionalProperties: false
+      required: [id, viaje_id, motivo, eje_autorizacion, inicio]
+      description: >-
+        Estadía del viaje. La DURACIÓN NO es un campo: se deriva de `inicio` y
+        `cierre` en la lectura (DEC-038). No existe `prolongada` ni umbral en V1.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        motivo: {$ref: "#/components/schemas/MotivoEstadia"}
+        eje_autorizacion: {$ref: "#/components/schemas/EjeAutorizacionEstadia"}
+        inicio: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        cierre:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Cierre de la estadía, o null si sigue abierta. Mismo formato que
+            `MarcaTiempo`. La duración se deriva de `inicio` y este valor.
+
+    EstadiaEntrada:
+      type: object
+      additionalProperties: false
+      required: [motivo, eje_autorizacion]
+      description: >-
+        Cuerpo de apertura de una estadía (POST). El servicio asigna id y fija
+        `inicio` al momento del registro.
+      properties:
+        motivo: {$ref: "#/components/schemas/MotivoEstadia"}
+        eje_autorizacion: {$ref: "#/components/schemas/EjeAutorizacionEstadia"}
+
+    CierreEstadiaEntrada:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de cierre de una estadía (PATCH). Sin campos obligatorios: el
+        servidor fija `cierre` al momento del registro. Cuerpo vacío válido.
+      properties: {}
+
+    PaginaEstadias:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Estadia"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
 
     RegistroAuditoria:
       type: object
