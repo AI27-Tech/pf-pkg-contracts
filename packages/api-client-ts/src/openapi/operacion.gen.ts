@@ -229,6 +229,55 @@ export interface paths {
         patch: operations["resolverIncidencia"];
         trace?: never;
     };
+    "/api/v1/viajes/{id}/estadias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Listar estadías del viaje (ordenadas por inicio).
+         * @description Devuelve las estadías del viaje. La duración de cada una es DERIVABLE de `inicio` y `cierre`; el contrato no la expone como campo persistido.
+         */
+        get: operations["listarEstadias"];
+        put?: never;
+        /**
+         * Abrir una estadía (parada durante el recorrido).
+         * @description Abre una estadía con su motivo y eje de autorización. Registra `inicio`. No cambia `viaje.estado` (el viaje sigue EN_TRANSITO). Varias estadías del viaje son válidas a lo largo del tiempo; su coexistencia con una condición INCIDENCIA también lo es (dimensiones distintas).
+         */
+        post: operations["abrirEstadia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/estadias/{eid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Cerrar una estadía (registra el cierre).
+         * @description Registra `cierre` sobre una estadía abierta. La duración queda DERIVABLE de `inicio` y `cierre`; no se captura a mano ni se rotula. No cambia `viaje.estado`. El "reinicio de viaje" (DEC-013) cierra la estadía activa por esta misma ruta.
+         */
+        patch: operations["cerrarEstadia"];
+        trace?: never;
+    };
     "/api/v1/viajes/{id}/auditoria": {
         parameters: {
             query?: never;
@@ -439,6 +488,41 @@ export interface components {
         };
         ResolucionIncidenciaEntrada: {
             resolucion: string;
+        };
+        /**
+         * @description Motivo de la estadía (parada). Lista cerrada de V1; se amplía por ola aditiva si el negocio lo decide.
+         * @enum {string}
+         */
+        MotivoEstadia: "combustible" | "descanso" | "alimentos" | "sanitario" | "reten" | "revision_autoridades" | "gastos" | "espera_entrega";
+        /**
+         * @description Eje de autorización de la estadía (E1-HU-008).
+         * @enum {string}
+         */
+        EjeAutorizacionEstadia: "autorizada" | "no_autorizada" | "antes_200km";
+        /** @description Estadía del viaje. La DURACIÓN NO es un campo: se deriva de `inicio` y `cierre` en la lectura (DEC-038). No existe `prolongada` ni umbral en V1. */
+        Estadia: {
+            id: components["schemas"]["Id"];
+            viaje_id: components["schemas"]["Id"];
+            motivo: components["schemas"]["MotivoEstadia"];
+            eje_autorizacion: components["schemas"]["EjeAutorizacionEstadia"];
+            inicio: components["schemas"]["MarcaTiempo"];
+            /**
+             * Format: date-time
+             * @description Cierre de la estadía, o null si sigue abierta. Mismo formato que `MarcaTiempo`. La duración se deriva de `inicio` y este valor.
+             */
+            cierre?: string | null;
+        };
+        /** @description Cuerpo de apertura de una estadía (POST). El servicio asigna id y fija `inicio` al momento del registro. */
+        EstadiaEntrada: {
+            motivo: components["schemas"]["MotivoEstadia"];
+            eje_autorizacion: components["schemas"]["EjeAutorizacionEstadia"];
+        };
+        /** @description Cuerpo de cierre de una estadía (PATCH). Sin campos obligatorios: el servidor fija `cierre` al momento del registro. Cuerpo vacío válido. */
+        CierreEstadiaEntrada: Record<string, never>;
+        PaginaEstadias: {
+            items: components["schemas"]["Estadia"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
         };
         RegistroAuditoria: {
             entidad: string;
@@ -982,6 +1066,101 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
+        };
+    };
+    listarEstadias: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de estadías. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaEstadias"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    abrirEstadia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EstadiaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Estadía abierta. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Estadia"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    cerrarEstadia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CierreEstadiaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Estadía cerrada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Estadia"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description La estadía ya está cerrada. `codigo` de máquina `estadia_ya_cerrada`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     consultarAuditoria: {
