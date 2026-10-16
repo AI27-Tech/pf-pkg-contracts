@@ -1,0 +1,120 @@
+# =============================================================================
+# contracts/openapi/realtime.yaml
+# -----------------------------------------------------------------------------
+# Superficie HTTP del servicio `realtime` (ola contractual `tracer.9`).
+# Fuente: ADR 28 (contrato de snapshot y reconexión) y
+# docs/arquitectura/services/realtime.md (f). Es la vía de entrega viva de
+# `mensajeria`; `bff` NO la compone (realtime.md (f)): el cliente abre el stream
+# directo contra el proxy de la DMZ (ADR 32 §2, `api.<dominio>`).
+#
+# ALCANCE DE ESTA OLA: solo lo que la arquitectura tiene CONGELADO.
+# - GET /api/v1/stream (operación, cabeceras, 409 stream_resync_required).
+# - /health y /ready los da la plantilla común (no se declaran aquí).
+#
+# FUERA, por estar PENDIENTE de congelar en la arquitectura (no se inventa,
+# regla 6 de 00-indice; ADR 28, realtime.md (f)):
+# - La forma de respuesta de GET /api/v1/conexiones (solo mencionada en
+#   realtime.md (f), sin esquema).
+# - La codificación concreta del id SSE / Last-Event-ID (stream_id+epoch+seq):
+#   realtime.md (f) la deja "en el contrato pendiente". OpenAPI describe la
+#   operación HTTP, no los frames SSE ni esa codificación.
+# - Los eventos de control de línea (anuncio de heartbeat_interval/
+#   liveness_timeout/replay y stream.stale) viven en los frames del stream, no
+#   en el cuerpo HTTP; su forma sigue pendiente (ADR 28 §6).
+# - Prioridad/TTL/dedup por tipo: son del registro de eventos de `mensajeria`,
+#   no de este spec, y tampoco están fijados.
+# =============================================================================
+openapi: 3.0.3
+info:
+  title: AI27 — realtime
+  version: 0.1.0-tracer.9
+  description: >-
+    Entrega viva de `mensajeria` por SSE. `realtime` mantiene conexiones
+    abiertas y reparte sobres ya autorizados; no interpreta el payload ni
+    infiere destinatarios (ADR 28). El cliente obtiene el estado inicial y su
+    cursor por HTTP vía `bff`, abre este stream y aplica deltas por cursor de
+    dominio.
+  x-ai27-servicio: realtime
+  x-ai27-capa: soporte
+  x-ai27-tracer: false
+
+servers:
+- url: /
+  description: Ruta base montada por el despliegue; los paths incluyen /api/v1.
+
+security:
+- bearerCognito: []
+
+tags:
+- name: stream
+
+paths:
+  /api/v1/stream:
+    get:
+      operationId: abrirStream
+      tags: [stream]
+      summary: Abrir la línea SSE de entrega viva autorizada.
+      description: >-
+        Devuelve el flujo SSE COMPLETO autorizado de `mensajeria` para el
+        sujeto autenticado: conversación, bandeja y casos de emergencia dentro
+        de su alcance (ADR 28 §1). El servidor DERIVA el flujo de la identidad,
+        alcance y membresía vigentes; no acepta `?canales` ni selección
+        arbitraria de conversaciones, pools o bandejas (ADR 28 §7).
+
+
+        El cuerpo es `text/event-stream`: una línea resumible con `stream_id`,
+        `epoch` y `seq` de transporte, replay corto dentro de la época, deltas
+        vivos y latido. Cada frame lleva su `id` SSE; su codificación concreta y
+        los eventos de control de línea NO se fijan en este contrato (realtime.md
+        (f): "la codificación concreta permanece en el contrato pendiente").
+
+
+        La autorización se revalida en CADA apertura o reconexión (sesión,
+        alcance, membresía e invalidaciones). Poseer un `Last-Event-ID` nunca
+        autoriza (ADR 28 §4). La revocación de sesión corta la línea en ≤30s
+        (ADR 26 §6).
+      parameters:
+      - name: Last-Event-ID
+        in: header
+        required: false
+        description: >-
+          Codifica `stream_id + epoch + seq` de la línea a reanudar. Ausente en
+          una línea nueva. Opaco: no contiene tenant, sujeto, bandeja,
+          conversación ni canal en claro (ADR 28 §4). Si la línea es
+          desconocida, de otra sesión, su época venció o quedó fuera de la
+          ventana de replay, la respuesta es 409 (ADR 28 §5).
+        schema:
+          type: string
+      responses:
+        "200":
+          description: >-
+            Línea SSE abierta. El cuerpo es un flujo `text/event-stream`; su
+            formato de frames no se describe en OpenAPI.
+          headers:
+            Cache-Control:
+              description: Siempre `no-cache` (realtime.md (f)).
+              schema: {type: string}
+            X-Accel-Buffering:
+              description: Siempre `no`, para que el proxy no bufferice el stream (realtime.md (f); ADR 32 §2).
+              schema: {type: string}
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >-
+                  Flujo de eventos SSE. Cada evento lleva su `id` (codificación
+                  pendiente de contrato) y un payload de dos capas: la de
+                  dominio la produce `mensajeria` (ver `SobreVivo` en
+                  contracts/events), la de transporte la añade `realtime`.
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409":
+          description: >-
+            Reanudación imposible. `codigo` de máquina `stream_resync_required`.
+            Es IDÉNTICA para todas las causas (línea desconocida, de otra
+            sesión, época vencida o fuera de la ventana), para no crear un
+            oráculo sobre líneas ajenas (ADR 28 §5). El cliente repite bootstrap
+            y catch-up durable por HTTP vía `bff`.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}

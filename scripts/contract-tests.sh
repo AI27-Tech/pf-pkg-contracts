@@ -104,6 +104,7 @@ import (
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/identidad"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/mensajeria"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/operacion"
+	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/realtime"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/registro"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/reportes"
 	"github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/roles"
@@ -179,6 +180,9 @@ func main() {
 	}
 	if c, err := mensajeria.NewClient("https://api.ai27.tech"); err != nil || c == nil {
 		panic("mensajeria.NewClient debe construir un cliente")
+	}
+	if c, err := realtime.NewClient("https://api.ai27.tech"); err != nil || c == nil {
+		panic("realtime.NewClient debe construir un cliente")
 	}
 
 	// Ola 2 (tracer.7): la conversación viaja por la superficie RESTRINGIDA y
