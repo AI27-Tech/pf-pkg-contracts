@@ -57,6 +57,7 @@ PAQUETES=(
   bff
   reportes
   mensajeria
+  realtime
   eventos
   estados
   registro

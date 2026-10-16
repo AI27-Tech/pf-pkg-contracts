@@ -11,7 +11,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — Componentes comunes
-  version: 0.1.0-tracer.8
+  version: 0.1.0-tracer.9
   description: >-
     Esquemas y respuestas reutilizables del paquete contractual del tracer.
     Alcance congelado por ADR 25.

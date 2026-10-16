@@ -3,6 +3,26 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-14 [tracer.9] — superficie SSE mínima de `realtime`
+
+**Resumen:** Se publica `contracts/openapi/realtime.yaml` con la parte CONGELADA de la superficie SSE de `realtime` (DEC-090): la operación `GET /api/v1/stream` y la respuesta `409 stream_resync_required`. Es la ola que destraba el scaffold de `realtime` (prompt 08) para montar la ruta del stream contra un contrato real.
+
+**Contexto:** camino 2 acordado con el Lead (contrato SSE antes del scaffold). Al medir contra ADR 28 y `realtime.md` (f), solo `GET /api/v1/stream` y el `409` están congelados; el resto del protocolo SSE y la emergencia de mensajería siguen pendientes de congelar en la arquitectura (DEC-090). No se contrata lo pendiente.
+
+**Cambios:**
+- `contracts/openapi/realtime.yaml` (nuevo): `GET /api/v1/stream` (SSE, sin `?canales`, `Last-Event-ID` opcional, cabeceras `Cache-Control: no-cache` y `X-Accel-Buffering: no`, respuesta 200 `text/event-stream`), y `409` con `codigo` de máquina `stream_resync_required`.
+- Tooling: `realtime` entra a `generar.sh`, `breaking-openapi.sh`, `lint-openapi`, `check-tags.sh` y al consumidor limpio de `contract-tests.sh`.
+- `VERSION`, los siete specs previos y el paquete TS a `0.1.0-tracer.9`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` compatible con `tracer.8` en los siete specs previos; `realtime` es spec nuevo sin línea base. `buf breaking` de eventos compatible con `tracer.8` (esta ola no cambia eventos). Sin entrada en `rompimientos/`.
+
+**Fuera de esta ola, por pendiente declarado (no inventado):**
+- `GET /api/v1/conexiones`: solo mencionada en `realtime.md` (f), sin esquema.
+- La codificación concreta del `id` SSE / `Last-Event-ID`: la fuente la deja "en el contrato pendiente". OpenAPI describe la operación HTTP, no los frames SSE.
+- Eventos de control de línea (`stream.stale`, anuncio de heartbeat): viven en los frames, pendientes (ADR 28 §6).
+- Emergencia de mensajería: sus esquemas y nombres no están congelados (`mensajeria.md` (l), ADR 21, E7). Espera una ola futura.
+
+
 ## 2026-10-14 Sprint 3: superficie de catálogos, estadías y descarga
 
 **Resumen:** Se agrega la superficie contractual (OpenAPI) de cinco historias
