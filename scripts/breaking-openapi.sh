@@ -33,7 +33,7 @@ VERSION="${VERSION:-$(cat VERSION)}"
 GATE_DIR="$RAIZ/tools/breaking-gate"
 ROMPIMIENTOS_DIR="$RAIZ/rompimientos"
 
-SERVICIOS=(identidad catalogos operacion bff reportes mensajeria)
+SERVICIOS=(identidad catalogos operacion bff reportes mensajeria realtime)
 
 # --- Línea base: último tag de tracer publicada -------------------------------
 base="$(git tag --list 'v*-tracer.*' --sort=-v:refname | head -1 || true)"
