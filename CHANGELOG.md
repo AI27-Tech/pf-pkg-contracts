@@ -3,6 +3,27 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-16 [tracer.10] — marca de frescura en las lecturas de `reportes`
+
+**Resumen:** Se agrega la marca de frescura a las dos respuestas de lectura de `reportes` (`ReporteViajes` y `ReporteEstados`): `proyeccion_al` (instante hasta el que la proyección aplicó eventos) y `stale` (booleano de obsolescencia contra el techo del servicio). Es la ola que destraba las lecturas HTTP de E6 (E6-T2 dashboard), que estaban bloqueadas por R3: una proyección por eventos puede ir atrasada y la respuesta debe declararlo.
+
+**Contexto:** `reportes` es un modelo de lectura por eventos (ADR 18). Su arquitectura obliga a que "todo reporte devuelva la marca de frescura de las proyecciones que usó" (`reportes.md` (i)): sin ella, un reporte congelado por un consumo detenido se ve idéntico a un periodo tranquilo. El audit lo dejaba pendiente de congelar (compuerta G3). El techo de frescura es configuración del servicio, no del contrato: el contrato solo expone el booleano `stale` ya resuelto. Variante elegida con el Lead: instante + bandera, no segundos de retraso derivables.
+
+**Cambios:**
+- `contracts/openapi/reportes.yaml`: `ReporteViajes` y `ReporteEstados` suman `proyeccion_al` (`MarcaTiempo`, nullable) y `stale` (boolean), ambos **opcionales** (no entran a `required`). El servicio los llena siempre; `proyeccion_al` es null solo si la proyección aún no aplicó ningún evento.
+- Clientes Go y TS de `reportes` regenerados (`make generate`): `ProyeccionAl *MarcaTiempo`, `Stale *bool` en ambos schemas.
+- `VERSION`, los ocho specs OpenAPI y el paquete TS a `0.1.0-tracer.10` (solo `reportes` cambió de forma; los demás suben de número porque el tag versiona el paquete completo).
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.9`. Sin entrada en `rompimientos/`. `make verify` y `make generate` reproducibles en verde.
+
+**Archivos modificados:**
+- `VERSION`
+- `contracts/openapi/reportes.yaml`
+- `contracts/openapi/_comunes.yaml`, `bff.yaml`, `catalogos.yaml`, `identidad.yaml`, `mensajeria.yaml`, `operacion.yaml`, `realtime.yaml` (solo bump de `info.version`)
+- `packages/api-client-go/reportes/reportes.gen.go`
+- `packages/api-client-ts/src/openapi/reportes.gen.ts`
+- `packages/api-client-ts/package.json`
+
 ## 2026-10-14 [tracer.9] — superficie SSE mínima de `realtime`
 
 **Resumen:** Se publica `contracts/openapi/realtime.yaml` con la parte CONGELADA de la superficie SSE de `realtime` (DEC-090): la operación `GET /api/v1/stream` y la respuesta `409 stream_resync_required`. Es la ola que destraba el scaffold de `realtime` (prompt 08) para montar la ruta del stream contra un contrato real.

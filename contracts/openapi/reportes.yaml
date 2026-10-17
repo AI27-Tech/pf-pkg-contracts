@@ -12,7 +12,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — reportes
-  version: 0.1.0-tracer.9
+  version: 0.1.0-tracer.10
   description: Proyección de lectura por eventos. Reportes operativos del tracer.
   x-ai27-servicio: reportes
   x-ai27-capa: soporte
@@ -103,6 +103,22 @@ components:
           type: array
           items: {$ref: "#/components/schemas/FilaViaje"}
         total: {type: integer}
+        proyeccion_al:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          nullable: true
+          description: >-
+            Instante hasta el que la proyección aplicó eventos del origen
+            (`reportes` es una proyección por eventos, ADR 18). El reporte
+            refleja el estado del dominio hasta este momento, no el de ahora.
+            Opcional (expand/contract): el servicio lo llena siempre. null solo
+            si la proyección aún no aplicó ningún evento.
+        stale:
+          type: boolean
+          description: >-
+            true si el retraso de la proyección (now menos `proyeccion_al`)
+            excede el techo de frescura configurado del servicio. Distingue un
+            reporte al día de uno congelado por un consumo detenido. El valor
+            del techo es configuración del servicio, no del contrato.
 
     ConteoEstado:
       type: object
@@ -122,3 +138,19 @@ components:
         conteos:
           type: array
           items: {$ref: "#/components/schemas/ConteoEstado"}
+        proyeccion_al:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          nullable: true
+          description: >-
+            Instante hasta el que la proyección aplicó eventos del origen
+            (`reportes` es una proyección por eventos, ADR 18). El reporte
+            refleja el estado del dominio hasta este momento, no el de ahora.
+            Opcional (expand/contract): el servicio lo llena siempre. null solo
+            si la proyección aún no aplicó ningún evento.
+        stale:
+          type: boolean
+          description: >-
+            true si el retraso de la proyección (now menos `proyeccion_al`)
+            excede el techo de frescura configurado del servicio. Distingue un
+            reporte al día de uno congelado por un consumo detenido. El valor
+            del techo es configuración del servicio, no del contrato.
