@@ -70,12 +70,24 @@ type MarcaTiempo = time.Time
 // ReporteEstados defines model for ReporteEstados.
 type ReporteEstados struct {
 	Conteos []ConteoEstado `json:"conteos"`
+
+	// ProyeccionAl Instante hasta el que la proyección aplicó eventos del origen (`reportes` es una proyección por eventos, ADR 18). El reporte refleja el estado del dominio hasta este momento, no el de ahora. Opcional (expand/contract): el servicio lo llena siempre. null solo si la proyección aún no aplicó ningún evento.
+	ProyeccionAl *MarcaTiempo `json:"proyeccion_al"`
+
+	// Stale true si el retraso de la proyección (now menos `proyeccion_al`) excede el techo de frescura configurado del servicio. Distingue un reporte al día de uno congelado por un consumo detenido. El valor del techo es configuración del servicio, no del contrato.
+	Stale *bool `json:"stale,omitempty"`
 }
 
 // ReporteViajes defines model for ReporteViajes.
 type ReporteViajes struct {
 	Filas []FilaViaje `json:"filas"`
-	Total int         `json:"total"`
+
+	// ProyeccionAl Instante hasta el que la proyección aplicó eventos del origen (`reportes` es una proyección por eventos, ADR 18). El reporte refleja el estado del dominio hasta este momento, no el de ahora. Opcional (expand/contract): el servicio lo llena siempre. null solo si la proyección aún no aplicó ningún evento.
+	ProyeccionAl *MarcaTiempo `json:"proyeccion_al"`
+
+	// Stale true si el retraso de la proyección (now menos `proyeccion_al`) excede el techo de frescura configurado del servicio. Distingue un reporte al día de uno congelado por un consumo detenido. El valor del techo es configuración del servicio, no del contrato.
+	Stale *bool `json:"stale,omitempty"`
+	Total int   `json:"total"`
 }
 
 // NoAutorizado defines model for NoAutorizado.
