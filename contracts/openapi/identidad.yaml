@@ -17,7 +17,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — identidad
-  version: 0.1.0-tracer.10
+  version: 0.1.0-tracer.11
   description: >-
     Autenticación, sesión y alcance del tracer. Fuente de verdad de la
     revocación (evento `sesion.revocada`, ADR 26).
@@ -35,6 +35,13 @@ security:
 tags:
 - name: sesiones
   description: Emisión, refresco, revocación y snapshot de revocación.
+- name: gobierno
+  description: >-
+    Administración de sujetos y roles (E4-T6). Toda operación exige rol
+    `administrador`, resuelto en servidor desde el token (nunca del cuerpo).
+    El cambio se compromete en local (estado + traza + outbox) y el IdP se
+    sincroniza después, de forma reintentable (DEC-085); por eso el fallo del
+    IdP no revierte la operación ni se refleja como error de esta superficie.
 
 paths:
   /api/v1/sesiones:
@@ -141,6 +148,148 @@ paths:
               schema: {$ref: "#/components/schemas/PaginaRevocaciones"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
 
+  /api/v1/sujetos:
+    post:
+      operationId: altaSujeto
+      tags: [gobierno]
+      summary: Alta de un sujeto con su rol inicial.
+      description: >-
+        Crea el usuario en el IdP y el `sujeto` local con su rol inicial en una
+        sola transacción local, publicando `sujeto.creado` y `rol.asignado`.
+        Restringida a `administrador` (403 si no lo es).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AltaSujetoEntrada"}
+      responses:
+        "201":
+          description: Sujeto creado con su rol inicial.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Sujeto"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/sujetos/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerSujeto
+      tags: [gobierno]
+      summary: Detalle de un sujeto y su rol activo.
+      description: Lectura restringida a `administrador` (G-10).
+      responses:
+        "200":
+          description: Detalle del sujeto.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SujetoDetalle"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    delete:
+      operationId: desactivarSujeto
+      tags: [gobierno]
+      summary: Desactivar un sujeto (retiro de acceso).
+      description: >-
+        Marca el sujeto inactivo, revoca su sesión viva (corte ≤30 s, G-6) y
+        publica `sujeto.desactivado`. Se rechaza con 409 si dejaría al sistema
+        sin administrador activo (G-7).
+      responses:
+        "204": {description: Sujeto desactivado.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/sujetos/{id}/reactivacion:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: reactivarSujeto
+      tags: [gobierno]
+      summary: Reactivar un sujeto desactivado (otorgamiento).
+      description: >-
+        Habilita el sujeto en el IdP y lo marca activo de nuevo, publicando
+        `sujeto.reactivado` (hecho propio, no reusa `sujeto.creado`).
+      responses:
+        "204": {description: Sujeto reactivado.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/sujetos/{id}/historial:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarHistorialSujeto
+      tags: [gobierno]
+      summary: Historial de cambios administrativos de un sujeto.
+      description: >-
+        Traza inmutable (`cambio_identidad`) ordenada por tiempo descendente,
+        paginada por cursor opaco. Restringida a `administrador`.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        description: Cursor de continuación; ausente para la primera página.
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de cambios y cursor.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaHistorial"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/sujetos/{id}/rol:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    put:
+      operationId: fijarRolSujeto
+      tags: [gobierno]
+      summary: Asignar el rol inicial o reemplazar el rol activo de un sujeto.
+      description: >-
+        Única vía para fijar el rol. Si el sujeto no tiene rol activo, lo asigna
+        (`rol.asignado`); si ya tiene uno, lo reemplaza en una sola transacción
+        (`rol.revocado` + `rol.asignado`). No existe revocar un rol suelto (C2).
+        Se rechaza con 409 si el sujeto está desactivado, si el rol nuevo es
+        igual al activo, o si dejaría al sistema sin administrador (G-7); con
+        403 si un sujeto intenta cambiar su propio rol (autoescalamiento).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AsignacionRolEntrada"}
+      responses:
+        "204": {description: Rol fijado.}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
 components:
   schemas:
     CredencialesEntrada:
@@ -231,3 +380,99 @@ components:
           type: string
           nullable: true
           description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    AltaSujetoEntrada:
+      type: object
+      additionalProperties: false
+      required: [nombre, identificador_usuario, rol, tenant_id]
+      description: >-
+        Alta de un sujeto con su rol inicial (E4-HU-018). El actor y su
+        autorización NO viajan aquí: se resuelven en servidor desde el token.
+      properties:
+        nombre:
+          type: string
+          description: Nombre del usuario.
+        identificador_usuario:
+          type: string
+          description: Identificador de acceso del sujeto (correo o usuario).
+        rol: {$ref: "_comunes.yaml#/components/schemas/Rol"}
+        tenant_id:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
+          description: >-
+            Tenant del sujeto. Para `cliente` lo determina su organización;
+            para los roles internos es el tenant interno de AI27 (G-9).
+
+    Sujeto:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_id, activo]
+      description: >-
+        Sujeto dentro de un tenant. identidad no custodia credenciales; el
+        `idp_subject` es el subject OIDC opaco del IdP (DEC-072, `sub` ≠ `id`).
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        idp_subject:
+          type: string
+          description: Subject OIDC opaco del IdP. No es la credencial ni el `id`.
+        tenant_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        activo:
+          type: boolean
+          description: false si el sujeto está desactivado (retiro de acceso).
+
+    SujetoDetalle:
+      type: object
+      additionalProperties: false
+      required: [sujeto, tiene_rol]
+      description: Detalle de un sujeto con su rol activo, si tiene uno.
+      properties:
+        sujeto: {$ref: "#/components/schemas/Sujeto"}
+        tiene_rol:
+          type: boolean
+          description: false si el sujeto no tiene rol activo; entonces `rol` se omite.
+        rol:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Rol"]
+          description: Rol activo del sujeto. Ausente si `tiene_rol` es false.
+
+    AsignacionRolEntrada:
+      type: object
+      additionalProperties: false
+      required: [rol]
+      description: >-
+        Rol a fijar en el sujeto. Si no tiene rol activo lo asigna; si ya tiene,
+        lo reemplaza. El actor se resuelve en servidor desde el token.
+      properties:
+        rol: {$ref: "_comunes.yaml#/components/schemas/Rol"}
+
+    CambioAdministrativo:
+      type: object
+      additionalProperties: false
+      required: [tipo, sujeto_id, ocurrido_en]
+      description: Una fila de la traza inmutable `cambio_identidad`.
+      properties:
+        tipo:
+          type: string
+          description: >-
+            Nombre canónico del hecho registrado: `sujeto.creado`,
+            `sujeto.desactivado`, `sujeto.reactivado`, `rol.asignado`,
+            `rol.revocado`.
+        sujeto_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        tenant_id:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
+          description: Opcional; ausente en cambios que no lo registran.
+        actor_id:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
+          description: Sujeto que ejecutó el cambio. Opcional en cambios de sistema.
+        ocurrido_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    PaginaHistorial:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/CambioAdministrativo"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no hay más páginas.

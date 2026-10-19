@@ -3,6 +3,35 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-19 [tracer.11] — superficie de gobierno de `identidad` (sujetos y roles)
+
+**Resumen:** Se publica la superficie HTTP de administración de usuarios y roles de `identidad` (E4-T6), hasta ahora ausente del contrato (brecha G-2): el backend de gobierno estaba listo pero no podía exponerse ni pasar al front porque no existían tipos a los que pegarse. Se agregan las rutas bajo `/api/v1/sujetos` y los dos eventos de ciclo de vida que faltaban, `sujeto.creado` y `sujeto.reactivado`.
+
+**Contexto:** `identidad` es dueño del gobierno de sujetos y roles; el servicio compromete cada cambio en local (estado + traza + outbox) y sincroniza el IdP después (DEC-085, local manda). El contrato publicado (`tracer.9`) solo tenía la superficie de sesión. La forma de las operaciones y de los eventos se deriva del backend ya implementado (`pf-svc-identidad/internal/gobierno`), no se inventa. El payload de `sujeto.creado`/`sujeto.reactivado` toma como precedente `sujeto.desactivado`/`rol.asignado` (agregado + tenant + marca de tiempo; `creado` suma el `rol` inicial). Número de ola: `tracer.10` ya está tomado por la marca de frescura de `reportes` en `-d`/`-q`, así que esta ola toma el siguiente libre, `tracer.11` (regla de versión de contratos §7).
+
+**Cambios:**
+- `contracts/openapi/identidad.yaml`: tag `gobierno` y rutas `POST /api/v1/sujetos` (alta con rol), `GET /api/v1/sujetos/{id}` (detalle), `DELETE /api/v1/sujetos/{id}` (desactivar), `POST /api/v1/sujetos/{id}/reactivacion`, `GET /api/v1/sujetos/{id}/historial` (traza paginada por cursor) y `PUT /api/v1/sujetos/{id}/rol` (asignar inicial o reemplazar). Schemas nuevos: `AltaSujetoEntrada`, `Sujeto`, `SujetoDetalle`, `AsignacionRolEntrada`, `CambioAdministrativo`, `PaginaHistorial`. Reutiliza `Rol`, `Id`, `Cursor`, `MarcaTiempo` y las respuestas de error de `_comunes.yaml`.
+- `contracts/events/ai27/eventos/v1/sujeto.proto`: mensajes `SujetoCreado` (con `rol`) y `SujetoReactivado`.
+- `contracts/events/registro.tipos.yaml` e `INVENTARIO.md`: filas `sujeto.creado` y `sujeto.reactivado` (productor `identidad`, consumidores `catalogos`/`mensajeria`/`reportes`, agregado `sujeto_id`, amplia). El registro pasa de 26 a 28 tipos.
+- Clientes Go y TS regenerados (`make generate`). `VERSION`, los ocho specs OpenAPI y el paquete TS a `0.1.0-tracer.11`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.9`; `buf breaking` de eventos compatible con `pf-contracts-m`. Sin entrada en `rompimientos/`. `make verify` y `make generate` reproducibles en verde.
+
+**Archivos modificados:**
+- `VERSION`
+- `contracts/openapi/identidad.yaml`
+- `contracts/openapi/_comunes.yaml`, `bff.yaml`, `catalogos.yaml`, `mensajeria.yaml`, `operacion.yaml`, `realtime.yaml`, `reportes.yaml` (solo bump de `info.version`)
+- `contracts/events/ai27/eventos/v1/sujeto.proto`
+- `contracts/events/registro.tipos.yaml`, `contracts/events/INVENTARIO.md`
+- `packages/api-client-go/identidad/identidad.gen.go`
+- `packages/api-client-go/eventos/ai27/eventos/v1/sujeto.pb.go`
+- `packages/api-client-go/registro/registro.gen.go`
+- `packages/api-client-ts/src/openapi/identidad.gen.ts`
+- `packages/api-client-ts/src/eventos/ai27/eventos/v1/sujeto_pb.ts`
+- `packages/api-client-ts/src/registro/registro.gen.ts`
+- `packages/api-client-ts/package.json`
+
+
 ## 2026-10-16 [tracer.10] — marca de frescura en las lecturas de `reportes`
 
 **Resumen:** Se agrega la marca de frescura a las dos respuestas de lectura de `reportes` (`ReporteViajes` y `ReporteEstados`): `proyeccion_al` (instante hasta el que la proyección aplicó eventos) y `stale` (booleano de obsolescencia contra el techo del servicio). Es la ola que destraba las lecturas HTTP de E6 (E6-T2 dashboard), que estaban bloqueadas por R3: una proyección por eventos puede ir atrasada y la respuesta debe declararlo.
