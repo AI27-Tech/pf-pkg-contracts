@@ -91,6 +91,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sujetos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Alta de un sujeto con su rol inicial.
+         * @description Crea el usuario en el IdP y el `sujeto` local con su rol inicial en una sola transacción local, publicando `sujeto.creado` y `rol.asignado`. Restringida a `administrador` (403 si no lo es).
+         */
+        post: operations["altaSujeto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sujetos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Detalle de un sujeto y su rol activo.
+         * @description Lectura restringida a `administrador` (G-10).
+         */
+        get: operations["obtenerSujeto"];
+        put?: never;
+        post?: never;
+        /**
+         * Desactivar un sujeto (retiro de acceso).
+         * @description Marca el sujeto inactivo, revoca su sesión viva (corte ≤30 s, G-6) y publica `sujeto.desactivado`. Se rechaza con 409 si dejaría al sistema sin administrador activo (G-7).
+         */
+        delete: operations["desactivarSujeto"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sujetos/{id}/reactivacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivar un sujeto desactivado (otorgamiento).
+         * @description Habilita el sujeto en el IdP y lo marca activo de nuevo, publicando `sujeto.reactivado` (hecho propio, no reusa `sujeto.creado`).
+         */
+        post: operations["reactivarSujeto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sujetos/{id}/historial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Historial de cambios administrativos de un sujeto.
+         * @description Traza inmutable (`cambio_identidad`) ordenada por tiempo descendente, paginada por cursor opaco. Restringida a `administrador`.
+         */
+        get: operations["listarHistorialSujeto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sujetos/{id}/rol": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Asignar el rol inicial o reemplazar el rol activo de un sujeto.
+         * @description Única vía para fijar el rol. Si el sujeto no tiene rol activo, lo asigna (`rol.asignado`); si ya tiene uno, lo reemplaza en una sola transacción (`rol.revocado` + `rol.asignado`). No existe revocar un rol suelto (C2). Se rechaza con 409 si el sujeto está desactivado, si el rol nuevo es igual al activo, o si dejaría al sistema sin administrador (G-7); con 403 si un sujeto intenta cambiar su propio rol (autoescalamiento).
+         */
+        put: operations["fijarRolSujeto"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -141,6 +257,53 @@ export interface components {
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
+        /** @description Alta de un sujeto con su rol inicial (E4-HU-018). El actor y su autorización NO viajan aquí: se resuelven en servidor desde el token. */
+        AltaSujetoEntrada: {
+            /** @description Nombre del usuario. */
+            nombre: string;
+            /** @description Identificador de acceso del sujeto (correo o usuario). */
+            identificador_usuario: string;
+            rol: components["schemas"]["Rol"];
+            /** @description Tenant del sujeto. Para `cliente` lo determina su organización; para los roles internos es el tenant interno de AI27 (G-9). */
+            tenant_id: components["schemas"]["Id"];
+        };
+        /** @description Sujeto dentro de un tenant. identidad no custodia credenciales; el `idp_subject` es el subject OIDC opaco del IdP (DEC-072, `sub` ≠ `id`). */
+        Sujeto: {
+            id: components["schemas"]["Id"];
+            /** @description Subject OIDC opaco del IdP. No es la credencial ni el `id`. */
+            idp_subject?: string;
+            tenant_id: components["schemas"]["Id"];
+            /** @description false si el sujeto está desactivado (retiro de acceso). */
+            activo: boolean;
+        };
+        /** @description Detalle de un sujeto con su rol activo, si tiene uno. */
+        SujetoDetalle: {
+            sujeto: components["schemas"]["Sujeto"];
+            /** @description false si el sujeto no tiene rol activo; entonces `rol` se omite. */
+            tiene_rol: boolean;
+            /** @description Rol activo del sujeto. Ausente si `tiene_rol` es false. */
+            rol?: components["schemas"]["Rol"];
+        };
+        /** @description Rol a fijar en el sujeto. Si no tiene rol activo lo asigna; si ya tiene, lo reemplaza. El actor se resuelve en servidor desde el token. */
+        AsignacionRolEntrada: {
+            rol: components["schemas"]["Rol"];
+        };
+        /** @description Una fila de la traza inmutable `cambio_identidad`. */
+        CambioAdministrativo: {
+            /** @description Nombre canónico del hecho registrado: `sujeto.creado`, `sujeto.desactivado`, `sujeto.reactivado`, `rol.asignado`, `rol.revocado`. */
+            tipo: string;
+            sujeto_id: components["schemas"]["Id"];
+            /** @description Opcional; ausente en cambios que no lo registran. */
+            tenant_id?: components["schemas"]["Id"];
+            /** @description Sujeto que ejecutó el cambio. Opcional en cambios de sistema. */
+            actor_id?: components["schemas"]["Id"];
+            ocurrido_en: components["schemas"]["MarcaTiempo"];
+        };
+        PaginaHistorial: {
+            items: components["schemas"]["CambioAdministrativo"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no hay más páginas. */
+            cursor_siguiente: string | null;
+        };
         /**
          * Format: uuid
          * @description Identificador único (UUID). Nunca un correlativo expuesto.
@@ -167,6 +330,11 @@ export interface components {
         };
         /** @description Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato. */
         Cursor: string;
+        /**
+         * @description Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+         * @enum {string}
+         */
+        Rol: "cliente" | "jefe_operativo" | "monitorista" | "supervisor" | "coordinador" | "ejecutivo" | "reaccion" | "administrador";
     };
     responses: {
         /** @description La petición no cumple el contrato (validación de cuerpo o parámetros). */
@@ -198,6 +366,15 @@ export interface components {
         };
         /** @description Autenticado pero fuera de alcance/rol para la acción o el recurso. */
         Prohibido: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description La acción choca con el estado actual del recurso (p. ej. una transición de estado no permitida por `contracts/estados/`). */
+        Conflicto: {
             headers: {
                 [name: string]: unknown;
             };
@@ -336,6 +513,168 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+        };
+    };
+    altaSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AltaSujetoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Sujeto creado con su rol inicial. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sujeto"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
+    obtenerSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Detalle del sujeto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SujetoDetalle"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    desactivarSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sujeto desactivado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
+    reactivarSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sujeto reactivado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    listarHistorialSujeto: {
+        parameters: {
+            query?: {
+                /** @description Cursor de continuación; ausente para la primera página. */
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de cambios y cursor. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaHistorial"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    fijarRolSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AsignacionRolEntrada"];
+            };
+        };
+        responses: {
+            /** @description Rol fijado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["Conflicto"];
         };
     };
 }
