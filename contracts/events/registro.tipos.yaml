@@ -119,7 +119,21 @@ tipos:
 
   # --- Ola contractual 2 (`tracer.7`): sujeto y RBAC de `identidad` ---------
   # Fuente de la proyección de pool de `mensajeria` (identidad.md (g)).
+  - tipo: sujeto.creado
+    version: 1
+    productor: identidad
+    consumidores_durables: [catalogos, mensajeria, reportes]
+    agregado: sujeto_id
+    sensibilidad: amplia
+
   - tipo: sujeto.desactivado
+    version: 1
+    productor: identidad
+    consumidores_durables: [catalogos, mensajeria, reportes]
+    agregado: sujeto_id
+    sensibilidad: amplia
+
+  - tipo: sujeto.reactivado
     version: 1
     productor: identidad
     consumidores_durables: [catalogos, mensajeria, reportes]
