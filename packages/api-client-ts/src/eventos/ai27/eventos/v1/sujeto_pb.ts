@@ -17,6 +17,67 @@ import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialM
 import { Message, proto3, Timestamp } from "@bufbuild/protobuf";
 
 /**
+ * sujeto.creado — al comprometer el alta de un sujeto con su rol inicial.
+ * Lo publica solo AltaSujeto (gobierno). Acompaña a `rol.asignado` en la misma
+ * transacción. Consumido por `catalogos`, `mensajeria` y `reportes`.
+ *
+ * @generated from message ai27.eventos.v1.SujetoCreado
+ */
+export class SujetoCreado extends Message<SujetoCreado> {
+  /**
+   * @generated from field: string sujeto_id = 1;
+   */
+  sujetoId = "";
+
+  /**
+   * @generated from field: string tenant_id = 2;
+   */
+  tenantId = "";
+
+  /**
+   * Rol inicial (enum `Rol` de _comunes.yaml, DEC-053).
+   *
+   * @generated from field: string rol = 3;
+   */
+  rol = "";
+
+  /**
+   * @generated from field: google.protobuf.Timestamp creado_en = 4;
+   */
+  creadoEn?: Timestamp;
+
+  constructor(data?: PartialMessage<SujetoCreado>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "ai27.eventos.v1.SujetoCreado";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "sujeto_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "tenant_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "rol", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "creado_en", kind: "message", T: Timestamp },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SujetoCreado {
+    return new SujetoCreado().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SujetoCreado {
+    return new SujetoCreado().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SujetoCreado {
+    return new SujetoCreado().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SujetoCreado | PlainMessage<SujetoCreado> | undefined, b: SujetoCreado | PlainMessage<SujetoCreado> | undefined): boolean {
+    return proto3.util.equals(SujetoCreado, a, b);
+  }
+}
+
+/**
  * sujeto.desactivado — al comprometer la desactivación del sujeto.
  *
  * @generated from message ai27.eventos.v1.SujetoDesactivado
@@ -64,6 +125,58 @@ export class SujetoDesactivado extends Message<SujetoDesactivado> {
 
   static equals(a: SujetoDesactivado | PlainMessage<SujetoDesactivado> | undefined, b: SujetoDesactivado | PlainMessage<SujetoDesactivado> | undefined): boolean {
     return proto3.util.equals(SujetoDesactivado, a, b);
+  }
+}
+
+/**
+ * sujeto.reactivado — al comprometer la reactivación del sujeto. Hecho propio,
+ * no reusa `sujeto.creado` (identidad gobierno C5).
+ *
+ * @generated from message ai27.eventos.v1.SujetoReactivado
+ */
+export class SujetoReactivado extends Message<SujetoReactivado> {
+  /**
+   * @generated from field: string sujeto_id = 1;
+   */
+  sujetoId = "";
+
+  /**
+   * @generated from field: string tenant_id = 2;
+   */
+  tenantId = "";
+
+  /**
+   * @generated from field: google.protobuf.Timestamp reactivado_en = 3;
+   */
+  reactivadoEn?: Timestamp;
+
+  constructor(data?: PartialMessage<SujetoReactivado>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "ai27.eventos.v1.SujetoReactivado";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "sujeto_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "tenant_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "reactivado_en", kind: "message", T: Timestamp },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SujetoReactivado {
+    return new SujetoReactivado().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SujetoReactivado {
+    return new SujetoReactivado().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SujetoReactivado {
+    return new SujetoReactivado().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SujetoReactivado | PlainMessage<SujetoReactivado> | undefined, b: SujetoReactivado | PlainMessage<SujetoReactivado> | undefined): boolean {
+    return proto3.util.equals(SujetoReactivado, a, b);
   }
 }
 

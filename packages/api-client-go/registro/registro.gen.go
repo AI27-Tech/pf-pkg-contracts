@@ -124,7 +124,23 @@ var Tipos = []TipoEvento{
 		Sensibilidad:         SensibilidadAmplia,
 	},
 	{
+		Tipo:                 "sujeto.creado",
+		Version:              1,
+		Productor:            "identidad",
+		ConsumidoresDurables: []string{"catalogos", "mensajeria", "reportes"},
+		Agregado:             "sujeto_id",
+		Sensibilidad:         SensibilidadAmplia,
+	},
+	{
 		Tipo:                 "sujeto.desactivado",
+		Version:              1,
+		Productor:            "identidad",
+		ConsumidoresDurables: []string{"catalogos", "mensajeria", "reportes"},
+		Agregado:             "sujeto_id",
+		Sensibilidad:         SensibilidadAmplia,
+	},
+	{
+		Tipo:                 "sujeto.reactivado",
 		Version:              1,
 		Productor:            "identidad",
 		ConsumidoresDurables: []string{"catalogos", "mensajeria", "reportes"},

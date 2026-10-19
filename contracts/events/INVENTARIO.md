@@ -39,7 +39,9 @@ Reglas que este inventario materializa:
 | `viaje.acceso_revocado` | 1 | `operacion` | `mensajeria`, `realtime` | `viaje_id` | amplia |
 | `sesion.revocada` | 1 | `identidad` | `bff`, `operacion`, `catalogos`, `reportes`, `mensajeria`, `realtime` | `sesion_id` | amplia |
 | `catalogo.actualizado` | 1 | `catalogos` | `operacion`, `mensajeria` | `entidad` + `entidad_id` | amplia |
+| `sujeto.creado` | 1 | `identidad` | `catalogos`, `mensajeria`, `reportes` | `sujeto_id` | amplia |
 | `sujeto.desactivado` | 1 | `identidad` | `catalogos`, `mensajeria`, `reportes` | `sujeto_id` | amplia |
+| `sujeto.reactivado` | 1 | `identidad` | `catalogos`, `mensajeria`, `reportes` | `sujeto_id` | amplia |
 | `rol.asignado` | 1 | `identidad` | `mensajeria`, `reportes` | `sujeto_id` | amplia |
 | `rol.revocado` | 1 | `identidad` | `mensajeria`, `reportes` | `sujeto_id` | amplia |
 | `conversacion.abierta` | 1 | `mensajeria` | `realtime`, `reportes` | `conversacion_id` | restringida |
@@ -66,10 +68,13 @@ Reglas que este inventario materializa:
 - **`catalogo.actualizado`** — Efecto idempotente (invalida caché). Reentregar
   sólo vuelve a invalidar. Desde `tracer.7` también lo consume `mensajeria`
   (caché de cliente para la lectura por lote).
-- **`sujeto.desactivado`, `rol.asignado`, `rol.revocado`** (`tracer.7`) —
-  Publicados por `identidad`. Son la fuente de la proyección de pool de
-  `mensajeria`. El alcance por `cliente`/`unidad` NO viaja aquí: su evento
-  sigue pendiente (identidad.md (g), DEC-045).
+- **`sujeto.creado`, `sujeto.desactivado`, `sujeto.reactivado`, `rol.asignado`,
+  `rol.revocado`** (`sujeto.*`/`rol.*` desde `tracer.7`; `creado`/`reactivado`
+  agregados después) — Publicados por `identidad` (gobierno E4-T6). `creado` y
+  `reactivado` son hechos propios de ciclo de vida del sujeto; el alta publica
+  `sujeto.creado` + `rol.asignado` en la misma transacción. Son la fuente de la
+  proyección de pool de `mensajeria`. El alcance por `cliente`/`unidad` NO viaja
+  aquí: su evento sigue pendiente (identidad.md (g), DEC-045).
 - **Conversación (`conversacion.*`, `mensaje.*`, `recibo.*`,
   `membresia.cambiada`)** (`tracer.7`) — Superficie **restringida**. Viajan por
   el tema restringido envueltos en `SobreVivo` (`sobre_vivo.proto`), que lleva

@@ -15,11 +15,30 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1;eventosv1";
 
+// sujeto.creado — al comprometer el alta de un sujeto con su rol inicial.
+// Lo publica solo AltaSujeto (gobierno). Acompaña a `rol.asignado` en la misma
+// transacción. Consumido por `catalogos`, `mensajeria` y `reportes`.
+message SujetoCreado {
+  string sujeto_id = 1;
+  string tenant_id = 2;
+  // Rol inicial (enum `Rol` de _comunes.yaml, DEC-053).
+  string rol = 3;
+  google.protobuf.Timestamp creado_en = 4;
+}
+
 // sujeto.desactivado — al comprometer la desactivación del sujeto.
 message SujetoDesactivado {
   string sujeto_id = 1;
   string tenant_id = 2;
   google.protobuf.Timestamp desactivado_en = 3;
+}
+
+// sujeto.reactivado — al comprometer la reactivación del sujeto. Hecho propio,
+// no reusa `sujeto.creado` (identidad gobierno C5).
+message SujetoReactivado {
+  string sujeto_id = 1;
+  string tenant_id = 2;
+  google.protobuf.Timestamp reactivado_en = 3;
 }
 
 // rol.asignado — al comprometer la asignación de un rol a un sujeto.
