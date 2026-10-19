@@ -17,7 +17,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — identidad
-  version: 0.1.0-tracer.9
+  version: 0.1.0-tracer.10
   description: >-
     Autenticación, sesión y alcance del tracer. Fuente de verdad de la
     revocación (evento `sesion.revocada`, ADR 26).

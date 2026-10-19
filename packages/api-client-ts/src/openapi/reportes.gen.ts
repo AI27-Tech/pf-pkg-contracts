@@ -57,6 +57,10 @@ export interface components {
         ReporteViajes: {
             filas: components["schemas"]["FilaViaje"][];
             total: number;
+            /** @description Instante hasta el que la proyección aplicó eventos del origen (`reportes` es una proyección por eventos, ADR 18). El reporte refleja el estado del dominio hasta este momento, no el de ahora. Opcional (expand/contract): el servicio lo llena siempre. null solo si la proyección aún no aplicó ningún evento. */
+            proyeccion_al?: components["schemas"]["MarcaTiempo"] | null;
+            /** @description true si el retraso de la proyección (now menos `proyeccion_al`) excede el techo de frescura configurado del servicio. Distingue un reporte al día de uno congelado por un consumo detenido. El valor del techo es configuración del servicio, no del contrato. */
+            stale?: boolean;
         };
         ConteoEstado: {
             estado: string;
@@ -65,6 +69,10 @@ export interface components {
         };
         ReporteEstados: {
             conteos: components["schemas"]["ConteoEstado"][];
+            /** @description Instante hasta el que la proyección aplicó eventos del origen (`reportes` es una proyección por eventos, ADR 18). El reporte refleja el estado del dominio hasta este momento, no el de ahora. Opcional (expand/contract): el servicio lo llena siempre. null solo si la proyección aún no aplicó ningún evento. */
+            proyeccion_al?: components["schemas"]["MarcaTiempo"] | null;
+            /** @description true si el retraso de la proyección (now menos `proyeccion_al`) excede el techo de frescura configurado del servicio. Distingue un reporte al día de uno congelado por un consumo detenido. El valor del techo es configuración del servicio, no del contrato. */
+            stale?: boolean;
         };
         /**
          * Format: date-time
