@@ -300,6 +300,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/viajes/{id}/adjuntos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Listar los adjuntos de un viaje con sus metadatos.
+         * @description Lista los metadatos de los adjuntos del viaje. No devuelve bytes: la descarga se pide por separado con autorización de vida corta. Un usuario fuera del alcance del viaje recibe 403 antes de listar nada.
+         */
+        get: operations["listarAdjuntos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/adjuntos/intenciones-subida": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Intención de subida de un adjunto con autorización de vida corta.
+         * @description Los bytes NO pasan por el servicio: el cliente los sube al almacenamiento de objetos con la URL devuelta. La clave del objeto queda alcanzada por tenant/viaje. Un usuario fuera del alcance del viaje recibe 403 antes de emitir la intención.
+         */
+        post: operations["crearIntencionSubidaAdjunto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/adjuntos/{aid}/descarga": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                aid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Autorización de vida corta para descargar un adjunto.
+         * @description Devuelve una URL de descarga de vida corta del almacenamiento de objetos tras reverificar tenant y alcance del viaje. Los bytes NO pasan por el servicio. Cada descarga queda auditada (actor, adjunto, momento; E1-T7). Un usuario fuera del alcance recibe 403 antes de autorizar nada.
+         */
+        get: operations["descargarAdjunto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -536,6 +603,50 @@ export interface components {
             items: components["schemas"]["RegistroAuditoria"][];
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
+        };
+        /** @description Metadatos de un adjunto del viaje. No incluye los bytes. */
+        Adjunto: {
+            id: components["schemas"]["Id"];
+            viaje_id: components["schemas"]["Id"];
+            /** @description Tipo MIME declarado del adjunto. */
+            tipo_medio: string;
+            /** Format: int64 */
+            tamano_bytes: number;
+            /** @description Checksum declarado en la subida; null si no se declaró. */
+            checksum_sha256?: string | null;
+            /**
+             * @description Estado del escaneo antivirus del objeto. `pendiente` tras crear la intención; `limpio`/`infectado` cuando el escaneo concluye. Un adjunto no `limpio` no autoriza descarga.
+             * @enum {string}
+             */
+            estado_escaneo: "pendiente" | "limpio" | "infectado";
+            creado_en: components["schemas"]["MarcaTiempo"];
+        };
+        PaginaAdjuntos: {
+            items: components["schemas"]["Adjunto"][];
+        };
+        IntencionSubidaAdjuntoEntrada: {
+            /** @description Tipo MIME declarado. */
+            tipo_medio: string;
+            /** Format: int64 */
+            tamano_bytes: number;
+            checksum_sha256: string;
+        };
+        IntencionSubidaAdjunto: {
+            adjunto_id: components["schemas"]["Id"];
+            /**
+             * Format: uri
+             * @description URL de vida corta del almacenamiento de objetos.
+             */
+            url_subida: string;
+            expira_en: components["schemas"]["MarcaTiempo"];
+        };
+        DescargaAdjunto: {
+            /**
+             * Format: uri
+             * @description URL de vida corta del almacenamiento de objetos.
+             */
+            url_descarga: string;
+            expira_en: components["schemas"]["MarcaTiempo"];
         };
         /** @description Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato. */
         Cursor: string;
@@ -1187,6 +1298,87 @@ export interface operations {
             };
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+        };
+    };
+    listarAdjuntos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Adjuntos del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaAdjuntos"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    crearIntencionSubidaAdjunto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntencionSubidaAdjuntoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Intención creada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntencionSubidaAdjunto"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    descargarAdjunto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                aid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Autorización de descarga. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DescargaAdjunto"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
         };
     };
 }
