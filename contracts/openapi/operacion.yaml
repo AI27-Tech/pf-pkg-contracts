@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — operacion
-  version: 0.1.0-tracer.11
+  version: 0.1.0-tracer.12
   description: >-
     Progreso del viaje: creación, transiciones, asignación, bitácora,
     incidencias y auditoría. Consumido por `bff`, nunca por el frontend directo.
@@ -43,6 +43,10 @@ tags:
     Estadías del viaje (paradas durante EN_TRANSITO). Condición con datos
     propios, NO un valor de condicion_viaje ni un estado (DEC-013/DEC-038).
 - name: auditoria
+- name: adjuntos
+  description: >-
+    Adjuntos/evidencia del viaje (E6-T4). Metadatos en `bitacora`; bytes en el
+    almacenamiento de objetos (ADR 32), nunca por el servicio. Acceso auditado.
 
 paths:
   /api/v1/viajes:
@@ -580,6 +584,99 @@ paths:
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
+  # ---------------------------------------------------------------------------
+  # Adjuntos / evidencia del viaje (E6-T4 / E6-HU-027). Metadatos en el esquema
+  # `bitacora` de `operacion`; los BYTES viven en el almacenamiento de objetos
+  # (propuesta ADR 32: MinIO) y NUNCA pasan por el servicio: la subida y la
+  # descarga usan una URL de vida corta. La clave del objeto queda alcanzada por
+  # tenant/viaje (mismo patrón que `mensajeria`, MSG-REC §7). No existe catálogo
+  # de tipos obligatorios en V1 (DEC-040): un viaje con cero adjuntos cierra. Todo
+  # acceso a un adjunto —subida y descarga— queda auditado (E1-T7).
+  # ---------------------------------------------------------------------------
+  /api/v1/viajes/{id}/adjuntos:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarAdjuntos
+      tags: [adjuntos]
+      summary: Listar los adjuntos de un viaje con sus metadatos.
+      description: >-
+        Lista los metadatos de los adjuntos del viaje. No devuelve bytes: la
+        descarga se pide por separado con autorización de vida corta. Un usuario
+        fuera del alcance del viaje recibe 403 antes de listar nada.
+      responses:
+        "200":
+          description: Adjuntos del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaAdjuntos"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/viajes/{id}/adjuntos/intenciones-subida:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: crearIntencionSubidaAdjunto
+      tags: [adjuntos]
+      summary: Intención de subida de un adjunto con autorización de vida corta.
+      description: >-
+        Los bytes NO pasan por el servicio: el cliente los sube al almacenamiento
+        de objetos con la URL devuelta. La clave del objeto queda alcanzada por
+        tenant/viaje. Un usuario fuera del alcance del viaje recibe 403 antes de
+        emitir la intención.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/IntencionSubidaAdjuntoEntrada"}
+      responses:
+        "201":
+          description: Intención creada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/IntencionSubidaAdjunto"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/viajes/{id}/adjuntos/{aid}/descarga:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    - name: aid
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: descargarAdjunto
+      tags: [adjuntos]
+      summary: Autorización de vida corta para descargar un adjunto.
+      description: >-
+        Devuelve una URL de descarga de vida corta del almacenamiento de objetos
+        tras reverificar tenant y alcance del viaje. Los bytes NO pasan por el
+        servicio. Cada descarga queda auditada (actor, adjunto, momento; E1-T7).
+        Un usuario fuera del alcance recibe 403 antes de autorizar nada.
+      responses:
+        "200":
+          description: Autorización de descarga.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DescargaAdjunto"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
 components:
   schemas:
     # --- Enum espejo de contracts/estados/viaje.estados.yaml. CI verifica la
@@ -1076,3 +1173,82 @@ components:
           type: string
           nullable: true
           description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    # --- Adjuntos / evidencia (E6-T4). Metadatos del adjunto; los bytes viven
+    #     en el almacenamiento de objetos, alcanzados por tenant/viaje. ---
+    Adjunto:
+      type: object
+      additionalProperties: false
+      required: [id, viaje_id, tipo_medio, tamano_bytes, estado_escaneo, creado_en]
+      description: Metadatos de un adjunto del viaje. No incluye los bytes.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        tipo_medio:
+          type: string
+          description: Tipo MIME declarado del adjunto.
+        tamano_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        checksum_sha256:
+          type: string
+          nullable: true
+          pattern: "^[a-f0-9]{64}$"
+          description: Checksum declarado en la subida; null si no se declaró.
+        estado_escaneo:
+          type: string
+          enum: [pendiente, limpio, infectado]
+          description: >-
+            Estado del escaneo antivirus del objeto. `pendiente` tras crear la
+            intención; `limpio`/`infectado` cuando el escaneo concluye. Un
+            adjunto no `limpio` no autoriza descarga.
+        creado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    PaginaAdjuntos:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Adjunto"}
+
+    IntencionSubidaAdjuntoEntrada:
+      type: object
+      additionalProperties: false
+      required: [tipo_medio, tamano_bytes, checksum_sha256]
+      properties:
+        tipo_medio:
+          type: string
+          description: Tipo MIME declarado.
+        tamano_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        checksum_sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+
+    IntencionSubidaAdjunto:
+      type: object
+      additionalProperties: false
+      required: [adjunto_id, url_subida, expira_en]
+      properties:
+        adjunto_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        url_subida:
+          type: string
+          format: uri
+          description: URL de vida corta del almacenamiento de objetos.
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    DescargaAdjunto:
+      type: object
+      additionalProperties: false
+      required: [url_descarga, expira_en]
+      properties:
+        url_descarga:
+          type: string
+          format: uri
+          description: URL de vida corta del almacenamiento de objetos.
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
