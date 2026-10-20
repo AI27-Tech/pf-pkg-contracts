@@ -3,6 +3,23 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-19 [tracer.12] — superficie de adjuntos/evidencia de `operacion` (E6-T4)
+
+**Resumen:** Se agrega al contrato de `operacion` la superficie de adjuntos/evidencia del viaje (E6-T4 / `E6-HU-027`), hasta ahora ausente: el schema `bitacora` tenía un `TODO` de adjuntos y la historia técnica estaba bloqueada por "contrato primero". Se publican tres operaciones bajo `/api/v1/viajes/{id}/adjuntos` siguiendo el patrón ya contratado para `mensajeria` (intención de subida con URL de vida corta; los bytes nunca pasan por el servicio).
+
+**Contexto:** E6-T4 pide un módulo de adjuntos en `operacion` (schema `bitacora`), con metadatos en Postgres y bytes en el almacenamiento de objetos (propuesta ADR 32: MinIO). La forma se deriva del patrón ya contratado en `mensajeria.yaml` (`crearIntencionSubida` → `IntencionSubida`), adaptado al viaje: clave de objeto alcanzada por tenant/viaje, estado de escaneo antivirus, y acceso auditado (E1-T7, DEC-040: cero adjuntos no bloquea el cierre). Esto desbloquea E6-T4 por el lado del contrato; la implementación (tabla `adjunto_viaje`, adaptador de object storage) sigue pendiente y depende de que ADR 32 fije el almacenamiento. Número de ola: `tracer.11` es la última publicada en `-d`, así que esta toma el siguiente libre, `tracer.12` (regla de versión de contratos §7).
+
+**Cambios:**
+- `contracts/openapi/operacion.yaml`: tag `adjuntos` y rutas `GET /api/v1/viajes/{id}/adjuntos` (listar metadatos), `POST /api/v1/viajes/{id}/adjuntos/intenciones-subida` (autorización de subida de vida corta) y `GET /api/v1/viajes/{id}/adjuntos/{aid}/descarga` (autorización de descarga de vida corta, auditada). Schemas nuevos: `Adjunto`, `PaginaAdjuntos`, `IntencionSubidaAdjuntoEntrada`, `IntencionSubidaAdjunto`, `DescargaAdjunto`. Reutiliza `Id`, `MarcaTiempo` y las respuestas de error de `_comunes.yaml`.
+- Clientes Go y TS regenerados (`make generate`). `VERSION`, los ocho specs OpenAPI y el paquete TS a `0.1.0-tracer.12`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.11` (operacion "sin romper", el resto sin cambios). Sin entrada en `rompimientos/`. `make verify` y `make generate` reproducibles en verde.
+
+**Archivos modificados:**
+- `contracts/openapi/operacion.yaml`, los otros siete specs (solo `info.version`), `VERSION`
+- `packages/api-client-go/operacion/operacion.gen.go`, `packages/api-client-ts/src/openapi/operacion.gen.ts`, `packages/api-client-ts/package.json`
+- `CHANGELOG.md`
+
 ## 2026-10-19 [tracer.11] — superficie de gobierno de `identidad` (sujetos y roles)
 
 **Resumen:** Se publica la superficie HTTP de administración de usuarios y roles de `identidad` (E4-T6), hasta ahora ausente del contrato (brecha G-2): el backend de gobierno estaba listo pero no podía exponerse ni pasar al front porque no existían tipos a los que pegarse. Se agregan las rutas bajo `/api/v1/sujetos` y los dos eventos de ciclo de vida que faltaban, `sujeto.creado` y `sujeto.reactivado`.
