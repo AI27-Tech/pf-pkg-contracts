@@ -246,11 +246,24 @@ type RegistroAuditoria struct {
 	OcurridoEn MarcaTiempo `json:"ocurrido_en"`
 }
 
+// RevisionBandeja Revisión monotónica de la COLECCIÓN de trabajo de una bandeja (ADR 28 §3): avanza con cada cambio de la colección (alta, baja, reenrutamiento, reclamo, atención). Es el cursor de dominio del bootstrap y el catch-up de bandeja. No es el cursor de paginación, ni una secuencia de mensaje, ni el `seq` de transporte de `realtime`.
+type RevisionBandeja = int64
+
 // Rol Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
 type Rol string
 
 // SecuenciaMensaje Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una versión de reclamo ni el `seq` de transporte de `realtime`.
 type SecuenciaMensaje = int64
+
+// TrabajoBandeja Trabajo de una bandeja con su cursor de dominio. A diferencia de `PaginaConversaciones` (listado por alcance), declara la `revision` de la COLECCIÓN al momento de la respuesta (ADR 28 §3): es el cursor del bootstrap de bandeja y el punto desde el que `desde_revision` pide el catch-up. El cursor de paginación (`cursor_siguiente`) y el cursor de cambios (`revision`) son distintos y no se confunden.
+type TrabajoBandeja struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más.
+	CursorSiguiente *string        `json:"cursor_siguiente"`
+	Items           []Conversacion `json:"items"`
+
+	// Revision Revisión de la colección que representa esta respuesta. El cliente la usa como `desde_revision` en el siguiente catch-up.
+	Revision RevisionBandeja `json:"revision"`
+}
 
 // TransferenciaEntrada defines model for TransferenciaEntrada.
 type TransferenciaEntrada struct {
@@ -290,6 +303,9 @@ type NoEncontrado = Error
 // Prohibido defines model for Prohibido.
 type Prohibido = Error
 
+// ResyncRequerido defines model for ResyncRequerido.
+type ResyncRequerido = Error
+
 // SolicitudInvalida defines model for SolicitudInvalida.
 type SolicitudInvalida = Error
 
@@ -303,6 +319,9 @@ type ListarAuditoriaConversacionParams struct {
 type ListarTrabajoBandejaParams struct {
 	// Cursor Cursor de paginación. No es el cursor de cambios de ADR 28.
 	Cursor *CursorPagina `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// DesdeRevision Catch-up: devuelve los cambios de la colección con revisión mayor a este valor. Es la `revision` de una respuesta previa, no el cursor de paginación.
+	DesdeRevision *RevisionBandeja `form:"desde_revision,omitempty" json:"desde_revision,omitempty"`
 }
 
 // ListarConversacionesParams defines parameters for ListarConversaciones.
@@ -802,6 +821,22 @@ func NewListarTrabajoBandejaRequest(server string, id IdRuta, params *ListarTrab
 		if params.Cursor != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.DesdeRevision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "desde_revision", runtime.ParamLocationQuery, *params.DesdeRevision); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -1510,10 +1545,11 @@ func (r ListarAuditoriaConversacionResponse) StatusCode() int {
 type ListarTrabajoBandejaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *PaginaConversaciones
+	JSON200      *TrabajoBandeja
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
 	JSON404      *NoEncontrado
+	JSON409      *ResyncRequerido
 }
 
 // Status returns HTTPResponse.Status
@@ -2042,7 +2078,7 @@ func ParseListarTrabajoBandejaResponse(rsp *http.Response) (*ListarTrabajoBandej
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest PaginaConversaciones
+		var dest TrabajoBandeja
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2068,6 +2104,13 @@ func ParseListarTrabajoBandejaResponse(rsp *http.Response) (*ListarTrabajoBandej
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ResyncRequerido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
