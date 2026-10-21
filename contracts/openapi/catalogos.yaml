@@ -22,7 +22,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — catalogos
-  version: 0.1.0-tracer.12
+  version: 0.1.0-tracer.13
   description: Registro maestro. Lectura para el tracer y afirmación de aptitud.
   x-ai27-servicio: catalogos
   x-ai27-capa: catalogo
