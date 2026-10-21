@@ -22,11 +22,29 @@ const (
 	BearerCognitoScopes = "bearerCognito.Scopes"
 )
 
+// Defines values for CondicionAbiertaTipo.
+const (
+	INCIDENCIA CondicionAbiertaTipo = "INCIDENCIA"
+	SINSENAL   CondicionAbiertaTipo = "SIN_SENAL"
+)
+
 // Defines values for IncidenciaCuradaEstado.
 const (
 	EnAtencion IncidenciaCuradaEstado = "en_atencion"
 	Resuelta   IncidenciaCuradaEstado = "resuelta"
 )
+
+// CondicionAbierta Condición ortogonal abierta. Espejo de `CondicionAbierta` de `operacion`.
+type CondicionAbierta struct {
+	// AbiertaEn Instante en UTC, RFC 3339.
+	AbiertaEn MarcaTiempo `json:"abierta_en"`
+
+	// Tipo Condición ortogonal al progreso. Nunca es un estado.
+	Tipo CondicionAbiertaTipo `json:"tipo"`
+}
+
+// CondicionAbiertaTipo Condición ortogonal al progreso. Nunca es un estado.
+type CondicionAbiertaTipo string
 
 // CrearViajeEntrada defines model for CrearViajeEntrada.
 type CrearViajeEntrada struct {
@@ -92,6 +110,12 @@ type Error struct {
 
 	// Mensaje Descripción legible para diagnóstico. No es contrato de UI.
 	Mensaje string `json:"mensaje"`
+}
+
+// EtaEntrada Entrada para fijar el ETA. Espejo de `EtaEntrada` de `operacion`.
+type EtaEntrada struct {
+	// EtaEstimado ETA estimado a fijar (captura manual, ADR 20). Reemplaza el valor previo.
+	EtaEstimado MarcaTiempo `json:"eta_estimado"`
 }
 
 // FichaTecnicaDescarga Ficha técnica del viaje tal como la expone `operacion` (E1-T5).
@@ -174,6 +198,50 @@ type Sesion struct {
 	SesionId Id `json:"sesion_id"`
 }
 
+// TransicionEntrada Entrada de una transición de estado. Espejo de `TransicionEntrada` de `operacion`.
+type TransicionEntrada struct {
+	// AEstado Estado destino (token de `EstadoViaje`, ADR 19). Se valida contra la máquina de estados en `operacion`.
+	AEstado string `json:"a_estado"`
+
+	// Causa Causa de la transición. Obligatoria cuando el destino la requiere; la validación fina vive en `operacion`.
+	Causa *string `json:"causa,omitempty"`
+}
+
+// ViajeDetalle Detalle interno del viaje: estado canónico MÁS condiciones activas como dato separado. Un viaje puede estar `EN_TRANSITO` y con `INCIDENCIA` abierta a la vez. Espejo de `ViajeDetalle` de `operacion`.
+type ViajeDetalle struct {
+	// CondicionesActivas Condiciones ortogonales abiertas (dato separado del estado).
+	CondicionesActivas []CondicionAbierta `json:"condiciones_activas"`
+
+	// Viaje Viaje con su estado canónico, tal como lo expone `operacion` (ADR 19). Los campos mínimos que el frontend interno necesita para derivar acciones y pintar el bucle multi-parada y el estado terminal.
+	Viaje ViajeInterno `json:"viaje"`
+}
+
+// ViajeInterno Viaje con su estado canónico, tal como lo expone `operacion` (ADR 19). Los campos mínimos que el frontend interno necesita para derivar acciones y pintar el bucle multi-parada y el estado terminal.
+type ViajeInterno struct {
+	// ClienteId Opcional; mismo formato que `Id`. null si no aplica.
+	ClienteId *openapi_types.UUID `json:"cliente_id"`
+
+	// CreadoEn Instante en UTC, RFC 3339.
+	CreadoEn MarcaTiempo `json:"creado_en"`
+	Destinos []struct {
+		Nombre      string  `json:"nombre"`
+		NumeroEnvio *string `json:"numero_envio,omitempty"`
+	} `json:"destinos"`
+
+	// Estado Token de estado canónico (`EstadoViaje`, ADR 19), tal como lo publica `operacion`. El `bff` no replica el enum; el frontend deriva las acciones con la máquina de estados generada.
+	Estado string `json:"estado"`
+
+	// EtaEstimado ETA estimado capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado. El `bff` deriva `stale` sólo en la vista de cliente (`seguirViaje`), no aquí.
+	EtaEstimado *time.Time `json:"eta_estimado"`
+
+	// FechaHoraServicio Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+	FechaHoraServicio *time.Time `json:"fecha_hora_servicio"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id     Id     `json:"id"`
+	Origen string `json:"origen"`
+}
+
 // ViajeResumen defines model for ViajeResumen.
 type ViajeResumen struct {
 	// Estado Token de estado tal como lo publica `operacion` (ADR 19).
@@ -231,6 +299,12 @@ type RefrescarSesionJSONRequestBody = RefrescoEntrada
 
 // CrearViajeJSONRequestBody defines body for CrearViaje for application/json ContentType.
 type CrearViajeJSONRequestBody = CrearViajeEntrada
+
+// FijarEtaJSONRequestBody defines body for FijarEta for application/json ContentType.
+type FijarEtaJSONRequestBody = EtaEntrada
+
+// TransicionarViajeJSONRequestBody defines body for TransicionarViaje for application/json ContentType.
+type TransicionarViajeJSONRequestBody = TransicionEntrada
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -331,6 +405,19 @@ type ClientInterface interface {
 
 	// DescargarViaje request
 	DescargarViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerViajeInterno request
+	ObtenerViajeInterno(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// FijarEtaWithBody request with any body
+	FijarEtaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	FijarEta(ctx context.Context, id Id, body FijarEtaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TransicionarViajeWithBody request with any body
+	TransicionarViajeWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	TransicionarViaje(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) CerrarSesion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -443,6 +530,66 @@ func (c *Client) SeguirViaje(ctx context.Context, id Id, reqEditors ...RequestEd
 
 func (c *Client) DescargarViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDescargarViajeRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerViajeInterno(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerViajeInternoRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarEtaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarEtaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarEta(ctx context.Context, id Id, body FijarEtaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarEtaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TransicionarViajeWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTransicionarViajeRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TransicionarViaje(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTransicionarViajeRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -733,6 +880,134 @@ func NewDescargarViajeRequest(server string, id Id) (*http.Request, error) {
 	return req, nil
 }
 
+// NewObtenerViajeInternoRequest generates requests for ObtenerViajeInterno
+func NewObtenerViajeInternoRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/detalle", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewFijarEtaRequest calls the generic FijarEta builder with application/json body
+func NewFijarEtaRequest(server string, id Id, body FijarEtaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewFijarEtaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewFijarEtaRequestWithBody generates requests for FijarEta with any type of body
+func NewFijarEtaRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/eta", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTransicionarViajeRequest calls the generic TransicionarViaje builder with application/json body
+func NewTransicionarViajeRequest(server string, id Id, body TransicionarViajeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTransicionarViajeRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewTransicionarViajeRequestWithBody generates requests for TransicionarViaje with any type of body
+func NewTransicionarViajeRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/transiciones", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -802,6 +1077,19 @@ type ClientWithResponsesInterface interface {
 
 	// DescargarViajeWithResponse request
 	DescargarViajeWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*DescargarViajeResponse, error)
+
+	// ObtenerViajeInternoWithResponse request
+	ObtenerViajeInternoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerViajeInternoResponse, error)
+
+	// FijarEtaWithBodyWithResponse request with any body
+	FijarEtaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarEtaResponse, error)
+
+	FijarEtaWithResponse(ctx context.Context, id Id, body FijarEtaJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarEtaResponse, error)
+
+	// TransicionarViajeWithBodyWithResponse request with any body
+	TransicionarViajeWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
+
+	TransicionarViajeWithResponse(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
 }
 
 type CerrarSesionResponse struct {
@@ -972,6 +1260,83 @@ func (r DescargarViajeResponse) StatusCode() int {
 	return 0
 }
 
+type ObtenerViajeInternoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ViajeDetalle
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerViajeInternoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerViajeInternoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type FijarEtaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ViajeDetalle
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r FijarEtaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FijarEtaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type TransicionarViajeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ViajeDetalle
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r TransicionarViajeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TransicionarViajeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // CerrarSesionWithResponse request returning *CerrarSesionResponse
 func (c *ClientWithResponses) CerrarSesionWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*CerrarSesionResponse, error) {
 	rsp, err := c.CerrarSesion(ctx, reqEditors...)
@@ -1057,6 +1422,49 @@ func (c *ClientWithResponses) DescargarViajeWithResponse(ctx context.Context, id
 		return nil, err
 	}
 	return ParseDescargarViajeResponse(rsp)
+}
+
+// ObtenerViajeInternoWithResponse request returning *ObtenerViajeInternoResponse
+func (c *ClientWithResponses) ObtenerViajeInternoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerViajeInternoResponse, error) {
+	rsp, err := c.ObtenerViajeInterno(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerViajeInternoResponse(rsp)
+}
+
+// FijarEtaWithBodyWithResponse request with arbitrary body returning *FijarEtaResponse
+func (c *ClientWithResponses) FijarEtaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarEtaResponse, error) {
+	rsp, err := c.FijarEtaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarEtaResponse(rsp)
+}
+
+func (c *ClientWithResponses) FijarEtaWithResponse(ctx context.Context, id Id, body FijarEtaJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarEtaResponse, error) {
+	rsp, err := c.FijarEta(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarEtaResponse(rsp)
+}
+
+// TransicionarViajeWithBodyWithResponse request with arbitrary body returning *TransicionarViajeResponse
+func (c *ClientWithResponses) TransicionarViajeWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error) {
+	rsp, err := c.TransicionarViajeWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTransicionarViajeResponse(rsp)
+}
+
+func (c *ClientWithResponses) TransicionarViajeWithResponse(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error) {
+	rsp, err := c.TransicionarViaje(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTransicionarViajeResponse(rsp)
 }
 
 // ParseCerrarSesionResponse parses an HTTP response from a CerrarSesionWithResponse call
@@ -1333,6 +1741,161 @@ func ParseDescargarViajeResponse(rsp *http.Response) (*DescargarViajeResponse, e
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerViajeInternoResponse parses an HTTP response from a ObtenerViajeInternoWithResponse call
+func ParseObtenerViajeInternoResponse(rsp *http.Response) (*ObtenerViajeInternoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerViajeInternoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ViajeDetalle
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseFijarEtaResponse parses an HTTP response from a FijarEtaWithResponse call
+func ParseFijarEtaResponse(rsp *http.Response) (*FijarEtaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FijarEtaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ViajeDetalle
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTransicionarViajeResponse parses an HTTP response from a TransicionarViajeWithResponse call
+func ParseTransicionarViajeResponse(rsp *http.Response) (*TransicionarViajeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TransicionarViajeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ViajeDetalle
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
