@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.12
+  version: 0.1.0-tracer.13
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -200,6 +200,115 @@ paths:
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
+  # ---------------------------------------------------------------------------
+  # Superficie interna de avance del viaje (E8-T8 / E1-HU-005). Tres reenvíos a
+  # `operacion` con las guardas de alcance/rol del `bff`; no añaden lógica de
+  # dominio. Existen porque el frontend interno habla sólo con el `bff` y la
+  # vista `seguirViaje` es deliberadamente la curada para cliente (hito colapsado
+  # + ETA con `stale`, DEC-006): no trae el `estado` canónico ni las condiciones,
+  # así que no sirve para derivar acciones desde la máquina de estados. La vista
+  # interna y la curada coexisten a propósito, como la sesión singular/plural.
+  # ---------------------------------------------------------------------------
+  /api/v1/viajes/{id}/detalle:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerViajeInterno
+      tags: [viajes]
+      summary: Detalle interno del viaje con estado canónico (audiencia interna).
+      description: >-
+        Reenvía a `operacion.obtenerViaje`. Devuelve el `estado` canónico (token
+        de `EstadoViaje`, ADR 19) y las condiciones activas como dato separado,
+        para que el frontend interno derive las acciones ofrecidas desde la
+        máquina de estados generada. Audiencia interna: un usuario fuera del
+        alcance del viaje recibe 403; un viaje inexistente o fuera de alcance, 404.
+      responses:
+        "200":
+          description: Detalle interno del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ViajeDetalle"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/viajes/{id}/transiciones:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: transicionarViaje
+      tags: [viajes]
+      summary: Registrar una transición de estado validada (audiencia interna).
+      description: >-
+        Reenvía a `operacion.transicionarViaje`. La máquina de estados valida la
+        arista en `operacion`; `bff` no replica el grafo. Devuelve el detalle
+        interno ya recompuesto para refrescar la vista sin un segundo GET.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TransicionEntrada"}
+      responses:
+        "200":
+          description: Transición aplicada; detalle interno del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ViajeDetalle"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409":
+          description: >-
+            Transición no permitida por la máquina de estados. `codigo` de
+            máquina `transicion_no_permitida` en el cuerpo: la UI distingue el
+            rechazo por carrera a partir de él, no del `mensaje`.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/viajes/{id}/eta:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    patch:
+      operationId: fijarEta
+      tags: [viajes]
+      summary: Fijar el ETA estimado del viaje (captura manual, audiencia interna).
+      description: >-
+        Reenvía a `operacion.fijarEta`. En V1 el ETA es captura manual, no un
+        cálculo (ADR 20 / DEC-007). No es un cambio de estado; sólo exige que el
+        viaje no esté en un estado terminal. Devuelve el detalle interno
+        recompuesto para refrescar la vista sin un segundo GET.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EtaEntrada"}
+      responses:
+        "200":
+          description: ETA actualizado; detalle interno del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ViajeDetalle"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409":
+          description: >-
+            El viaje está en un estado terminal y no admite fijar ETA. `codigo`
+            de máquina `viaje_en_estado_terminal` en el cuerpo.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
 components:
   schemas:
     CredencialesEntrada:
@@ -280,6 +389,113 @@ components:
           type: string
           nullable: true
           description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    # --- Superficie interna del viaje (E8-T8). Espejo de las formas de
+    #     `operacion` (ViajeDetalle, Viaje, CondicionAbierta, TransicionEntrada,
+    #     EtaEntrada): mismos nombres y mismas formas, para que el consumidor
+    #     migre por cambio de importación, no por reescritura. El `estado` es el
+    #     token canónico como `string` (igual que ViajeResumen): el enum vive y
+    #     se valida en `operacion`/`contracts/estados`, el `bff` no lo replica. ---
+    ViajeDetalle:
+      type: object
+      additionalProperties: false
+      required: [viaje, condiciones_activas]
+      description: >-
+        Detalle interno del viaje: estado canónico MÁS condiciones activas como
+        dato separado. Un viaje puede estar `EN_TRANSITO` y con `INCIDENCIA`
+        abierta a la vez. Espejo de `ViajeDetalle` de `operacion`.
+      properties:
+        viaje: {$ref: "#/components/schemas/ViajeInterno"}
+        condiciones_activas:
+          type: array
+          description: Condiciones ortogonales abiertas (dato separado del estado).
+          items: {$ref: "#/components/schemas/CondicionAbierta"}
+
+    ViajeInterno:
+      type: object
+      additionalProperties: false
+      required: [id, estado, origen, destinos, creado_en]
+      description: >-
+        Viaje con su estado canónico, tal como lo expone `operacion` (ADR 19).
+        Los campos mínimos que el frontend interno necesita para derivar acciones
+        y pintar el bucle multi-parada y el estado terminal.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        estado:
+          type: string
+          description: >-
+            Token de estado canónico (`EstadoViaje`, ADR 19), tal como lo publica
+            `operacion`. El `bff` no replica el enum; el frontend deriva las
+            acciones con la máquina de estados generada.
+        cliente_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Opcional; mismo formato que `Id`. null si no aplica.
+        origen: {type: string}
+        destinos:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [nombre]
+            properties:
+              nombre: {type: string}
+              numero_envio: {type: string}
+        fecha_hora_servicio:
+          type: string
+          format: date-time
+          nullable: true
+          description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+        eta_estimado:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            ETA estimado capturado a mano (ADR 20). Mismo formato que
+            `MarcaTiempo`. null si no se ha fijado. El `bff` deriva `stale` sólo
+            en la vista de cliente (`seguirViaje`), no aquí.
+        creado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    CondicionAbierta:
+      type: object
+      additionalProperties: false
+      required: [tipo, abierta_en]
+      description: Condición ortogonal abierta. Espejo de `CondicionAbierta` de `operacion`.
+      properties:
+        tipo:
+          type: string
+          enum: [INCIDENCIA, SIN_SENAL]
+          description: Condición ortogonal al progreso. Nunca es un estado.
+        abierta_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    TransicionEntrada:
+      type: object
+      additionalProperties: false
+      required: [a_estado]
+      description: Entrada de una transición de estado. Espejo de `TransicionEntrada` de `operacion`.
+      properties:
+        a_estado:
+          type: string
+          description: >-
+            Estado destino (token de `EstadoViaje`, ADR 19). Se valida contra la
+            máquina de estados en `operacion`.
+        causa:
+          type: string
+          description: >-
+            Causa de la transición. Obligatoria cuando el destino la requiere;
+            la validación fina vive en `operacion`.
+
+    EtaEntrada:
+      type: object
+      additionalProperties: false
+      required: [eta_estimado]
+      description: Entrada para fijar el ETA. Espejo de `EtaEntrada` de `operacion`.
+      properties:
+        eta_estimado:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          description: ETA estimado a fijar (captura manual, ADR 20). Reemplaza el valor previo.
+
     HitoCliente:
       type: object
       additionalProperties: false

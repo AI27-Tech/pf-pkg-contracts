@@ -116,6 +116,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/viajes/{id}/detalle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Detalle interno del viaje con estado canónico (audiencia interna).
+         * @description Reenvía a `operacion.obtenerViaje`. Devuelve el `estado` canónico (token de `EstadoViaje`, ADR 19) y las condiciones activas como dato separado, para que el frontend interno derive las acciones ofrecidas desde la máquina de estados generada. Audiencia interna: un usuario fuera del alcance del viaje recibe 403; un viaje inexistente o fuera de alcance, 404.
+         */
+        get: operations["obtenerViajeInterno"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/transiciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar una transición de estado validada (audiencia interna).
+         * @description Reenvía a `operacion.transicionarViaje`. La máquina de estados valida la arista en `operacion`; `bff` no replica el grafo. Devuelve el detalle interno ya recompuesto para refrescar la vista sin un segundo GET.
+         */
+        post: operations["transicionarViaje"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/eta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Fijar el ETA estimado del viaje (captura manual, audiencia interna).
+         * @description Reenvía a `operacion.fijarEta`. En V1 el ETA es captura manual, no un cálculo (ADR 20 / DEC-007). No es un cambio de estado; sólo exige que el viaje no esté en un estado terminal. Devuelve el detalle interno recompuesto para refrescar la vista sin un segundo GET.
+         */
+        patch: operations["fijarEta"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -162,6 +228,60 @@ export interface components {
             items: components["schemas"]["ViajeResumen"][];
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
+        };
+        /** @description Detalle interno del viaje: estado canónico MÁS condiciones activas como dato separado. Un viaje puede estar `EN_TRANSITO` y con `INCIDENCIA` abierta a la vez. Espejo de `ViajeDetalle` de `operacion`. */
+        ViajeDetalle: {
+            viaje: components["schemas"]["ViajeInterno"];
+            /** @description Condiciones ortogonales abiertas (dato separado del estado). */
+            condiciones_activas: components["schemas"]["CondicionAbierta"][];
+        };
+        /** @description Viaje con su estado canónico, tal como lo expone `operacion` (ADR 19). Los campos mínimos que el frontend interno necesita para derivar acciones y pintar el bucle multi-parada y el estado terminal. */
+        ViajeInterno: {
+            id: components["schemas"]["Id"];
+            /** @description Token de estado canónico (`EstadoViaje`, ADR 19), tal como lo publica `operacion`. El `bff` no replica el enum; el frontend deriva las acciones con la máquina de estados generada. */
+            estado: string;
+            /**
+             * Format: uuid
+             * @description Opcional; mismo formato que `Id`. null si no aplica.
+             */
+            cliente_id?: string | null;
+            origen: string;
+            destinos: {
+                nombre: string;
+                numero_envio?: string;
+            }[];
+            /**
+             * Format: date-time
+             * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+             */
+            fecha_hora_servicio?: string | null;
+            /**
+             * Format: date-time
+             * @description ETA estimado capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado. El `bff` deriva `stale` sólo en la vista de cliente (`seguirViaje`), no aquí.
+             */
+            eta_estimado?: string | null;
+            creado_en: components["schemas"]["MarcaTiempo"];
+        };
+        /** @description Condición ortogonal abierta. Espejo de `CondicionAbierta` de `operacion`. */
+        CondicionAbierta: {
+            /**
+             * @description Condición ortogonal al progreso. Nunca es un estado.
+             * @enum {string}
+             */
+            tipo: "INCIDENCIA" | "SIN_SENAL";
+            abierta_en: components["schemas"]["MarcaTiempo"];
+        };
+        /** @description Entrada de una transición de estado. Espejo de `TransicionEntrada` de `operacion`. */
+        TransicionEntrada: {
+            /** @description Estado destino (token de `EstadoViaje`, ADR 19). Se valida contra la máquina de estados en `operacion`. */
+            a_estado: string;
+            /** @description Causa de la transición. Obligatoria cuando el destino la requiere; la validación fina vive en `operacion`. */
+            causa?: string;
+        };
+        /** @description Entrada para fijar el ETA. Espejo de `EtaEntrada` de `operacion`. */
+        EtaEntrada: {
+            /** @description ETA estimado a fijar (captura manual, ADR 20). Reemplaza el valor previo. */
+            eta_estimado: components["schemas"]["MarcaTiempo"];
         };
         /** @description Hito de progreso presentado al cliente. `bff` colapsa el bucle multi-parada en un hito legible (mapeo estado→hito, E2-T2); no expone el enum completo de estados. */
         HitoCliente: {
@@ -482,6 +602,107 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
+        };
+    };
+    obtenerViajeInterno: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Detalle interno del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViajeDetalle"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    transicionarViaje: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransicionEntrada"];
+            };
+        };
+        responses: {
+            /** @description Transición aplicada; detalle interno del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViajeDetalle"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            /** @description Transición no permitida por la máquina de estados. `codigo` de máquina `transicion_no_permitida` en el cuerpo: la UI distingue el rechazo por carrera a partir de él, no del `mensaje`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    fijarEta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EtaEntrada"];
+            };
+        };
+        responses: {
+            /** @description ETA actualizado; detalle interno del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViajeDetalle"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            /** @description El viaje está en un estado terminal y no admite fijar ETA. `codigo` de máquina `viaje_en_estado_terminal` en el cuerpo. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }
