@@ -3,6 +3,23 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-21 [tracer.13] — superficie interna de avance del viaje en `bff` (E8-T8)
+
+**Resumen:** Se amplía el contrato de `bff` con la superficie interna de avance del viaje que pide el frontend interno para la pantalla de detalle (E8-T8 / `E1-HU-005`), hasta ahora ausente: el frontend habla sólo con `bff` y la lectura publicada (`seguirViaje`) es la vista curada para cliente, sin `estado` canónico ni condiciones, así que no sirve para derivar acciones desde la máquina de estados. Se agregan tres reenvíos a `operacion`: leer el detalle interno con estado canónico, registrar una transición y fijar el ETA manual.
+
+**Contexto:** Las tres piezas ya existen en `operacion.yaml` (`obtenerViaje` → `ViajeDetalle`, `transicionarViaje`, `fijarEta`), marcado "Consumido por `bff`, nunca por el frontend directo"; el frontend no puede llamarlo. La brecha quedó fuera de olas previas del tracer (handoff), no es un error de diseño. Los schemas nuevos de `bff` son espejo de las formas de `operacion` con los mismos nombres (`ViajeDetalle`, `TransicionEntrada`, `EtaEntrada`, `CondicionAbierta`), para que el consumidor migre por cambio de importación, no por reescritura. El `estado` se expone como token `string` igual que `ViajeResumen`: el enum `EstadoViaje` vive y se valida en `operacion`/`contracts/estados` (gate `check-estados`), el `bff` no lo replica para no crear una segunda fuente de verdad sin ese check. El 200 de transición y ETA devuelve `ViajeDetalle` para refrescar la vista sin un segundo GET. Número de ola: `tracer.12` es la última publicada en `-d` y no hay ola `13` tomada por tag ni por rama de trabajo (verificado contra tags remotos y `VERSION` de cada rama `feat/*`), así que esta toma el siguiente libre, `tracer.13` (regla de versión de contratos §7).
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: rutas `GET /api/v1/viajes/{id}/detalle` (`obtenerViajeInterno` → `ViajeDetalle`), `POST /api/v1/viajes/{id}/transiciones` (`transicionarViaje`, 409 con `codigo` `transicion_no_permitida`) y `PATCH /api/v1/viajes/{id}/eta` (`fijarEta`, 409 con `codigo` `viaje_en_estado_terminal`). Schemas nuevos: `ViajeDetalle`, `ViajeInterno`, `CondicionAbierta`, `TransicionEntrada`, `EtaEntrada`. Reutiliza `Id`, `MarcaTiempo` y las respuestas de error de `_comunes.yaml`.
+- Clientes Go y TS regenerados (`make generate`). `VERSION`, los ocho specs OpenAPI y el paquete TS a `0.1.0-tracer.13`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.12` (bff "cambió, compatible"; el resto solo bump de versión). Sin entrada en `rompimientos/`. `make lint-openapi`, `make check-estados` y `go build`/`go vet` en verde.
+
+**Archivos modificados:**
+- `contracts/openapi/bff.yaml`, los otros siete specs (solo `info.version`), `VERSION`
+- `packages/api-client-go/bff/bff.gen.go`, `packages/api-client-ts/src/openapi/bff.gen.ts`, `packages/api-client-ts/package.json`
+- `CHANGELOG.md`
+
 ## 2026-10-19 [tracer.12] — superficie de adjuntos/evidencia de `operacion` (E6-T4)
 
 **Resumen:** Se agrega al contrato de `operacion` la superficie de adjuntos/evidencia del viaje (E6-T4 / `E6-HU-027`), hasta ahora ausente: el schema `bitacora` tenía un `TODO` de adjuntos y la historia técnica estaba bloqueada por "contrato primero". Se publican tres operaciones bajo `/api/v1/viajes/{id}/adjuntos` siguiendo el patrón ya contratado para `mensajeria` (intención de subida con URL de vida corta; los bytes nunca pasan por el servicio).
