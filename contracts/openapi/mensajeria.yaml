@@ -10,9 +10,12 @@
 # por un pool, no entre el cliente y un operador nombrado. Solo el responsable
 # con reclamo activo responde normalmente (Addendum §4).
 #
-# FUERA de esta ola (tracer.8): las capacidades de bootstrap y catch-up de la
-# colección de bandeja y del caso de emergencia (ADR 28, rutas aún sin congelar
-# en la arquitectura) y toda la familia de emergencia (ADR 21, DEC-034).
+# FUERA de esta ola: toda la familia de emergencia (ADR 21, DEC-034): sus
+# rutas, esquemas y eventos siguen sin congelar en la arquitectura (pregunta 8
+# del audit). El catch-up de la COLECCIÓN de bandeja SÍ entra desde tracer.14:
+# `listarTrabajoBandeja` expone la `revision` de la colección y acepta
+# `desde_revision` para el catch-up incremental, con `409 stream_resync_required`
+# fuera de ventana (ADR 28 §3, §5), el mismo patrón que la conversación ya tenía.
 # Plantillas de notificación no se publican: V1 no notifica al cliente (DEC-023).
 #
 # Cursores (ADR 28): la recuperación durable de una conversación es
@@ -23,7 +26,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — mensajeria
-  version: 0.1.0-tracer.13
+  version: 0.1.0-tracer.14
   description: >-
     Conversación de negocio entre el cliente y la bandeja compartida de AI27:
     enrutamiento, reclamo versionado, orden canónico de mensajes, recibos,
@@ -54,22 +57,38 @@ paths:
     get:
       operationId: listarTrabajoBandeja
       tags: [bandejas]
-      summary: Listar el trabajo de una bandeja.
+      summary: Listar el trabajo de una bandeja (bootstrap y catch-up).
       description: >-
         Requiere MEMBRESÍA EFECTIVA en el pool de la bandeja; el rol
         `ejecutivo` por sí solo no concede acceso a todas las bandejas
         (Addendum §7).
+
+        Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la
+        `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el
+        CATCH-UP: devuelve los cambios de la colección posteriores a esa
+        revisión. Si la revisión pedida quedó fuera de la ventana retenida,
+        responde `409 stream_resync_required` y el cliente repite el bootstrap
+        (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
       parameters:
       - {$ref: "#/components/parameters/CursorPagina"}
+      - name: desde_revision
+        in: query
+        required: false
+        description: >-
+          Catch-up: devuelve los cambios de la colección con revisión mayor a
+          este valor. Es la `revision` de una respuesta previa, no el cursor de
+          paginación.
+        schema: {$ref: "#/components/schemas/RevisionBandeja"}
       responses:
         "200":
-          description: Página de conversaciones enrutadas a la bandeja.
+          description: Trabajo de la bandeja con la revisión de la colección.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/PaginaConversaciones"}
+              schema: {$ref: "#/components/schemas/TrabajoBandeja"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ResyncRequerido"}
 
   /api/v1/conversaciones:
     get:
@@ -387,6 +406,17 @@ components:
         application/json:
           schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
 
+    ResyncRequerido:
+      description: >-
+        La `desde_revision` pedida quedó fuera de la ventana de cambios retenida
+        de la colección: el catch-up incremental ya no es posible y el cliente
+        debe repetir el bootstrap (ADR 28 §5). `codigo` de máquina
+        `stream_resync_required`, el mismo que usa `realtime` ante una línea no
+        reanudable; la respuesta no distingue la causa.
+      content:
+        application/json:
+          schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
   schemas:
     SecuenciaMensaje:
       type: integer
@@ -395,6 +425,17 @@ components:
       description: >-
         Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una
         versión de reclamo ni el `seq` de transporte de `realtime`.
+
+    RevisionBandeja:
+      type: integer
+      format: int64
+      minimum: 0
+      description: >-
+        Revisión monotónica de la COLECCIÓN de trabajo de una bandeja (ADR 28
+        §3): avanza con cada cambio de la colección (alta, baja, reenrutamiento,
+        reclamo, atención). Es el cursor de dominio del bootstrap y el catch-up
+        de bandeja. No es el cursor de paginación, ni una secuencia de mensaje,
+        ni el `seq` de transporte de `realtime`.
 
     VersionReclamo:
       type: integer
@@ -455,6 +496,31 @@ components:
         items:
           type: array
           items: {$ref: "#/components/schemas/Conversacion"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no hay más.
+
+    TrabajoBandeja:
+      type: object
+      additionalProperties: false
+      required: [items, revision, cursor_siguiente]
+      description: >-
+        Trabajo de una bandeja con su cursor de dominio. A diferencia de
+        `PaginaConversaciones` (listado por alcance), declara la `revision` de la
+        COLECCIÓN al momento de la respuesta (ADR 28 §3): es el cursor del
+        bootstrap de bandeja y el punto desde el que `desde_revision` pide el
+        catch-up. El cursor de paginación (`cursor_siguiente`) y el cursor de
+        cambios (`revision`) son distintos y no se confunden.
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Conversacion"}
+        revision:
+          allOf: [{$ref: "#/components/schemas/RevisionBandeja"}]
+          description: >-
+            Revisión de la colección que representa esta respuesta. El cliente la
+            usa como `desde_revision` en el siguiente catch-up.
         cursor_siguiente:
           type: string
           nullable: true

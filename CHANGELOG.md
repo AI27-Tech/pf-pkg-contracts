@@ -3,6 +3,23 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-21 [tracer.14] — catch-up de la colección de bandeja en `mensajeria` (M3)
+
+**Resumen:** `listarTrabajoBandeja` deja de ser un listado paginado genérico y se vuelve el bootstrap/catch-up de la colección de bandeja que ADR 28 exige. Devuelve la `revision` monotónica de la colección (cursor de dominio, ADR 28 §3), acepta `desde_revision` para pedir solo los cambios posteriores, y responde `409 stream_resync_required` cuando esa revisión quedó fuera de la ventana retenida (ADR 28 §5). Es el mismo patrón que la conversación ya tenía (`obtenerConversacion` → `ultima_secuencia`, `listarMensajes?despues_de=`), trasladado del agregado "mensajes de una conversación" al agregado "conversaciones de una bandeja".
+
+**Contexto:** El catch-up de bandeja (M3) estaba declarado fuera de alcance desde `tracer.7` ("bootstrap/catch-up de la colección de bandeja… rutas aún sin congelar") y no entró en ninguna ola 8–13 (verificado contra el CHANGELOG y el `mensajeria.yaml` de `tracer.13`). El protocolo ya estaba decidido en ADR 28; solo faltaba plasmarlo en el contrato. No requiere decisión de producto nueva. Se modela como agregado propio (`TrabajoBandeja`, no `PaginaConversaciones`) porque la bandeja tiene una revisión de colección que el listado por alcance (`listarConversaciones`) no tiene; meter `revision` en `PaginaConversaciones` habría obligado a `listarConversaciones` a declarar un cursor que no le corresponde. `listarConversaciones` no cambia. Número de ola: `tracer.13` es la última publicada en `-d` y no hay `14` tomada por tag ni por rama (verificado), así que esta toma el siguiente libre, `tracer.14` (regla de versión de contratos §7).
+
+**Cambios:**
+- `contracts/openapi/mensajeria.yaml`: `listarTrabajoBandeja` gana el parámetro opcional `desde_revision`, la respuesta `409 ResyncRequerido` (`codigo` `stream_resync_required`) y cambia su 200 de `PaginaConversaciones` a `TrabajoBandeja`. Schemas nuevos: `RevisionBandeja` (int64 monotónico de colección) y `TrabajoBandeja` (`items`, `revision`, `cursor_siguiente`). Respuesta reutilizable nueva `ResyncRequerido`.
+- Clientes Go y TS regenerados (`make generate`). `VERSION`, los ocho specs OpenAPI y el paquete TS a `0.1.0-tracer.14`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.13` (mensajeria "cambió, compatible": el 200 pasa a un superconjunto, el parámetro y el 409 son nuevos; el resto solo bump de versión). Sin entrada en `rompimientos/`. `make lint-openapi` y `make check-estados` en verde; clientes Go compilan.
+
+**Archivos modificados:**
+- `contracts/openapi/mensajeria.yaml`, los otros siete specs (solo `info.version`), `VERSION`
+- `packages/api-client-go/mensajeria/mensajeria.gen.go`, `packages/api-client-ts/src/openapi/mensajeria.gen.ts`, `packages/api-client-ts/package.json`
+- `CHANGELOG.md`
+
 ## 2026-10-21 [tracer.13] — superficie interna de avance del viaje en `bff` (E8-T8)
 
 **Resumen:** Se amplía el contrato de `bff` con la superficie interna de avance del viaje que pide el frontend interno para la pantalla de detalle (E8-T8 / `E1-HU-005`), hasta ahora ausente: el frontend habla sólo con `bff` y la lectura publicada (`seguirViaje`) es la vista curada para cliente, sin `estado` canónico ni condiciones, así que no sirve para derivar acciones desde la máquina de estados. Se agregan tres reenvíos a `operacion`: leer el detalle interno con estado canónico, registrar una transición y fijar el ETA manual.
