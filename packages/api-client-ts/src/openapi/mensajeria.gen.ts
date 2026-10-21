@@ -14,8 +14,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Listar el trabajo de una bandeja.
+         * Listar el trabajo de una bandeja (bootstrap y catch-up).
          * @description Requiere MEMBRESÍA EFECTIVA en el pool de la bandeja; el rol `ejecutivo` por sí solo no concede acceso a todas las bandejas (Addendum §7).
+         *     Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el CATCH-UP: devuelve los cambios de la colección posteriores a esa revisión. Si la revisión pedida quedó fuera de la ventana retenida, responde `409 stream_resync_required` y el cliente repite el bootstrap (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
          */
         get: operations["listarTrabajoBandeja"];
         put?: never;
@@ -277,6 +278,11 @@ export interface components {
         SecuenciaMensaje: number;
         /**
          * Format: int64
+         * @description Revisión monotónica de la COLECCIÓN de trabajo de una bandeja (ADR 28 §3): avanza con cada cambio de la colección (alta, baja, reenrutamiento, reclamo, atención). Es el cursor de dominio del bootstrap y el catch-up de bandeja. No es el cursor de paginación, ni una secuencia de mensaje, ni el `seq` de transporte de `realtime`.
+         */
+        RevisionBandeja: number;
+        /**
+         * Format: int64
          * @description Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.
          */
         VersionReclamo: number;
@@ -315,6 +321,14 @@ export interface components {
         };
         PaginaConversaciones: {
             items: components["schemas"]["Conversacion"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
+            cursor_siguiente: string | null;
+        };
+        /** @description Trabajo de una bandeja con su cursor de dominio. A diferencia de `PaginaConversaciones` (listado por alcance), declara la `revision` de la COLECCIÓN al momento de la respuesta (ADR 28 §3): es el cursor del bootstrap de bandeja y el punto desde el que `desde_revision` pide el catch-up. El cursor de paginación (`cursor_siguiente`) y el cursor de cambios (`revision`) son distintos y no se confunden. */
+        TrabajoBandeja: {
+            items: components["schemas"]["Conversacion"][];
+            /** @description Revisión de la colección que representa esta respuesta. El cliente la usa como `desde_revision` en el siguiente catch-up. */
+            revision: components["schemas"]["RevisionBandeja"];
             /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
             cursor_siguiente: string | null;
         };
@@ -446,6 +460,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description La `desde_revision` pedida quedó fuera de la ventana de cambios retenida de la colección: el catch-up incremental ya no es posible y el cliente debe repetir el bootstrap (ADR 28 §5). `codigo` de máquina `stream_resync_required`, el mismo que usa `realtime` ante una línea no reanudable; la respuesta no distingue la causa. */
+        ResyncRequerido: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Token ausente, inválido, expirado o con sesión revocada (fallo cerrado). */
         NoAutorizado: {
             headers: {
@@ -499,6 +522,8 @@ export interface operations {
             query?: {
                 /** @description Cursor de paginación. No es el cursor de cambios de ADR 28. */
                 cursor?: components["parameters"]["CursorPagina"];
+                /** @description Catch-up: devuelve los cambios de la colección con revisión mayor a este valor. Es la `revision` de una respuesta previa, no el cursor de paginación. */
+                desde_revision?: components["schemas"]["RevisionBandeja"];
             };
             header?: never;
             path: {
@@ -508,18 +533,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Página de conversaciones enrutadas a la bandeja. */
+            /** @description Trabajo de la bandeja con la revisión de la colección. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginaConversaciones"];
+                    "application/json": components["schemas"]["TrabajoBandeja"];
                 };
             };
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ResyncRequerido"];
         };
     };
     listarConversaciones: {
