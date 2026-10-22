@@ -1,0 +1,77 @@
+// Eventos del caso de emergencia V1, publicados por `mensajeria` (ADR 21,
+// DEC-034, DEC-100). Ola contractual de emergencia, `tracer.17`.
+//
+// Superficie RESTRINGIDA: viajan por el tema restringido envueltos en
+// `SobreVivo` (sobre_vivo.proto). Orden por agregado = caso_emergencia_id.
+// No existe clave global (ADR 29).
+//
+// `emergencia.nota_agregada` tiene a `operacion` como consumidor durable
+// además de `realtime`/`reportes`: operacion proyecta la nota al histórico
+// interno del viaje (DEC-100 punto 1). `actor_real` NO viaja en estos eventos:
+// queda en la auditoría local de `mensajeria`; el cliente solo ve la vista
+// mínima (ADR 21 §6).
+syntax = "proto3";
+
+package ai27.eventos.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1;eventosv1";
+
+// emergencia.activada — al crear el caso por una activación intencional.
+message EmergenciaActivada {
+  string caso_emergencia_id = 1;
+  string viaje_id = 2;
+  string cliente_id = 3;
+  // Origen de la activación: `cliente` | `operacion`.
+  string origen = 4;
+  google.protobuf.Timestamp activada_en = 5;
+}
+
+// emergencia.nota_agregada — al agregar una nota al caso. Consumido
+// durablemente por `operacion` para copiar la nota al histórico del viaje.
+message EmergenciaNotaAgregada {
+  string caso_emergencia_id = 1;
+  string nota_id = 2;
+  string viaje_id = 3;
+  // Audiencia de dominio del autor: `Cliente` | `Interno` (DEC-054).
+  string audiencia_autor = 4;
+  string cuerpo = 5;
+  // true si es la nota que acompañó la resolución del caso.
+  bool es_resolucion = 6;
+  google.protobuf.Timestamp creado_en = 7;
+}
+
+// emergencia.reclamada — al abrir el reclamo (abierta -> en_atencion).
+message EmergenciaReclamada {
+  string caso_emergencia_id = 1;
+  string reclamo_id = 2;
+  string responsable_id = 3;
+  int64 version_reclamo = 4;
+  google.protobuf.Timestamp reclamada_en = 5;
+}
+
+// emergencia.transferida — al cerrar un reclamo y abrir el siguiente en una
+// sola transacción. Conserva el estado del caso.
+message EmergenciaTransferida {
+  string caso_emergencia_id = 1;
+  string reclamo_anterior_id = 2;
+  string reclamo_id = 3;
+  string responsable_id = 4;
+  int64 version_reclamo = 5;
+  google.protobuf.Timestamp transferida_en = 6;
+}
+
+// emergencia.resuelta — el responsable vigente resolvió el caso
+// (en_atencion -> resuelta).
+message EmergenciaResuelta {
+  string caso_emergencia_id = 1;
+  string responsable_id = 2;
+  google.protobuf.Timestamp resuelta_en = 3;
+}
+
+// emergencia.cerrada — cierre administrativo del caso (resuelta -> cerrada).
+message EmergenciaCerrada {
+  string caso_emergencia_id = 1;
+  google.protobuf.Timestamp cerrada_en = 2;
+}

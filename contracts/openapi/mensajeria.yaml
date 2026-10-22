@@ -10,9 +10,11 @@
 # por un pool, no entre el cliente y un operador nombrado. Solo el responsable
 # con reclamo activo responde normalmente (Addendum §4).
 #
-# FUERA de esta ola: toda la familia de emergencia (ADR 21, DEC-034): sus
-# rutas, esquemas y eventos siguen sin congelar en la arquitectura (pregunta 8
-# del audit). El catch-up de la COLECCIÓN de bandeja SÍ entra desde tracer.14:
+# DESDE tracer.17: la familia de emergencia (ADR 21, DEC-034, DEC-099, DEC-100)
+# entra aquí como superficie NUEVA junto a la conversación: rutas
+# `/api/v1/viajes/{id}/emergencias`, esquemas `CasoEmergencia`/`NotaEmergencia`
+# y ciclo del caso `abierta → en_atencion → resuelta → cerrada`. No generaliza
+# ni toca los esquemas de conversación (DEC-100 punto 2). El catch-up de la COLECCIÓN de bandeja SÍ entra desde tracer.14:
 # `listarTrabajoBandeja` expone la `revision` de la colección y acepta
 # `desde_revision` para el catch-up incremental, con `409 stream_resync_required`
 # fuera de ventana (ADR 28 §3, §5), el mismo patrón que la conversación ya tenía.
@@ -26,7 +28,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — mensajeria
-  version: 0.1.0-tracer.16
+  version: 0.1.0-tracer.17
   description: >-
     Conversación de negocio entre el cliente y la bandeja compartida de AI27:
     enrutamiento, reclamo versionado, orden canónico de mensajes, recibos,
@@ -47,6 +49,7 @@ tags:
 - name: conversaciones
 - name: mensajes
 - name: reclamos
+- name: emergencias
 - name: adjuntos
 - name: auditoria
 
@@ -363,6 +366,246 @@ paths:
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
+  /api/v1/viajes/{id}/emergencias:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    get:
+      operationId: listarEmergencias
+      tags: [emergencias]
+      summary: Listar los casos de emergencia de un viaje por audiencia.
+      description: >-
+        Para el cliente, la VISTA MÍNIMA (ADR 21 §6): solo casos en `abierta`,
+        `en_atencion` o `resuelta`, identificados por fecha/hora, sin cuerpos de
+        nota, contactos, recursos ni personal de Reacción. Para audiencia
+        Interno dentro del alcance del viaje, el caso completo. Un miembro
+        efectivo del pool Reacción ve los casos que puede reclamar (DEC-028).
+      responses:
+        "200":
+          description: Casos de emergencia del viaje, proyectados por audiencia.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaEmergencias"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    post:
+      operationId: activarEmergencia
+      tags: [emergencias]
+      summary: Activar una emergencia sobre el viaje (idempotente por activacion_id).
+      description: >-
+        Cliente dentro de su organización, o usuario de monitoreo
+        (Monitorista/Supervisor/Coordinador) dentro de su alcance, activan el
+        caso (ADR 21 §1, DEC-045 #9). Habilitada desde `SOLICITADO` en estados
+        no terminales; denegada en `CERRADO`, `CANCELADO`, `RECHAZADO_POR_AI27`
+        y `RECHAZADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`.
+
+        Idempotente por `activacion_id` del llamante (ADR 21 §2, mismo patrón
+        que `enviarMensaje`): reentregar la misma activación devuelve el MISMO
+        caso con 200 y no crea un duplicado; una pulsación nueva con otro
+        `activacion_id` crea OTRO caso con 201, aunque ya exista uno abierto.
+        No crea incidencia ni condición.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ActivarEmergenciaEntrada"}
+      responses:
+        "201":
+          description: Caso creado.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CasoEmergencia"}
+        "200":
+          description: Reentrega idempotente; caso original.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CasoEmergencia"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            `codigo` de máquina `viaje_en_estado_terminal`: el viaje no admite
+            activar una emergencia en su estado actual.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/viajes/{id}/emergencias/{eid}/notas:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    - {$ref: "#/components/parameters/EmergenciaRuta"}
+    post:
+      operationId: agregarNotaEmergencia
+      tags: [emergencias]
+      summary: Agregar una nota al caso (append-only, unidireccional a Reacción).
+      description: >-
+        Cliente u Operator dentro del alcance agregan notas mientras el caso
+        esté en `abierta`, `en_atencion` o `resuelta`; denegado en `cerrada`
+        con 409 `emergencia_cerrada` (ADR 21 §4). Texto de hasta 1000
+        caracteres; se recortan espacios de inicio y fin; una nota vacía tras el
+        recorte no se guarda (400). Sin adjuntos en V1. La nota se copia con
+        contenido completo al histórico interno del viaje (evento
+        `emergencia.nota_agregada`, DEC-100).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NotaEmergenciaEntrada"}
+      responses:
+        "201":
+          description: Nota agregada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NotaEmergencia"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: "`codigo` de máquina `emergencia_cerrada`: el caso no admite notas."
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/viajes/{id}/emergencias/{eid}/reclamos:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    - {$ref: "#/components/parameters/EmergenciaRuta"}
+    post:
+      operationId: reclamarEmergencia
+      tags: [emergencias]
+      summary: Reclamar el caso (abierta -> en_atencion) con versión esperada.
+      description: >-
+        Solo un miembro efectivo del pool Reacción (DEC-028). El reclamo ejecuta
+        la transición `abierta -> en_atencion` (ADR 21 §5). Dos reclamos
+        concurrentes producen un ganador; el perdedor recibe 409
+        `conflicto_version_reclamo`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/VersionEsperadaEntrada"}
+      responses:
+        "201":
+          description: Reclamo abierto; caso en atención.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Reclamo"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/viajes/{id}/emergencias/{eid}/reclamos/{rid}:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    - {$ref: "#/components/parameters/EmergenciaRuta"}
+    - name: rid
+      in: path
+      required: true
+      description: Identificador del reclamo.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    delete:
+      operationId: liberarReclamoEmergencia
+      tags: [emergencias]
+      summary: Liberar el reclamo y devolver el caso al pool de Reacción.
+      description: >-
+        Lo hace el responsable o un supervisor con mando sobre Reacción dentro
+        de su alcance (DEC-099). El caso vuelve a `abierta`.
+      parameters:
+      - name: version_esperada
+        in: query
+        required: true
+        schema: {$ref: "#/components/schemas/VersionReclamo"}
+      responses:
+        "204": {description: Reclamo liberado.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/viajes/{id}/emergencias/{eid}/transferencias:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    - {$ref: "#/components/parameters/EmergenciaRuta"}
+    post:
+      operationId: transferirEmergencia
+      tags: [emergencias]
+      summary: Transferir la responsabilidad del caso a otro miembro de Reacción.
+      description: >-
+        Cierra el reclamo anterior y abre el siguiente en UNA transacción; no
+        hay ventana sin responsable ni con dos. La transferencia conserva el
+        estado del caso (ADR 21 §5).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TransferenciaEntrada"}
+      responses:
+        "201":
+          description: Reclamo nuevo del responsable destino.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Reclamo"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/viajes/{id}/emergencias/{eid}/resolucion:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    - {$ref: "#/components/parameters/EmergenciaRuta"}
+    post:
+      operationId: resolverEmergencia
+      tags: [emergencias]
+      summary: Resolver el caso (en_atencion -> resuelta) con nota obligatoria.
+      description: >-
+        Solo el responsable vigente de Reacción (ADR 21 §5). Exige una nota de
+        resolución de 1 a 1000 caracteres, con las mismas validaciones de las
+        demás notas. `resuelta` es irreversible.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ResolucionEmergenciaEntrada"}
+      responses:
+        "200":
+          description: Caso resuelto.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CasoEmergencia"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/viajes/{id}/emergencias/{eid}/cierre:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    - {$ref: "#/components/parameters/EmergenciaRuta"}
+    post:
+      operationId: cerrarEmergencia
+      tags: [emergencias]
+      summary: Cerrar administrativamente el caso (resuelta -> cerrada).
+      description: >-
+        Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje, o
+        Administrator global (ADR 21 §5). No exige texto. Reacción no cierra y
+        el Cliente no resuelve ni cierra. `cerrada` es irreversible.
+      responses:
+        "200":
+          description: Caso cerrado.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CasoEmergencia"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
   /api/v1/auditoria/conversaciones/{id}:
     parameters:
     - {$ref: "#/components/parameters/IdRuta"}
@@ -389,6 +632,12 @@ components:
       name: id
       in: path
       required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    EmergenciaRuta:
+      name: eid
+      in: path
+      required: true
+      description: Identificador del caso de emergencia.
       schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
     CursorPagina:
       name: cursor
@@ -662,6 +911,129 @@ components:
           format: uri
           description: URL de vida corta del almacenamiento de objetos.
         expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    EstadoEmergencia:
+      type: string
+      description: >-
+        Ciclo del caso de emergencia (ADR 21 §5), agregado propio distinto del
+        estado del viaje y de `EstadoConversacion`. `resuelta` y `cerrada` son
+        irreversibles.
+      enum: [abierta, en_atencion, resuelta, cerrada]
+
+    OrigenActivacion:
+      type: string
+      description: Quién originó la activación (ADR 21 §3).
+      enum: [cliente, operacion]
+
+    CasoEmergencia:
+      type: object
+      additionalProperties: false
+      required: [id, viaje_id, cliente_id, estado, origen, version_reclamo, activada_en]
+      description: >-
+        Caso de emergencia tal como lo conoce `mensajeria`. El payload rico a
+        Reacción (escolta, teléfonos, origen/destinos del viaje) lo compone
+        `bff` con `operacion`; aquí viajan los identificadores y el ciclo del
+        caso, no los datos del viaje. La proyección por audiencia la aplica la
+        lectura: el Cliente recibe la vista mínima (ADR 21 §6).
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        estado: {$ref: "#/components/schemas/EstadoEmergencia"}
+        origen:
+          allOf: [{$ref: "#/components/schemas/OrigenActivacion"}]
+          description: Solo para audiencia Interno.
+        actor_real:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Sujeto que activó. Siempre se registra; solo se entrega a audiencia
+            Interno.
+        version_reclamo: {$ref: "#/components/schemas/VersionReclamo"}
+        reclamo_activo:
+          allOf: [{$ref: "#/components/schemas/Reclamo"}]
+          nullable: true
+          description: Reclamo vigente. Solo para audiencia Interno; null en el pool.
+        activada_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        resuelta_en:
+          type: string
+          format: date-time
+          nullable: true
+        cerrada_en:
+          type: string
+          format: date-time
+          nullable: true
+
+    PaginaEmergencias:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/CasoEmergencia"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no hay más.
+
+    ActivarEmergenciaEntrada:
+      type: object
+      additionalProperties: false
+      required: [activacion_id]
+      properties:
+        activacion_id:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/Id"}]
+          description: >-
+            Generado por el llamante; clave de idempotencia de la activación
+            (ADR 21 §2). Reentregar el mismo valor devuelve el caso original.
+
+    NotaEmergencia:
+      type: object
+      additionalProperties: false
+      required: [id, emergencia_id, audiencia_autor, cuerpo, creado_en]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        emergencia_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        audiencia_autor: {$ref: "#/components/schemas/Audiencia"}
+        actor_real:
+          type: string
+          format: uuid
+          nullable: true
+          description: Sujeto que escribió. Solo se entrega a audiencia Interno.
+        cuerpo:
+          type: string
+          description: Contenido de la nota. Sin edición ni borrado en V1.
+        es_resolucion:
+          type: boolean
+          description: true si es la nota que acompañó la resolución del caso.
+        creado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    NotaEmergenciaEntrada:
+      type: object
+      additionalProperties: false
+      required: [cuerpo]
+      properties:
+        cuerpo:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: >-
+            Texto de la nota. El servidor recorta espacios de inicio y fin; si
+            queda vacío tras el recorte, responde 400 y no la guarda.
+
+    ResolucionEmergenciaEntrada:
+      type: object
+      additionalProperties: false
+      required: [version_esperada, nota]
+      properties:
+        version_esperada: {$ref: "#/components/schemas/VersionReclamo"}
+        nota:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Nota de resolución obligatoria; mismas validaciones que las demás notas.
 
     RegistroAuditoria:
       type: object
