@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.16
+  version: 0.1.0-tracer.17
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -35,6 +35,7 @@ tags:
 - name: sesion
   description: Sesión propia del llamante (singular).
 - name: viajes
+- name: emergencias
 - name: descarga
   description: >-
     Descarga del expediente de UN viaje para usuarios internos (E6-T3 / DEC-022
@@ -350,6 +351,100 @@ paths:
             El viaje está en un estado terminal y no admite editar la fecha/hora
             del servicio. `codigo` de máquina `viaje_en_estado_terminal` en el
             cuerpo.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/viajes/{id}/emergencias:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarEmergenciasCliente
+      tags: [emergencias]
+      summary: Vista mínima de las emergencias del viaje para el cliente (ADR 21 §6).
+      description: >-
+        Reenvía a `mensajeria.listarEmergencias` con audiencia Cliente. Devuelve
+        solo los casos en `abierta`, `en_atencion` o `resuelta`, identificados
+        por fecha/hora, con un indicador agregado "emergencia activa". Nunca
+        expone cuerpos de nota, contactos, recursos, actor interno ni personal
+        de Reacción. Las acciones de atención de Reacción NO pasan por `bff`:
+        son superficie interna de `mensajeria`.
+      responses:
+        "200":
+          description: Vista mínima de emergencias del viaje para el cliente.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EmergenciasCliente"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    post:
+      operationId: activarEmergenciaCliente
+      tags: [emergencias]
+      summary: El cliente activa una emergencia sobre su viaje (idempotente).
+      description: >-
+        Reenvía a `mensajeria.activarEmergencia`. Idempotente por
+        `activacion_id` del llamante. Un usuario fuera de alcance recibe 403
+        antes de componer nada.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ActivarEmergenciaClienteEntrada"}
+      responses:
+        "201":
+          description: Caso creado.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EmergenciaCliente"}
+        "200":
+          description: Reentrega idempotente; caso original.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EmergenciaCliente"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: "`codigo` de máquina `viaje_en_estado_terminal`."
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/viajes/{id}/emergencias/{eid}/notas:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    - name: eid
+      in: path
+      required: true
+      description: Identificador del caso de emergencia.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: agregarNotaEmergenciaCliente
+      tags: [emergencias]
+      summary: El cliente agrega una nota a un caso de emergencia.
+      description: >-
+        Reenvía a `mensajeria.agregarNotaEmergencia`. Texto ≤1000, se recorta y
+        no se guarda si queda vacío. Denegado si el caso está `cerrada`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NotaEmergenciaClienteEntrada"}
+      responses:
+        "201": {description: Nota agregada.}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: "`codigo` de máquina `emergencia_cerrada`."
           content:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
@@ -681,3 +776,55 @@ components:
         entidad: {type: string}
         actor: {type: string}
         ts: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    # --- Vista mínima de emergencia para el cliente (ADR 21 §6). Nunca cuerpos
+    #     de nota, contactos, recursos ni personal de Reacción. ---
+    EmergenciaCliente:
+      type: object
+      additionalProperties: false
+      required: [id, estado, activada_en]
+      description: >-
+        Caso de emergencia tal como lo ve el cliente: identificado por fecha/hora
+        y estado, sin detalles internos. `cerrada` no aparece en la lista
+        (ADR 21 §6).
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        estado:
+          type: string
+          enum: [abierta, en_atencion, resuelta]
+          description: El cliente no distingue `abierta` de `en_atencion` salvo por este valor.
+        activada_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    EmergenciasCliente:
+      type: object
+      additionalProperties: false
+      required: [emergencia_activa, casos]
+      properties:
+        emergencia_activa:
+          type: boolean
+          description: >-
+            Indicador agregado: true mientras exista al menos un caso en
+            `abierta` o `en_atencion` (ADR 21 §6). `resuelta` no lo sostiene.
+        casos:
+          type: array
+          description: Casos en `abierta`, `en_atencion` o `resuelta`, por fecha/hora.
+          items: {$ref: "#/components/schemas/EmergenciaCliente"}
+
+    ActivarEmergenciaClienteEntrada:
+      type: object
+      additionalProperties: false
+      required: [activacion_id]
+      properties:
+        activacion_id:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/Id"}]
+          description: Clave de idempotencia de la activación, generada por el cliente.
+
+    NotaEmergenciaClienteEntrada:
+      type: object
+      additionalProperties: false
+      required: [cuerpo]
+      properties:
+        cuerpo:
+          type: string
+          minLength: 1
+          maxLength: 1000

@@ -293,3 +293,42 @@ jobs:
           files: |
             manifiesto/tracer.manifest.json
             VERSION
+
+  auto-fusionar-promocion:
+    # Auto-merge de PRs de promoción entre ramas de larga vida, en VERDE.
+    #
+    # El flujo de AI27 es feature -> *-d -> *-q -> *-m. La revisión real ocurre
+    # en feature -> *-d (merge manual). Las promociones *-d -> *-q y *-q -> *-m
+    # no se re-revisan: este job las fusiona cuando `verificar` pasa.
+    #
+    # Vive DENTRO de este workflow de CI (no en uno aparte) a propósito: un
+    # segundo workflow que reaccionara al PR de promoción quedaría en
+    # `action_required`, porque ese PR lo crea el bot con el GITHUB_TOKEN y los
+    # eventos del token por defecto no disparan nuevas corridas (protección
+    # anti-bucle de Actions). Aquí el merge corre en la MISMA ejecución que ya
+    # verificó el PR, así que no hay segundo workflow que aprobar.
+    #
+    # `needs: verificar` es el gate en verde: si la verificación falla, este job
+    # no corre y no se fusiona nada. El merge usa --merge (merge commit): squash
+    # reescribiría la historia y rompería el diff de la siguiente promoción.
+    needs: verificar
+    if: >-
+      github.event_name == 'pull_request' &&
+      ( ( endsWith(github.event.pull_request.head.ref, '-d') && endsWith(github.base_ref, '-q') ) ||
+        ( endsWith(github.event.pull_request.head.ref, '-q') && endsWith(github.base_ref, '-m') ) )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Fusionar el PR de promoción en verde
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          echo "PR #$PR es promoción $HEAD_REF -> $BASE_REF y la verificación pasó. Fusionando."
+          gh pr merge "$PR" --repo "$REPO" --merge

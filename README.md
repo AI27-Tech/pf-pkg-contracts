@@ -36,6 +36,13 @@ mensajería, emergencias/Reacción, y toda capacidad V2 (telemetría, posiciones
 señal, geocercas). Que una capacidad esté decidida no obliga a incluirla en
 `tracer.2`.
 
+> **Olas posteriores.** La línea de arriba describe el corte de `tracer.2`.
+> Desde entonces entraron, como releases aditivas compatibles: mensajería y
+> bandeja compartida (`tracer.7`, catch-up de bandeja en `tracer.14`) y
+> **emergencias/Reacción (`tracer.17`)**. Lo único que sigue fuera es la
+> capacidad V2 (telemetría, posiciones, señal, geocercas). El archivo
+> `VERSION` fija la ola vigente.
+
 ---
 
 ## Estructura
@@ -45,6 +52,7 @@ contracts/
   estados/viaje.estados.yaml   Fuente ÚNICA de la máquina de estados (dato).
   openapi/                     Un spec por servicio del tracer + _comunes.yaml.
     identidad.yaml  catalogos.yaml  operacion.yaml  bff.yaml  reportes.yaml
+    mensajeria.yaml  realtime.yaml
   events/                      Eventos Protobuf + INVENTARIO.md.
     ai27/eventos/v1/*.proto
     registro.tipos.yaml        Registro legible por máquina de tipos de evento.
