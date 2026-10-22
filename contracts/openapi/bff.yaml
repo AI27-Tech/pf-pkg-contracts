@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.14
+  version: 0.1.0-tracer.15
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -309,6 +309,48 @@ paths:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
 
+  /api/v1/viajes/{id}/fecha-hora:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    patch:
+      operationId: completarFechaHora
+      tags: [viajes]
+      summary: Completar o editar la fecha/hora del servicio del viaje (audiencia interna).
+      description: >-
+        Reenvía a `operacion.completarFechaHora`. Escribe `fecha_hora_servicio`
+        sobre un viaje ya creado para satisfacer la guarda de aprobación
+        (`fecha_hora_servicio_definida`, DEC-010 #2): si el cliente no lo puso al
+        crear, el operador lo completa antes de aprobar (E1-HU-003). No es un
+        cambio de estado; sólo exige que el viaje no esté en un estado terminal.
+        Devuelve el detalle interno recompuesto para refrescar la vista sin un
+        segundo GET.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/FechaHoraEntrada"}
+      responses:
+        "200":
+          description: Fecha/hora del servicio actualizada; detalle interno del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ViajeDetalle"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            El viaje está en un estado terminal y no admite editar la fecha/hora
+            del servicio. `codigo` de máquina `viaje_en_estado_terminal` en el
+            cuerpo.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
 components:
   schemas:
     CredencialesEntrada:
@@ -495,6 +537,16 @@ components:
         eta_estimado:
           allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
           description: ETA estimado a fijar (captura manual, ADR 20). Reemplaza el valor previo.
+
+    FechaHoraEntrada:
+      type: object
+      additionalProperties: false
+      required: [fecha_hora_servicio]
+      description: Entrada para completar/editar la fecha/hora del servicio. Espejo de `FechaHoraEntrada` de `operacion`.
+      properties:
+        fecha_hora_servicio:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          description: Fecha/hora del servicio a completar o editar (E1-HU-003, DEC-010 #2). Reemplaza el valor previo.
 
     HitoCliente:
       type: object

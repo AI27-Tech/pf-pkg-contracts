@@ -120,6 +120,28 @@ export interface paths {
         patch: operations["fijarEta"];
         trace?: never;
     };
+    "/api/v1/viajes/{id}/fecha-hora": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Completar o editar la fecha/hora del servicio del viaje.
+         * @description Escribe `fecha_hora_servicio` sobre un viaje ya creado. La aprobación exige este dato (guarda `fecha_hora_servicio_definida` de `SOLICITADO → APROBADO`, DEC-010 #2); si el cliente no lo puso al crear, el operador lo completa antes de aprobar (E1-HU-003). NO valida contra el grafo de transiciones —no es un cambio de estado—; sólo exige que el viaje no esté en un estado terminal, igual que `fijarEta`.
+         */
+        patch: operations["completarFechaHora"];
+        trace?: never;
+    };
     "/api/v1/unidades": {
         parameters: {
             query?: never;
@@ -439,6 +461,10 @@ export interface components {
         EtaEntrada: {
             /** @description ETA estimado a fijar (captura manual, ADR 20). Reemplaza el valor previo; `operacion` no lo recalcula ni lo marca obsoleto. */
             eta_estimado: components["schemas"]["MarcaTiempo"];
+        };
+        FechaHoraEntrada: {
+            /** @description Fecha/hora del servicio a completar o editar sobre un viaje ya creado (E1-HU-003, DEC-010 #2). Reemplaza el valor previo. */
+            fecha_hora_servicio: components["schemas"]["MarcaTiempo"];
         };
         PaginaViajes: {
             items: components["schemas"]["Viaje"][];
@@ -940,6 +966,45 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             /** @description El viaje está en un estado terminal y no admite fijar ETA. `codigo` de máquina `viaje_en_estado_terminal`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    completarFechaHora: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FechaHoraEntrada"];
+            };
+        };
+        responses: {
+            /** @description Fecha/hora del servicio actualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Viaje"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description El viaje está en un estado terminal y no admite editar la fecha/hora del servicio. `codigo` de máquina `viaje_en_estado_terminal`. */
             409: {
                 headers: {
                     [name: string]: unknown;

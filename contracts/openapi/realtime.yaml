@@ -27,7 +27,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — realtime
-  version: 0.1.0-tracer.14
+  version: 0.1.0-tracer.15
   description: >-
     Entrega viva de `mensajeria` por SSE. `realtime` mantiene conexiones
     abiertas y reparte sobres ya autorizados; no interpreta el payload ni

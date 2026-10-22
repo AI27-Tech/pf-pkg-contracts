@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — operacion
-  version: 0.1.0-tracer.14
+  version: 0.1.0-tracer.15
   description: >-
     Progreso del viaje: creación, transiciones, asignación, bitácora,
     incidencias y auditoría. Consumido por `bff`, nunca por el frontend directo.
@@ -255,6 +255,46 @@ paths:
           description: >-
             El viaje está en un estado terminal y no admite fijar ETA. `codigo`
             de máquina `viaje_en_estado_terminal`.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/viajes/{id}/fecha-hora:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    patch:
+      operationId: completarFechaHora
+      tags: [viajes]
+      summary: Completar o editar la fecha/hora del servicio del viaje.
+      description: >-
+        Escribe `fecha_hora_servicio` sobre un viaje ya creado. La aprobación
+        exige este dato (guarda `fecha_hora_servicio_definida` de
+        `SOLICITADO → APROBADO`, DEC-010 #2); si el cliente no lo puso al crear,
+        el operador lo completa antes de aprobar (E1-HU-003). NO valida contra el
+        grafo de transiciones —no es un cambio de estado—; sólo exige que el
+        viaje no esté en un estado terminal, igual que `fijarEta`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/FechaHoraEntrada"}
+      responses:
+        "200":
+          description: Fecha/hora del servicio actualizada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Viaje"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            El viaje está en un estado terminal y no admite editar la fecha/hora
+            del servicio. `codigo` de máquina `viaje_en_estado_terminal`.
           content:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
@@ -808,6 +848,17 @@ components:
           description: >-
             ETA estimado a fijar (captura manual, ADR 20). Reemplaza el valor
             previo; `operacion` no lo recalcula ni lo marca obsoleto.
+
+    FechaHoraEntrada:
+      type: object
+      additionalProperties: false
+      required: [fecha_hora_servicio]
+      properties:
+        fecha_hora_servicio:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"]
+          description: >-
+            Fecha/hora del servicio a completar o editar sobre un viaje ya
+            creado (E1-HU-003, DEC-010 #2). Reemplaza el valor previo.
 
     PaginaViajes:
       type: object
