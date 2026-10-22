@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — operacion
-  version: 0.1.0-tracer.15
+  version: 0.1.0-tracer.16
   description: >-
     Progreso del viaje: creación, transiciones, asignación, bitácora,
     incidencias y auditoría. Consumido por `bff`, nunca por el frontend directo.
@@ -717,6 +717,44 @@ paths:
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
+  # ---------------------------------------------------------------------------
+  # Registro de descarga del expediente del viaje (E6-T3 / AI27-80). `bff`
+  # compone el expediente leyendo de `operacion` (ficha + bitácora + auditoría)
+  # y luego invoca esta operación, que deja EL rastro de auditoría de la
+  # descarga (actor, viaje, momento; E1-T7) en su propia transacción, vía el
+  # interceptor con el rol dueño `op_auditoria`. No se otorga GRANT a `op_viajes`
+  # ni se requiere ADR: el dueño del esquema `auditoria` ya tiene INSERT por
+  # diseño (ADR 33 gobierna la única excepción de GRANT cruzado, la de
+  # `op_asignacion`, que aquí no se toca). Es POST porque deja un efecto
+  # persistente; `bff` mantiene su GET público `descargarViaje` sin ensuciarlo
+  # con una escritura oculta.
+  # ---------------------------------------------------------------------------
+  /api/v1/viajes/{id}/descargas:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: registrarDescargaViaje
+      tags: [auditoria]
+      summary: Registrar una descarga del expediente del viaje (deja auditoría).
+      description: >-
+        Registra que el expediente del viaje se descargó, dejando su rastro de
+        auditoría en la misma transacción (interceptor, `op_auditoria`; E1-T7).
+        La invoca `bff` al servir `descargarViaje`; la composición del expediente
+        la arma `bff` con las lecturas existentes. Un usuario fuera del alcance
+        del viaje recibe 403 antes de registrar nada.
+      responses:
+        "200":
+          description: Descarga registrada; datos base del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Viaje"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
 components:
   schemas:
     # --- Enum espejo de contracts/estados/viaje.estados.yaml. CI verifica la
@@ -829,6 +867,17 @@ components:
           type: array
           description: Condiciones ortogonales abiertas (dato separado del estado).
           items: {$ref: "#/components/schemas/CondicionAbierta"}
+        incidencias_activas:
+          type: array
+          description: >-
+            Incidencias abiertas del viaje con su `tipo_interno` (AI27-59). Es
+            CONSUMO INTERNO de `bff`: la vista curada para el cliente la compone
+            `bff` mapeando el tipo a una categoría (DEC-006), nunca este
+            contrato. Opcional y aditivo: `condiciones_activas` se conserva sin
+            cambios. Cada entrada corresponde a una condición `INCIDENCIA`
+            abierta; `CondicionAbierta` no lleva el tipo porque es el dato crudo
+            de la máquina de condiciones, sin el catálogo operativo.
+          items: {$ref: "#/components/schemas/IncidenciaActiva"}
 
     CondicionAbierta:
       type: object
@@ -837,6 +886,25 @@ components:
       properties:
         tipo: {$ref: "#/components/schemas/CondicionViaje"}
         abierta_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    IncidenciaActiva:
+      type: object
+      additionalProperties: false
+      required: [id, tipo_interno, estado, abierta_en]
+      description: >-
+        Incidencia abierta embebida en la lectura del viaje (AI27-59). Vista
+        reducida de `Incidencia` para consumo de `bff`: sin `viaje_id` (implícito
+        en el viaje leído) ni `resuelta_en` (si está en la lista, está abierta).
+        `tipo_interno` es interno; el curado para el cliente lo hace `bff`
+        (DEC-006).
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        tipo_interno: {type: string}
+        estado:
+          type: string
+          enum: [en_atencion, resuelta]
+        abierta_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
 
     EtaEntrada:
       type: object

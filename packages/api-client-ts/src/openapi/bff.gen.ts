@@ -105,7 +105,7 @@ export interface paths {
         };
         /**
          * Descargar el expediente de un viaje (solo interno).
-         * @description Compone ficha técnica, histórico de bitácora y auditoría relevante del viaje en un expediente de exportación. Audiencia interna; un operativo fuera de su alcance recibe 403 antes de componer nada. Un viaje inexistente o fuera de alcance devuelve 404.
+         * @description Compone ficha técnica, histórico de bitácora y auditoría relevante del viaje en un expediente de exportación. Audiencia interna; un operativo fuera de su alcance recibe 403 antes de componer nada. Un viaje inexistente o fuera de alcance devuelve 404. Cada descarga exitosa deja un registro de auditoría (actor, viaje, momento; E1-T7): el rastro lo escribe `operacion` en su transacción vía `registrarDescargaViaje`, no el `bff` (que no tiene base de datos).
          */
         get: operations["descargarViaje"];
         put?: never;
