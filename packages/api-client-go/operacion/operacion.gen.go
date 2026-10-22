@@ -290,6 +290,12 @@ type EtaEntrada struct {
 	EtaEstimado MarcaTiempo `json:"eta_estimado"`
 }
 
+// FechaHoraEntrada defines model for FechaHoraEntrada.
+type FechaHoraEntrada struct {
+	// FechaHoraServicio Fecha/hora del servicio a completar o editar sobre un viaje ya creado (E1-HU-003, DEC-010 #2). Reemplaza el valor previo.
+	FechaHoraServicio MarcaTiempo `json:"fecha_hora_servicio"`
+}
+
 // Id Identificador único (UUID). Nunca un correlativo expuesto.
 type Id = openapi_types.UUID
 
@@ -576,6 +582,9 @@ type CerrarEstadiaJSONRequestBody = CierreEstadiaEntrada
 // FijarEtaJSONRequestBody defines body for FijarEta for application/json ContentType.
 type FijarEtaJSONRequestBody = EtaEntrada
 
+// CompletarFechaHoraJSONRequestBody defines body for CompletarFechaHora for application/json ContentType.
+type CompletarFechaHoraJSONRequestBody = FechaHoraEntrada
+
 // AbrirIncidenciaJSONRequestBody defines body for AbrirIncidencia for application/json ContentType.
 type AbrirIncidenciaJSONRequestBody = IncidenciaEntrada
 
@@ -734,6 +743,11 @@ type ClientInterface interface {
 	FijarEtaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	FijarEta(ctx context.Context, id Id, body FijarEtaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CompletarFechaHoraWithBody request with any body
+	CompletarFechaHoraWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CompletarFechaHora(ctx context.Context, id Id, body CompletarFechaHoraJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AbrirIncidenciaWithBody request with any body
 	AbrirIncidenciaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1089,6 +1103,30 @@ func (c *Client) FijarEtaWithBody(ctx context.Context, id Id, contentType string
 
 func (c *Client) FijarEta(ctx context.Context, id Id, body FijarEtaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewFijarEtaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CompletarFechaHoraWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCompletarFechaHoraRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CompletarFechaHora(ctx context.Context, id Id, body CompletarFechaHoraJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCompletarFechaHoraRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2059,6 +2097,53 @@ func NewFijarEtaRequestWithBody(server string, id Id, contentType string, body i
 	return req, nil
 }
 
+// NewCompletarFechaHoraRequest calls the generic CompletarFechaHora builder with application/json body
+func NewCompletarFechaHoraRequest(server string, id Id, body CompletarFechaHoraJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCompletarFechaHoraRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewCompletarFechaHoraRequestWithBody generates requests for CompletarFechaHora with any type of body
+func NewCompletarFechaHoraRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/fecha-hora", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewAbrirIncidenciaRequest calls the generic AbrirIncidencia builder with application/json body
 func NewAbrirIncidenciaRequest(server string, id Id, body AbrirIncidenciaJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2326,6 +2411,11 @@ type ClientWithResponsesInterface interface {
 	FijarEtaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarEtaResponse, error)
 
 	FijarEtaWithResponse(ctx context.Context, id Id, body FijarEtaJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarEtaResponse, error)
+
+	// CompletarFechaHoraWithBodyWithResponse request with any body
+	CompletarFechaHoraWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CompletarFechaHoraResponse, error)
+
+	CompletarFechaHoraWithResponse(ctx context.Context, id Id, body CompletarFechaHoraJSONRequestBody, reqEditors ...RequestEditorFn) (*CompletarFechaHoraResponse, error)
 
 	// AbrirIncidenciaWithBodyWithResponse request with any body
 	AbrirIncidenciaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AbrirIncidenciaResponse, error)
@@ -2818,6 +2908,33 @@ func (r FijarEtaResponse) StatusCode() int {
 	return 0
 }
 
+type CompletarFechaHoraResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Viaje
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r CompletarFechaHoraResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CompletarFechaHoraResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type AbrirIncidenciaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3145,6 +3262,23 @@ func (c *ClientWithResponses) FijarEtaWithResponse(ctx context.Context, id Id, b
 		return nil, err
 	}
 	return ParseFijarEtaResponse(rsp)
+}
+
+// CompletarFechaHoraWithBodyWithResponse request with arbitrary body returning *CompletarFechaHoraResponse
+func (c *ClientWithResponses) CompletarFechaHoraWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CompletarFechaHoraResponse, error) {
+	rsp, err := c.CompletarFechaHoraWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCompletarFechaHoraResponse(rsp)
+}
+
+func (c *ClientWithResponses) CompletarFechaHoraWithResponse(ctx context.Context, id Id, body CompletarFechaHoraJSONRequestBody, reqEditors ...RequestEditorFn) (*CompletarFechaHoraResponse, error) {
+	rsp, err := c.CompletarFechaHora(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCompletarFechaHoraResponse(rsp)
 }
 
 // AbrirIncidenciaWithBodyWithResponse request with arbitrary body returning *AbrirIncidenciaResponse
@@ -4078,6 +4212,67 @@ func ParseFijarEtaResponse(rsp *http.Response) (*FijarEtaResponse, error) {
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCompletarFechaHoraResponse parses an HTTP response from a CompletarFechaHoraWithResponse call
+func ParseCompletarFechaHoraResponse(rsp *http.Response) (*CompletarFechaHoraResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CompletarFechaHoraResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Viaje
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error

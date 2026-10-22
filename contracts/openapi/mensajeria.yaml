@@ -26,7 +26,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — mensajeria
-  version: 0.1.0-tracer.14
+  version: 0.1.0-tracer.15
   description: >-
     Conversación de negocio entre el cliente y la bandeja compartida de AI27:
     enrutamiento, reclamo versionado, orden canónico de mensajes, recibos,

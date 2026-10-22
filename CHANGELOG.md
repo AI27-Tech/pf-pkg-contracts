@@ -3,6 +3,24 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-22 [tracer.15] — escritura de `fecha_hora_servicio` sobre un viaje existente (E1-HU-003)
+
+**Resumen:** Se agrega una operación de escritura de `fecha_hora_servicio` sobre un `viaje` ya creado, hasta ahora ausente: el contrato sólo permitía leer el campo (`ViajeInterno`) y escribirlo al crear (`CrearViajeEntrada`). El `Jefe Operativo` no puede aprobar una solicitud si falta la `fecha_hora_servicio` (guarda `fecha_hora_servicio_definida` de `SOLICITADO → APROBADO`, DEC-010 #2); si el cliente no la puso al crear, debía poder completarla antes de aprobar, y no existía ruta para hacerlo. Se publica `completarFechaHora` en `operacion` y su reenvío en `bff`, como `PATCH /api/v1/viajes/{id}/fecha-hora`.
+
+**Contexto:** La brecha la reportó el equipo de `pf-web-frontend-internal` desde E8-T9 (satisface `E1-HU-003`), que hoy opera contra un `mock` MSW. El endpoint es el espejo exacto de `fijarEta` (ADR 20): escribe un campo suelto del viaje, NO es una transición de estado, y sólo exige que el viaje no esté en un estado terminal. Por eso su 409 reutiliza el `codigo` `viaje_en_estado_terminal` y NO `transicion_no_permitida` (ese código pertenece sólo a `transicionarViaje`, que valida contra el grafo). Decidido con el PO: la escritura se permite en cualquier estado no terminal (no sólo `SOLICITADO`); el esquema de entrada se llama `FechaHoraEntrada` para que el alias del frontend quede 1:1. A diferencia de `fijarEta`, el nuevo endpoint SÍ declara `404` en el spec (un id inexistente es un caso real del flujo de edición; `fijarEta` lo omite, desajuste spec↔código preexistente que no se replica). `completarFechaHora` devuelve `Viaje` en `operacion` y `ViajeDetalle` recompuesto en `bff`, igual que `fijarEta`, para refrescar el detalle sin un segundo GET. Número de ola: `tracer.14` es la última publicada en `-d` y no hay ola `15` tomada por tag ni por rama (verificado contra tags y `VERSION`), así que toma el siguiente libre, `tracer.15` (regla de versión de contratos §7).
+
+**Cambios:**
+- `contracts/openapi/operacion.yaml`: ruta `PATCH /api/v1/viajes/{id}/fecha-hora` (`completarFechaHora` → `Viaje`, errores 400/401/403/404/409 con `codigo` `viaje_en_estado_terminal`). Schema nuevo `FechaHoraEntrada` (`fecha_hora_servicio` requerido, `MarcaTiempo`).
+- `contracts/openapi/bff.yaml`: mismo path, reenvía a `operacion.completarFechaHora`, `200` → `ViajeDetalle`. Schema nuevo `FechaHoraEntrada` espejo del de `operacion`.
+- Clientes Go y TS regenerados (`make generate`). `VERSION`, los ocho specs OpenAPI y el paquete TS a `0.1.0-tracer.15`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.14` (operacion y bff "cambió, compatible"; el resto solo bump de versión). Sin entrada en `rompimientos/`. `make verify`, `make lint-openapi` y `make check-estados` en verde; clientes Go compilan y pasan `go vet`.
+
+**Archivos modificados:**
+- `contracts/openapi/operacion.yaml`, `contracts/openapi/bff.yaml`, los otros seis specs (solo `info.version`), `VERSION`
+- `packages/api-client-go/bff/bff.gen.go`, `packages/api-client-go/operacion/operacion.gen.go`, `packages/api-client-ts/src/openapi/bff.gen.ts`, `packages/api-client-ts/src/openapi/operacion.gen.ts`, `packages/api-client-ts/package.json`
+- `CHANGELOG.md`
+
 ## 2026-10-21 [tracer.14] — catch-up de la colección de bandeja en `mensajeria` (M3)
 
 **Resumen:** `listarTrabajoBandeja` deja de ser un listado paginado genérico y se vuelve el bootstrap/catch-up de la colección de bandeja que ADR 28 exige. Devuelve la `revision` monotónica de la colección (cursor de dominio, ADR 28 §3), acepta `desde_revision` para pedir solo los cambios posteriores, y responde `409 stream_resync_required` cuando esa revisión quedó fuera de la ventana retenida (ADR 28 §5). Es el mismo patrón que la conversación ya tenía (`obtenerConversacion` → `ultima_secuencia`, `listarMensajes?despues_de=`), trasladado del agregado "mensajes de una conversación" al agregado "conversaciones de una bandeja".
