@@ -74,8 +74,14 @@ const (
 
 // Defines values for IncidenciaEstado.
 const (
-	EnAtencion IncidenciaEstado = "en_atencion"
-	Resuelta   IncidenciaEstado = "resuelta"
+	IncidenciaEstadoEnAtencion IncidenciaEstado = "en_atencion"
+	IncidenciaEstadoResuelta   IncidenciaEstado = "resuelta"
+)
+
+// Defines values for IncidenciaActivaEstado.
+const (
+	IncidenciaActivaEstadoEnAtencion IncidenciaActivaEstado = "en_atencion"
+	IncidenciaActivaEstadoResuelta   IncidenciaActivaEstado = "resuelta"
 )
 
 // Defines values for MotivoEstadia.
@@ -319,6 +325,20 @@ type Incidencia struct {
 // IncidenciaEstado defines model for Incidencia.Estado.
 type IncidenciaEstado string
 
+// IncidenciaActiva Incidencia abierta embebida en la lectura del viaje (AI27-59). Vista reducida de `Incidencia` para consumo de `bff`: sin `viaje_id` (implícito en el viaje leído) ni `resuelta_en` (si está en la lista, está abierta). `tipo_interno` es interno; el curado para el cliente lo hace `bff` (DEC-006).
+type IncidenciaActiva struct {
+	// AbiertaEn Instante en UTC, RFC 3339.
+	AbiertaEn MarcaTiempo            `json:"abierta_en"`
+	Estado    IncidenciaActivaEstado `json:"estado"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id          Id     `json:"id"`
+	TipoInterno string `json:"tipo_interno"`
+}
+
+// IncidenciaActivaEstado defines model for IncidenciaActiva.Estado.
+type IncidenciaActivaEstado string
+
 // IncidenciaEntrada defines model for IncidenciaEntrada.
 type IncidenciaEntrada struct {
 	Descripcion *string `json:"descripcion,omitempty"`
@@ -507,7 +527,10 @@ type Viaje struct {
 type ViajeDetalle struct {
 	// CondicionesActivas Condiciones ortogonales abiertas (dato separado del estado).
 	CondicionesActivas []CondicionAbierta `json:"condiciones_activas"`
-	Viaje              Viaje              `json:"viaje"`
+
+	// IncidenciasActivas Incidencias abiertas del viaje con su `tipo_interno` (AI27-59). Es CONSUMO INTERNO de `bff`: la vista curada para el cliente la compone `bff` mapeando el tipo a una categoría (DEC-006), nunca este contrato. Opcional y aditivo: `condiciones_activas` se conserva sin cambios. Cada entrada corresponde a una condición `INCIDENCIA` abierta; `CondicionAbierta` no lleva el tipo porque es el dato crudo de la máquina de condiciones, sin el catálogo operativo.
+	IncidenciasActivas *[]IncidenciaActiva `json:"incidencias_activas,omitempty"`
+	Viaje              Viaje               `json:"viaje"`
 }
 
 // Conflicto defines model for Conflicto.
@@ -725,6 +748,9 @@ type ClientInterface interface {
 	RegistrarEntradaBitacoraWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	RegistrarEntradaBitacora(ctx context.Context, id Id, body RegistrarEntradaBitacoraJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RegistrarDescargaViaje request
+	RegistrarDescargaViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListarEstadias request
 	ListarEstadias(ctx context.Context, id Id, params *ListarEstadiasParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1019,6 +1045,18 @@ func (c *Client) RegistrarEntradaBitacoraWithBody(ctx context.Context, id Id, co
 
 func (c *Client) RegistrarEntradaBitacora(ctx context.Context, id Id, body RegistrarEntradaBitacoraJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRegistrarEntradaBitacoraRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RegistrarDescargaViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRegistrarDescargaViajeRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1893,6 +1931,40 @@ func NewRegistrarEntradaBitacoraRequestWithBody(server string, id Id, contentTyp
 	return req, nil
 }
 
+// NewRegistrarDescargaViajeRequest generates requests for RegistrarDescargaViaje
+func NewRegistrarDescargaViajeRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/descargas", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListarEstadiasRequest generates requests for ListarEstadias
 func NewListarEstadiasRequest(server string, id Id, params *ListarEstadiasParams) (*http.Request, error) {
 	var err error
@@ -2394,6 +2466,9 @@ type ClientWithResponsesInterface interface {
 
 	RegistrarEntradaBitacoraWithResponse(ctx context.Context, id Id, body RegistrarEntradaBitacoraJSONRequestBody, reqEditors ...RequestEditorFn) (*RegistrarEntradaBitacoraResponse, error)
 
+	// RegistrarDescargaViajeWithResponse request
+	RegistrarDescargaViajeWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*RegistrarDescargaViajeResponse, error)
+
 	// ListarEstadiasWithResponse request
 	ListarEstadiasWithResponse(ctx context.Context, id Id, params *ListarEstadiasParams, reqEditors ...RequestEditorFn) (*ListarEstadiasResponse, error)
 
@@ -2806,6 +2881,31 @@ func (r RegistrarEntradaBitacoraResponse) StatusCode() int {
 	return 0
 }
 
+type RegistrarDescargaViajeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Viaje
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r RegistrarDescargaViajeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RegistrarDescargaViajeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ListarEstadiasResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3202,6 +3302,15 @@ func (c *ClientWithResponses) RegistrarEntradaBitacoraWithResponse(ctx context.C
 		return nil, err
 	}
 	return ParseRegistrarEntradaBitacoraResponse(rsp)
+}
+
+// RegistrarDescargaViajeWithResponse request returning *RegistrarDescargaViajeResponse
+func (c *ClientWithResponses) RegistrarDescargaViajeWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*RegistrarDescargaViajeResponse, error) {
+	rsp, err := c.RegistrarDescargaViaje(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRegistrarDescargaViajeResponse(rsp)
 }
 
 // ListarEstadiasWithResponse request returning *ListarEstadiasResponse
@@ -4017,6 +4126,53 @@ func ParseRegistrarEntradaBitacoraResponse(rsp *http.Response) (*RegistrarEntrad
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRegistrarDescargaViajeResponse parses an HTTP response from a RegistrarDescargaViajeWithResponse call
+func ParseRegistrarDescargaViajeResponse(rsp *http.Response) (*RegistrarDescargaViajeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RegistrarDescargaViajeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Viaje
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
