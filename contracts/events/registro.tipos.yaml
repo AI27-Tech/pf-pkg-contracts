@@ -234,12 +234,58 @@ tipos:
     agregado: bandeja_id
     sensibilidad: restringida
 
+  # --- Ola de emergencia (`tracer.17`): caso de emergencia de `mensajeria` ----
+  # Superficie RESTRINGIDA (ADR 21, DEC-100). Agregado = caso_emergencia_id.
+  # `emergencia.nota_agregada` suma `operacion` como consumidor durable: copia
+  # la nota al histórico interno del viaje (DEC-100 punto 1).
+  - tipo: emergencia.activada
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime, reportes]
+    agregado: caso_emergencia_id
+    sensibilidad: restringida
+
+  - tipo: emergencia.nota_agregada
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime, reportes, operacion]
+    agregado: caso_emergencia_id
+    sensibilidad: restringida
+
+  - tipo: emergencia.reclamada
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime]
+    agregado: caso_emergencia_id
+    sensibilidad: restringida
+
+  - tipo: emergencia.transferida
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime, reportes]
+    agregado: caso_emergencia_id
+    sensibilidad: restringida
+
+  - tipo: emergencia.resuelta
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime, reportes]
+    agregado: caso_emergencia_id
+    sensibilidad: restringida
+
+  - tipo: emergencia.cerrada
+    version: 1
+    productor: mensajeria
+    consumidores_durables: [realtime, reportes]
+    agregado: caso_emergencia_id
+    sensibilidad: restringida
+
 # Familias DECLARADAS FUERA del tracer. No entran al fanout de ninguna cola,
 # tema ni clave de orden de V1 (ADR 20). Se declaran para que una versión futura
 # las agregue explícitamente, no por omisión.
 fuera_del_tracer:
-  # Superficie restringida pendiente: bandeja (revisión de colección) y
-  # emergencia (E7) entran en `tracer.8`.
-  - [bandeja, emergencia]
+  # Superficie restringida pendiente: bandeja (revisión de colección). La
+  # familia emergencia entró en `tracer.17` (ver arriba).
+  - [bandeja]
   # Telemetría/tracking: V2, fuera de todo tema, cola y clave de orden de V1.
   - [sin_senal, telemetria, push]
