@@ -204,6 +204,56 @@ export interface paths {
         patch: operations["completarFechaHora"];
         trace?: never;
     };
+    "/api/v1/viajes/{id}/emergencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Vista mínima de las emergencias del viaje para el cliente (ADR 21 §6).
+         * @description Reenvía a `mensajeria.listarEmergencias` con audiencia Cliente. Devuelve solo los casos en `abierta`, `en_atencion` o `resuelta`, identificados por fecha/hora, con un indicador agregado "emergencia activa". Nunca expone cuerpos de nota, contactos, recursos, actor interno ni personal de Reacción. Las acciones de atención de Reacción NO pasan por `bff`: son superficie interna de `mensajeria`.
+         */
+        get: operations["listarEmergenciasCliente"];
+        put?: never;
+        /**
+         * El cliente activa una emergencia sobre su viaje (idempotente).
+         * @description Reenvía a `mensajeria.activarEmergencia`. Idempotente por `activacion_id` del llamante. Un usuario fuera de alcance recibe 403 antes de componer nada.
+         */
+        post: operations["activarEmergenciaCliente"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/emergencias/{eid}/notas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * El cliente agrega una nota a un caso de emergencia.
+         * @description Reenvía a `mensajeria.agregarNotaEmergencia`. Texto ≤1000, se recorta y no se guarda si queda vacío. Denegado si el caso está `cerrada`.
+         */
+        post: operations["agregarNotaEmergenciaCliente"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -377,6 +427,29 @@ export interface components {
             entidad: string;
             actor: string;
             ts: components["schemas"]["MarcaTiempo"];
+        };
+        /** @description Caso de emergencia tal como lo ve el cliente: identificado por fecha/hora y estado, sin detalles internos. `cerrada` no aparece en la lista (ADR 21 §6). */
+        EmergenciaCliente: {
+            id: components["schemas"]["Id"];
+            /**
+             * @description El cliente no distingue `abierta` de `en_atencion` salvo por este valor.
+             * @enum {string}
+             */
+            estado: "abierta" | "en_atencion" | "resuelta";
+            activada_en: components["schemas"]["MarcaTiempo"];
+        };
+        EmergenciasCliente: {
+            /** @description Indicador agregado: true mientras exista al menos un caso en `abierta` o `en_atencion` (ADR 21 §6). `resuelta` no lo sostiene. */
+            emergencia_activa: boolean;
+            /** @description Casos en `abierta`, `en_atencion` o `resuelta`, por fecha/hora. */
+            casos: components["schemas"]["EmergenciaCliente"][];
+        };
+        ActivarEmergenciaClienteEntrada: {
+            /** @description Clave de idempotencia de la activación, generada por el cliente. */
+            activacion_id: components["schemas"]["Id"];
+        };
+        NotaEmergenciaClienteEntrada: {
+            cuerpo: string;
         };
         /**
          * Format: uuid
@@ -761,6 +834,117 @@ export interface operations {
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
             /** @description El viaje está en un estado terminal y no admite editar la fecha/hora del servicio. `codigo` de máquina `viaje_en_estado_terminal` en el cuerpo. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listarEmergenciasCliente: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vista mínima de emergencias del viaje para el cliente. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmergenciasCliente"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    activarEmergenciaCliente: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivarEmergenciaClienteEntrada"];
+            };
+        };
+        responses: {
+            /** @description Reentrega idempotente; caso original. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmergenciaCliente"];
+                };
+            };
+            /** @description Caso creado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmergenciaCliente"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina `viaje_en_estado_terminal`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    agregarNotaEmergenciaCliente: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotaEmergenciaClienteEntrada"];
+            };
+        };
+        responses: {
+            /** @description Nota agregada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina `emergencia_cerrada`. */
             409: {
                 headers: {
                     [name: string]: unknown;

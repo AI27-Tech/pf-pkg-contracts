@@ -1,4 +1,4 @@
-# Inventario contractual de eventos — tracer `v0.1.0-tracer.7`
+# Inventario contractual de eventos — tracer `v0.1.0-tracer.17`
 
 > **La tabla de abajo es prosa; el dato legible por máquina es
 > `contracts/events/registro.tipos.yaml`.** Desde `tracer.2` el registro es un
@@ -20,8 +20,8 @@ Reglas que este inventario materializa:
   puede entrar al fanout. Un tipo/versión ausente del registro se rechaza antes
   del fanout y, si llega a un consumidor, se trata como evento venenoso.
 - La superficie amplia lleva metadatos no sensibles. Desde `tracer.7` la
-  superficie restringida incluye la conversación (E3); bandeja y emergencia
-  (E7) siguen fuera.
+  superficie restringida incluye la conversación (E3); desde `tracer.17` también
+  la emergencia (E7). La bandeja (revisión de colección) sigue fuera.
 
 ## Familias del tracer
 
@@ -55,6 +55,12 @@ Reglas que este inventario materializa:
 | `recibo.entregado` | 1 | `mensajeria` | `realtime` | `conversacion_id` | restringida |
 | `recibo.leido` | 1 | `mensajeria` | `realtime` | `conversacion_id` | restringida |
 | `membresia.cambiada` | 1 | `mensajeria` | `realtime` | `bandeja_id` | restringida |
+| `emergencia.activada` | 1 | `mensajeria` | `realtime`, `reportes` | `caso_emergencia_id` | restringida |
+| `emergencia.nota_agregada` | 1 | `mensajeria` | `realtime`, `reportes`, `operacion` | `caso_emergencia_id` | restringida |
+| `emergencia.reclamada` | 1 | `mensajeria` | `realtime` | `caso_emergencia_id` | restringida |
+| `emergencia.transferida` | 1 | `mensajeria` | `realtime`, `reportes` | `caso_emergencia_id` | restringida |
+| `emergencia.resuelta` | 1 | `mensajeria` | `realtime`, `reportes` | `caso_emergencia_id` | restringida |
+| `emergencia.cerrada` | 1 | `mensajeria` | `realtime`, `reportes` | `caso_emergencia_id` | restringida |
 
 ## Notas por familia
 
@@ -80,11 +86,18 @@ Reglas que este inventario materializa:
   el tema restringido envueltos en `SobreVivo` (`sobre_vivo.proto`), que lleva
   `cursor_dominio`, `audience_version` y `target_sujeto_ids` (ADR 28 §4).
   `actor_real` no viaja: queda en la auditoría local de `mensajeria`.
+- **Emergencia (`emergencia.*`)** (`tracer.17`) — Superficie **restringida**,
+  mismo transporte que la conversación (`SobreVivo` por el tema restringido).
+  Agregado = `caso_emergencia_id`. `emergencia.nota_agregada` suma `operacion`
+  como consumidor durable: proyecta la nota al histórico interno del viaje
+  (DEC-100 punto 1). `actor_real` no viaja; el cliente solo ve la vista mínima
+  (ADR 21 §6).
 
-## Fuera del tracer (declarado, NO incluido en `tracer.7`)
+## Fuera del tracer (declarado, NO incluido)
 
-Las familias de **bandeja** (revisión de colección) y **emergencia** (E7)
-pertenecen a la superficie restringida y entran en `tracer.8`.
+La familia de **bandeja** (revisión de colección) pertenece a la superficie
+restringida y sigue declarada fuera. La familia de **emergencia** (E7) entró en
+`tracer.17` (ver tabla).
 Los eventos de telemetría/tracking (`sin_senal.*`, `telemetria.*`,
 `push.*`) son **V2** y no forman parte de ningún tema, cola ni clave de orden de
 V1 (ADR 20).
