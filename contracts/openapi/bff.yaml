@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.15
+  version: 0.1.0-tracer.16
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -189,7 +189,10 @@ paths:
         Compone ficha técnica, histórico de bitácora y auditoría relevante del
         viaje en un expediente de exportación. Audiencia interna; un operativo
         fuera de su alcance recibe 403 antes de componer nada. Un viaje
-        inexistente o fuera de alcance devuelve 404.
+        inexistente o fuera de alcance devuelve 404. Cada descarga exitosa deja
+        un registro de auditoría (actor, viaje, momento; E1-T7): el rastro lo
+        escribe `operacion` en su transacción vía `registrarDescargaViaje`, no el
+        `bff` (que no tiene base de datos).
       responses:
         "200":
           description: Expediente del viaje.
