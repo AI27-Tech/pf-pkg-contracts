@@ -3,6 +3,32 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-22 [tracer.16] — tipo interno de incidencia en la lectura y auditoría de la descarga del expediente (AI27-59, AI27-80)
+
+**Resumen:** Dos adiciones del equipo backend para cerrar el sprint, ambas en `operacion`+`bff`. (1) AI27-59: `ViajeDetalle` gana `incidencias_activas` con el `tipo_interno` de cada incidencia abierta, para que `bff` mapee la categoría curada del cliente (DEC-006); hasta ahora `ViajeDetalle` solo exponía `condiciones_activas` sin el tipo. (2) AI27-80: la descarga del expediente deja su rastro de auditoría, modelada como el comando `registrarDescargaViaje` en `operacion` que `bff` invoca al servir `descargarViaje`.
+
+**Contexto:** Las dos brechas las reportó el equipo backend desde E2-T3 (AI27-59) y E6-T3 (AI27-80). Ambas verificadas ausentes en `tracer.14`.
+
+AI27-59 es aditivo puro: el dato ya se persiste en `viajes.condicion_viaje` (`tipo_interno`, AI27-14) y `op_viajes` ya tiene `SELECT/INSERT/UPDATE` sobre esa tabla, así que exponerlo no cambia permisos ni captura. Se eligió embeber `incidencias_activas` en `ViajeDetalle` (no un `listarIncidencias` aparte) para evitar un segundo viaje de red. Schema nuevo `IncidenciaActiva`: vista reducida de `Incidencia` (sin `viaje_id` ni `resuelta_en`) porque va embebida en el viaje leído. `condiciones_activas` se conserva sin cambios. `tipo_interno` es consumo interno de `bff`; el curado para el cliente lo hace `bff`, nunca el contrato.
+
+AI27-80 NO necesita ADR. El rastro lo escribe el interceptor de auditoría en la transacción de `operacion` con el rol dueño `op_auditoria` (que ya tiene INSERT por diseño), no un GRANT a `op_viajes`. La única excepción de GRANT cruzado del sistema (la de `op_asignacion`, gobernada por ADR 33) no se toca. Se modela como `POST /api/v1/viajes/{id}/descargas` → `registrarDescargaViaje` en `operacion`, porque deja un efecto persistente: `bff` conserva su GET público `descargarViaje` sin ensuciarlo con una escritura oculta. La redacción de la auditoría en `descargarViaje` sigue la ya usada por `descargarAdjunto` (E6-T4).
+
+Número de ola: `tracer.15` (escritura de `fecha_hora_servicio`, E1-HU-003) entró a `-d` antes que esta ola. Esta rama se rebasó sobre ese `-d` y confirmó que `tracer.16` seguía libre antes de publicar (regla de versión §7; mismo caso que `tracer.5/6` y `7/8`). El rebase solo tocó `VERSION`, los ocho `info.version`, `package.json` y el orden del CHANGELOG; las adiciones de ambas olas a `operacion.yaml`/`bff.yaml` están en zonas distintas y coexisten sin conflicto semántico.
+
+**Cambios:**
+- `contracts/openapi/operacion.yaml`: `ViajeDetalle.incidencias_activas` (opcional) y schema nuevo `IncidenciaActiva`. Ruta `POST /api/v1/viajes/{id}/descargas` (`registrarDescargaViaje` → `Viaje`, errores 401/403/404).
+- `contracts/openapi/bff.yaml`: la descripción de `descargarViaje` declara que cada descarga deja auditoría escrita por `operacion` vía `registrarDescargaViaje`. Sin cambio de superficie ni de schema en `bff`.
+- Clientes Go y TS regenerados (`make generate`). `VERSION`, los ocho specs OpenAPI y el paquete TS a `0.1.0-tracer.16`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.15` (operacion y bff "cambió, compatible"; el resto solo bump de versión). Sin entrada en `rompimientos/`. `make lint-openapi` y `make check-estados` en verde; clientes Go compilan y pasan `go vet`.
+
+**Archivos modificados:**
+- `contracts/openapi/operacion.yaml`, `contracts/openapi/bff.yaml`, los otros seis specs (solo `info.version`), `VERSION`
+- `packages/api-client-go/operacion/operacion.gen.go`, `packages/api-client-ts/src/openapi/operacion.gen.ts`, `packages/api-client-ts/src/openapi/bff.gen.ts`, `packages/api-client-ts/package.json`
+- `CHANGELOG.md`
+
+Nota: `packages/api-client-go/bff/bff.gen.go` no cambia; `oapi-codegen` no emite las descripciones de operación en el cliente Go, y el único cambio de `bff.yaml` fue la descripción de `descargarViaje`. El TS sí la refleja.
+
 ## 2026-10-22 [tracer.15] — escritura de `fecha_hora_servicio` sobre un viaje existente (E1-HU-003)
 
 **Resumen:** Se agrega una operación de escritura de `fecha_hora_servicio` sobre un `viaje` ya creado, hasta ahora ausente: el contrato sólo permitía leer el campo (`ViajeInterno`) y escribirlo al crear (`CrearViajeEntrada`). El `Jefe Operativo` no puede aprobar una solicitud si falta la `fecha_hora_servicio` (guarda `fecha_hora_servicio_definida` de `SOLICITADO → APROBADO`, DEC-010 #2); si el cliente no la puso al crear, debía poder completarla antes de aprobar, y no existía ruta para hacerlo. Se publica `completarFechaHora` en `operacion` y su reenvío en `bff`, como `PATCH /api/v1/viajes/{id}/fecha-hora`.

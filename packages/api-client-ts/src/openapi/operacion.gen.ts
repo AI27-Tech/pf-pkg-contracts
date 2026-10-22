@@ -389,6 +389,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/viajes/{id}/descargas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar una descarga del expediente del viaje (deja auditoría).
+         * @description Registra que el expediente del viaje se descargó, dejando su rastro de auditoría en la misma transacción (interceptor, `op_auditoria`; E1-T7). La invoca `bff` al servir `descargarViaje`; la composición del expediente la arma `bff` con las lecturas existentes. Un usuario fuera del alcance del viaje recibe 403 antes de registrar nada.
+         */
+        post: operations["registrarDescargaViaje"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -453,9 +475,19 @@ export interface components {
             viaje: components["schemas"]["Viaje"];
             /** @description Condiciones ortogonales abiertas (dato separado del estado). */
             condiciones_activas: components["schemas"]["CondicionAbierta"][];
+            /** @description Incidencias abiertas del viaje con su `tipo_interno` (AI27-59). Es CONSUMO INTERNO de `bff`: la vista curada para el cliente la compone `bff` mapeando el tipo a una categoría (DEC-006), nunca este contrato. Opcional y aditivo: `condiciones_activas` se conserva sin cambios. Cada entrada corresponde a una condición `INCIDENCIA` abierta; `CondicionAbierta` no lleva el tipo porque es el dato crudo de la máquina de condiciones, sin el catálogo operativo. */
+            incidencias_activas?: components["schemas"]["IncidenciaActiva"][];
         };
         CondicionAbierta: {
             tipo: components["schemas"]["CondicionViaje"];
+            abierta_en: components["schemas"]["MarcaTiempo"];
+        };
+        /** @description Incidencia abierta embebida en la lectura del viaje (AI27-59). Vista reducida de `Incidencia` para consumo de `bff`: sin `viaje_id` (implícito en el viaje leído) ni `resuelta_en` (si está en la lista, está abierta). `tipo_interno` es interno; el curado para el cliente lo hace `bff` (DEC-006). */
+        IncidenciaActiva: {
+            id: components["schemas"]["Id"];
+            tipo_interno: string;
+            /** @enum {string} */
+            estado: "en_atencion" | "resuelta";
             abierta_en: components["schemas"]["MarcaTiempo"];
         };
         EtaEntrada: {
@@ -1439,6 +1471,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DescargaAdjunto"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    registrarDescargaViaje: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Descarga registrada; datos base del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Viaje"];
                 };
             };
             401: components["responses"]["NoAutorizado"];
