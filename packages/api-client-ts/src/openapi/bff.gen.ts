@@ -182,6 +182,28 @@ export interface paths {
         patch: operations["fijarEta"];
         trace?: never;
     };
+    "/api/v1/viajes/{id}/fecha-hora": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Completar o editar la fecha/hora del servicio del viaje (audiencia interna).
+         * @description Reenvía a `operacion.completarFechaHora`. Escribe `fecha_hora_servicio` sobre un viaje ya creado para satisfacer la guarda de aprobación (`fecha_hora_servicio_definida`, DEC-010 #2): si el cliente no lo puso al crear, el operador lo completa antes de aprobar (E1-HU-003). No es un cambio de estado; sólo exige que el viaje no esté en un estado terminal. Devuelve el detalle interno recompuesto para refrescar la vista sin un segundo GET.
+         */
+        patch: operations["completarFechaHora"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -282,6 +304,11 @@ export interface components {
         EtaEntrada: {
             /** @description ETA estimado a fijar (captura manual, ADR 20). Reemplaza el valor previo. */
             eta_estimado: components["schemas"]["MarcaTiempo"];
+        };
+        /** @description Entrada para completar/editar la fecha/hora del servicio. Espejo de `FechaHoraEntrada` de `operacion`. */
+        FechaHoraEntrada: {
+            /** @description Fecha/hora del servicio a completar o editar (E1-HU-003, DEC-010 */
+            fecha_hora_servicio: components["schemas"]["MarcaTiempo"];
         };
         /** @description Hito de progreso presentado al cliente. `bff` colapsa el bucle multi-parada en un hito legible (mapeo estado→hito, E2-T2); no expone el enum completo de estados. */
         HitoCliente: {
@@ -695,6 +722,45 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             /** @description El viaje está en un estado terminal y no admite fijar ETA. `codigo` de máquina `viaje_en_estado_terminal` en el cuerpo. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    completarFechaHora: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FechaHoraEntrada"];
+            };
+        };
+        responses: {
+            /** @description Fecha/hora del servicio actualizada; detalle interno del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViajeDetalle"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description El viaje está en un estado terminal y no admite editar la fecha/hora del servicio. `codigo` de máquina `viaje_en_estado_terminal` en el cuerpo. */
             409: {
                 headers: {
                     [name: string]: unknown;
