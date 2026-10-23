@@ -3,6 +3,27 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-22 [tracer.18] — proyectar asignación de escolta y roster de unidades al `bff` (E8-T10, E1-HU-004)
+
+**Resumen:** Se proyectan al `bff` dos capacidades que ya existían en `operacion` y no estaban expuestas por la puerta única del frontend: asignar la escolta a un viaje (`POST /api/v1/viajes/{id}/asignacion` → `asignarRecursos`) y listar el roster de unidades (`GET /api/v1/unidades` → `listarUnidades`). Es una proyección espejo: mismos verbos, rutas y esquemas que `operacion`, reenviados por el `bff` con sus guardas de alcance/rol, sin lógica de dominio nueva.
+
+**Contexto:** La brecha la reportó `pf-web-frontend-internal` desde E8-T10 (satisface `E1-HU-004`), que hoy opera contra mocks. El frontend consume sólo el contrato del `bff` (regla de puerta única); `asignarRecursos`/`listarUnidades` existían en `operacion` desde olas previas pero no estaban proyectadas, así que el frontend no podía usarlas contra backend real. La reserva atómica (o todas las unidades o ninguna), la transición `APROBADO → ASIGNADO` (DEC-026) y la aptitud informativa que no gatea (DEC-055, ADR 31) viven en `operacion`; el `bff` sólo reenvía.
+
+Dos decisiones cerradas con el consumidor antes de publicar: (1) la respuesta de asignar es `Asignacion { viaje_id, unidades: UnidadAsignada[] }` —proyección fiel, con aptitud informativa por átomo—, no `ViajeDetalle`; el frontend refresca el viaje invalidando la query del detalle (segundo GET barato), no pidiendo recomposición al `bff`. (2) el 409 de asignar usa el único código de rechazo del dominio, `recurso_no_disponible`, que incluye la carrera contra otro jefe operativo; el dominio NO distingue "en conflicto" de "sin disponibles" (la distinción fina se escaló a Operación como propuesta aparte, no bloquea E8-T10). Se conserva el nombre espejo `asignarRecursos` (no `asignarEscolta`) por la convención de proyección del `bff`. Reasignar (`reasignarRecursos`, PATCH) queda fuera de alcance: no lo necesita E8-T10.
+
+Número de ola: `tracer.17` (familia de emergencia, E7) es la última publicada en `-d`; no hay ola `18` tomada por tag ni por rama (verificado contra tags y `VERSION`), así que toma el siguiente libre, `tracer.18` (regla de versión de contratos §7).
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: rutas `POST /api/v1/viajes/{id}/asignacion` (`asignarRecursos` → `Asignacion`; 400/401/403; 409 con `codigo` `recurso_no_disponible`) y `GET /api/v1/unidades` (`listarUnidades` → `PaginaUnidades`; 401/403). Esquemas nuevos espejo de `operacion`: `AsignacionEntrada`, `Asignacion`, `UnidadAsignada`, `AptitudRecurso`, `Unidad`, `PaginaUnidades`.
+- Clientes Go y TS regenerados (`make generate`). `VERSION`, los ocho specs OpenAPI y el encabezado de `INVENTARIO.md` a `0.1.0-tracer.18`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.17` (`bff` "cambió, compatible"; el resto solo bump de versión). Sin entrada en `rompimientos/`. `make lint-openapi`, `make check-estados` y `make check-registro` en verde; clientes Go compilan y pasan `go vet`.
+
+**Archivos modificados:**
+- `contracts/openapi/bff.yaml`, los otros siete specs y `_comunes.yaml` (solo `info.version`), `VERSION`, `contracts/events/INVENTARIO.md` (encabezado de ola)
+- `packages/api-client-go/bff/bff.gen.go`, `packages/api-client-ts/src/openapi/bff.gen.ts`
+- `CHANGELOG.md`
+
 ## 2026-10-22 [tracer.16] — tipo interno de incidencia en la lectura y auditoría de la descarga del expediente (AI27-59, AI27-80)
 
 **Resumen:** Dos adiciones del equipo backend para cerrar el sprint, ambas en `operacion`+`bff`. (1) AI27-59: `ViajeDetalle` gana `incidencias_activas` con el `tipo_interno` de cada incidencia abierta, para que `bff` mapee la categoría curada del cliente (DEC-006); hasta ahora `ViajeDetalle` solo exponía `condiciones_activas` sin el tipo. (2) AI27-80: la descarga del expediente deja su rastro de auditoría, modelada como el comando `registrarDescargaViaje` en `operacion` que `bff` invoca al servir `descargarViaje`.

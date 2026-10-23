@@ -22,6 +22,19 @@ const (
 	BearerCognitoScopes = "bearerCognito.Scopes"
 )
 
+// Defines values for AptitudRecursoEstado.
+const (
+	Apto        AptitudRecursoEstado = "apto"
+	Desconocido AptitudRecursoEstado = "desconocido"
+	NoApto      AptitudRecursoEstado = "no_apto"
+)
+
+// Defines values for AptitudRecursoRecurso.
+const (
+	Custodio AptitudRecursoRecurso = "custodio"
+	Vehiculo AptitudRecursoRecurso = "vehiculo"
+)
+
 // Defines values for CondicionAbiertaTipo.
 const (
 	INCIDENCIA CondicionAbiertaTipo = "INCIDENCIA"
@@ -41,10 +54,52 @@ const (
 	IncidenciaCuradaEstadoResuelta   IncidenciaCuradaEstado = "resuelta"
 )
 
+// Defines values for UnidadTipo.
+const (
+	Moto     UnidadTipo = "moto"
+	Patrulla UnidadTipo = "patrulla"
+)
+
 // ActivarEmergenciaClienteEntrada defines model for ActivarEmergenciaClienteEntrada.
 type ActivarEmergenciaClienteEntrada struct {
 	// ActivacionId Clave de idempotencia de la activación, generada por el cliente.
 	ActivacionId Id `json:"activacion_id"`
+}
+
+// AptitudRecurso Aptitud informativa por átomo en la respuesta de la asignación (DEC-055). Nunca bloquea la asignación en V1. Espejo de `AptitudRecurso` de `operacion`.
+type AptitudRecurso struct {
+	// Estado Afirmación informativa (DEC-055). `desconocido` lo calcula `operacion`. Nunca bloquea la asignación en V1.
+	Estado AptitudRecursoEstado `json:"estado"`
+
+	// Motivos Motivos, cuando el estado es `no_apto`.
+	Motivos *[]string `json:"motivos,omitempty"`
+
+	// Recurso Átomo evaluado dentro de la unidad.
+	Recurso AptitudRecursoRecurso `json:"recurso"`
+
+	// RecursoId Identificador único (UUID). Nunca un correlativo expuesto.
+	RecursoId Id `json:"recurso_id"`
+}
+
+// AptitudRecursoEstado Afirmación informativa (DEC-055). `desconocido` lo calcula `operacion`. Nunca bloquea la asignación en V1.
+type AptitudRecursoEstado string
+
+// AptitudRecursoRecurso Átomo evaluado dentro de la unidad.
+type AptitudRecursoRecurso string
+
+// Asignacion Escolta reservada del viaje; la reserva ya ocurrió y el viaje quedó `ASIGNADO`. Cada unidad trae su aptitud informativa por átomo (sólo dato). Espejo de `Asignacion` de `operacion`.
+type Asignacion struct {
+	// Unidades Unidades de la escolta reservada, cada una con su aptitud informativa.
+	Unidades []UnidadAsignada `json:"unidades"`
+
+	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.
+	ViajeId Id `json:"viaje_id"`
+}
+
+// AsignacionEntrada Escolta a reservar: una o más `unidades` del roster. La reserva es por unidad completa (paquete vehículo + custodios), no por recursos sueltos (ADR 31). Espejo de `AsignacionEntrada` de `operacion`.
+type AsignacionEntrada struct {
+	// UnidadesIds Identificadores de las unidades del roster que forman la escolta.
+	UnidadesIds []Id `json:"unidades_ids"`
 }
 
 // CondicionAbierta Condición ortogonal abierta. Espejo de `CondicionAbierta` de `operacion`.
@@ -213,6 +268,13 @@ type NotaEmergenciaClienteEntrada struct {
 	Cuerpo string `json:"cuerpo"`
 }
 
+// PaginaUnidades defines model for PaginaUnidades.
+type PaginaUnidades struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string  `json:"cursor_siguiente"`
+	Items           []Unidad `json:"items"`
+}
+
 // PaginaViajesResumen defines model for PaginaViajesResumen.
 type PaginaViajesResumen struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
@@ -253,6 +315,36 @@ type TransicionEntrada struct {
 
 	// Causa Causa de la transición. Obligatoria cuando el destino la requiere; la validación fina vive en `operacion`.
 	Causa *string `json:"causa,omitempty"`
+}
+
+// Unidad Unidad del roster tal como la expone `operacion`. Espejo de `Unidad` de `operacion`.
+type Unidad struct {
+	// Activa Si la unidad está activa (disponible para asignarse).
+	Activa bool `json:"activa"`
+
+	// CustodiosIds Custodios de la unidad, por identificador. Un coche lleva uno o dos; una moto, uno (ADR 31).
+	CustodiosIds []Id `json:"custodios_ids"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// Tipo Tipo de unidad, SOLO LECTURA, derivado del vehículo (coche -> patrulla, moto -> moto, ADR 31). Nunca se envía en una petición.
+	Tipo *UnidadTipo `json:"tipo,omitempty"`
+
+	// VehiculoId Identificador del vehículo en `catalogos`. Referencia, no FK.
+	VehiculoId Id `json:"vehiculo_id"`
+}
+
+// UnidadTipo Tipo de unidad, SOLO LECTURA, derivado del vehículo (coche -> patrulla, moto -> moto, ADR 31). Nunca se envía en una petición.
+type UnidadTipo string
+
+// UnidadAsignada Unidad reservada con su aptitud informativa. Espejo de `UnidadAsignada` de `operacion`.
+type UnidadAsignada struct {
+	// Aptitud Aptitud informativa por átomo (vehículo y custodios de la unidad).
+	Aptitud []AptitudRecurso `json:"aptitud"`
+
+	// UnidadId Identificador único (UUID). Nunca un correlativo expuesto.
+	UnidadId Id `json:"unidad_id"`
 }
 
 // ViajeDetalle Detalle interno del viaje: estado canónico MÁS condiciones activas como dato separado. Un viaje puede estar `EN_TRANSITO` y con `INCIDENCIA` abierta a la vez. Espejo de `ViajeDetalle` de `operacion`.
@@ -333,6 +425,11 @@ type Prohibido = Error
 // SolicitudInvalida defines model for SolicitudInvalida.
 type SolicitudInvalida = Error
 
+// ListarUnidadesParams defines parameters for ListarUnidades.
+type ListarUnidadesParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListarViajesParams defines parameters for ListarViajes.
 type ListarViajesParams struct {
 	Estado *string `form:"estado,omitempty" json:"estado,omitempty"`
@@ -347,6 +444,9 @@ type RefrescarSesionJSONRequestBody = RefrescoEntrada
 
 // CrearViajeJSONRequestBody defines body for CrearViaje for application/json ContentType.
 type CrearViajeJSONRequestBody = CrearViajeEntrada
+
+// AsignarRecursosJSONRequestBody defines body for AsignarRecursos for application/json ContentType.
+type AsignarRecursosJSONRequestBody = AsignacionEntrada
 
 // ActivarEmergenciaClienteJSONRequestBody defines body for ActivarEmergenciaCliente for application/json ContentType.
 type ActivarEmergenciaClienteJSONRequestBody = ActivarEmergenciaClienteEntrada
@@ -449,6 +549,9 @@ type ClientInterface interface {
 
 	RefrescarSesion(ctx context.Context, body RefrescarSesionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListarUnidades request
+	ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarViajes request
 	ListarViajes(ctx context.Context, params *ListarViajesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -459,6 +562,11 @@ type ClientInterface interface {
 
 	// SeguirViaje request
 	SeguirViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AsignarRecursosWithBody request with any body
+	AsignarRecursosWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AsignarRecursos(ctx context.Context, id Id, body AsignarRecursosJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DescargarViaje request
 	DescargarViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -555,6 +663,18 @@ func (c *Client) RefrescarSesion(ctx context.Context, body RefrescarSesionJSONRe
 	return c.Client.Do(req)
 }
 
+func (c *Client) ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarUnidadesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ListarViajes(ctx context.Context, params *ListarViajesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarViajesRequest(c.Server, params)
 	if err != nil {
@@ -593,6 +713,30 @@ func (c *Client) CrearViaje(ctx context.Context, body CrearViajeJSONRequestBody,
 
 func (c *Client) SeguirViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSeguirViajeRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AsignarRecursosWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAsignarRecursosRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AsignarRecursos(ctx context.Context, id Id, body AsignarRecursosJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAsignarRecursosRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -866,6 +1010,55 @@ func NewRefrescarSesionRequestWithBody(server string, contentType string, body i
 	return req, nil
 }
 
+// NewListarUnidadesRequest generates requests for ListarUnidades
+func NewListarUnidadesRequest(server string, params *ListarUnidadesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/unidades")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListarViajesRequest generates requests for ListarViajes
 func NewListarViajesRequest(server string, params *ListarViajesParams) (*http.Request, error) {
 	var err error
@@ -1001,6 +1194,53 @@ func NewSeguirViajeRequest(server string, id Id) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewAsignarRecursosRequest calls the generic AsignarRecursos builder with application/json body
+func NewAsignarRecursosRequest(server string, id Id, body AsignarRecursosJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAsignarRecursosRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewAsignarRecursosRequestWithBody generates requests for AsignarRecursos with any type of body
+func NewAsignarRecursosRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/asignacion", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -1405,6 +1645,9 @@ type ClientWithResponsesInterface interface {
 
 	RefrescarSesionWithResponse(ctx context.Context, body RefrescarSesionJSONRequestBody, reqEditors ...RequestEditorFn) (*RefrescarSesionResponse, error)
 
+	// ListarUnidadesWithResponse request
+	ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error)
+
 	// ListarViajesWithResponse request
 	ListarViajesWithResponse(ctx context.Context, params *ListarViajesParams, reqEditors ...RequestEditorFn) (*ListarViajesResponse, error)
 
@@ -1415,6 +1658,11 @@ type ClientWithResponsesInterface interface {
 
 	// SeguirViajeWithResponse request
 	SeguirViajeWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*SeguirViajeResponse, error)
+
+	// AsignarRecursosWithBodyWithResponse request with any body
+	AsignarRecursosWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AsignarRecursosResponse, error)
+
+	AsignarRecursosWithResponse(ctx context.Context, id Id, body AsignarRecursosJSONRequestBody, reqEditors ...RequestEditorFn) (*AsignarRecursosResponse, error)
 
 	// DescargarViajeWithResponse request
 	DescargarViajeWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*DescargarViajeResponse, error)
@@ -1521,6 +1769,30 @@ func (r RefrescarSesionResponse) StatusCode() int {
 	return 0
 }
 
+type ListarUnidadesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaUnidades
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarUnidadesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarUnidadesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ListarViajesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -1588,6 +1860,32 @@ func (r SeguirViajeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r SeguirViajeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AsignarRecursosResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Asignacion
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r AsignarRecursosResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AsignarRecursosResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1844,6 +2142,15 @@ func (c *ClientWithResponses) RefrescarSesionWithResponse(ctx context.Context, b
 	return ParseRefrescarSesionResponse(rsp)
 }
 
+// ListarUnidadesWithResponse request returning *ListarUnidadesResponse
+func (c *ClientWithResponses) ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error) {
+	rsp, err := c.ListarUnidades(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarUnidadesResponse(rsp)
+}
+
 // ListarViajesWithResponse request returning *ListarViajesResponse
 func (c *ClientWithResponses) ListarViajesWithResponse(ctx context.Context, params *ListarViajesParams, reqEditors ...RequestEditorFn) (*ListarViajesResponse, error) {
 	rsp, err := c.ListarViajes(ctx, params, reqEditors...)
@@ -1877,6 +2184,23 @@ func (c *ClientWithResponses) SeguirViajeWithResponse(ctx context.Context, id Id
 		return nil, err
 	}
 	return ParseSeguirViajeResponse(rsp)
+}
+
+// AsignarRecursosWithBodyWithResponse request with arbitrary body returning *AsignarRecursosResponse
+func (c *ClientWithResponses) AsignarRecursosWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AsignarRecursosResponse, error) {
+	rsp, err := c.AsignarRecursosWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAsignarRecursosResponse(rsp)
+}
+
+func (c *ClientWithResponses) AsignarRecursosWithResponse(ctx context.Context, id Id, body AsignarRecursosJSONRequestBody, reqEditors ...RequestEditorFn) (*AsignarRecursosResponse, error) {
+	rsp, err := c.AsignarRecursos(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAsignarRecursosResponse(rsp)
 }
 
 // DescargarViajeWithResponse request returning *DescargarViajeResponse
@@ -2097,6 +2421,46 @@ func ParseRefrescarSesionResponse(rsp *http.Response) (*RefrescarSesionResponse,
 	return response, nil
 }
 
+// ParseListarUnidadesResponse parses an HTTP response from a ListarUnidadesWithResponse call
+func ParseListarUnidadesResponse(rsp *http.Response) (*ListarUnidadesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarUnidadesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaUnidades
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListarViajesResponse parses an HTTP response from a ListarViajesWithResponse call
 func ParseListarViajesResponse(rsp *http.Response) (*ListarViajesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -2218,6 +2582,60 @@ func ParseSeguirViajeResponse(rsp *http.Response) (*SeguirViajeResponse, error) 
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAsignarRecursosResponse parses an HTTP response from a AsignarRecursosWithResponse call
+func ParseAsignarRecursosResponse(rsp *http.Response) (*AsignarRecursosResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AsignarRecursosResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Asignacion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

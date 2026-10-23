@@ -254,6 +254,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/viajes/{id}/asignacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Asignar la escolta (una o más unidades) en una escritura atómica (audiencia interna).
+         * @description Reenvía a `operacion.asignarRecursos`. Reserva la escolta —una o más `unidades` (paquetes vehículo + custodios) del roster— en una sola transacción (ADR 31): o se reservan todas, o ninguna. Al confirmar, el viaje pasa `APROBADO → ASIGNADO` (DEC-026). La aptitud es informativa y NO condiciona la asignación en V1 (DEC-055): no existe rechazo "no apto".
+         */
+        post: operations["asignarRecursos"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/unidades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar unidades del roster (audiencia interna).
+         * @description Reenvía a `operacion.listarUnidades`. El roster de `unidades` vive en `operacion` (ADR 31 §5 / ADR 33). Una `unidad` es un paquete pre-armado: un vehículo con uno o dos custodios, referidos por identificador. En V1 la lectura del roster NO expone aptitud.
+         */
+        get: operations["listarUnidades"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -450,6 +492,59 @@ export interface components {
         };
         NotaEmergenciaClienteEntrada: {
             cuerpo: string;
+        };
+        /** @description Escolta a reservar: una o más `unidades` del roster. La reserva es por unidad completa (paquete vehículo + custodios), no por recursos sueltos (ADR 31). Espejo de `AsignacionEntrada` de `operacion`. */
+        AsignacionEntrada: {
+            /** @description Identificadores de las unidades del roster que forman la escolta. */
+            unidades_ids: components["schemas"]["Id"][];
+        };
+        /** @description Aptitud informativa por átomo en la respuesta de la asignación (DEC-055). Nunca bloquea la asignación en V1. Espejo de `AptitudRecurso` de `operacion`. */
+        AptitudRecurso: {
+            /**
+             * @description Átomo evaluado dentro de la unidad.
+             * @enum {string}
+             */
+            recurso: "vehiculo" | "custodio";
+            recurso_id: components["schemas"]["Id"];
+            /**
+             * @description Afirmación informativa (DEC-055). `desconocido` lo calcula `operacion`. Nunca bloquea la asignación en V1.
+             * @enum {string}
+             */
+            estado: "apto" | "no_apto" | "desconocido";
+            /** @description Motivos, cuando el estado es `no_apto`. */
+            motivos?: string[];
+        };
+        /** @description Unidad reservada con su aptitud informativa. Espejo de `UnidadAsignada` de `operacion`. */
+        UnidadAsignada: {
+            unidad_id: components["schemas"]["Id"];
+            /** @description Aptitud informativa por átomo (vehículo y custodios de la unidad). */
+            aptitud: components["schemas"]["AptitudRecurso"][];
+        };
+        /** @description Escolta reservada del viaje; la reserva ya ocurrió y el viaje quedó `ASIGNADO`. Cada unidad trae su aptitud informativa por átomo (sólo dato). Espejo de `Asignacion` de `operacion`. */
+        Asignacion: {
+            viaje_id: components["schemas"]["Id"];
+            /** @description Unidades de la escolta reservada, cada una con su aptitud informativa. */
+            unidades: components["schemas"]["UnidadAsignada"][];
+        };
+        /** @description Unidad del roster tal como la expone `operacion`. Espejo de `Unidad` de `operacion`. */
+        Unidad: {
+            id: components["schemas"]["Id"];
+            /** @description Identificador del vehículo en `catalogos`. Referencia, no FK. */
+            vehiculo_id: components["schemas"]["Id"];
+            /** @description Custodios de la unidad, por identificador. Un coche lleva uno o dos; una moto, uno (ADR 31). */
+            custodios_ids: components["schemas"]["Id"][];
+            /**
+             * @description Tipo de unidad, SOLO LECTURA, derivado del vehículo (coche -> patrulla, moto -> moto, ADR 31). Nunca se envía en una petición.
+             * @enum {string}
+             */
+            readonly tipo: "patrulla" | "moto";
+            /** @description Si la unidad está activa (disponible para asignarse). */
+            activa: boolean;
+        };
+        PaginaUnidades: {
+            items: components["schemas"]["Unidad"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
         };
         /**
          * Format: uuid
@@ -953,6 +1048,68 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    asignarRecursos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AsignacionEntrada"];
+            };
+        };
+        responses: {
+            /** @description Asignación confirmada; el viaje queda `ASIGNADO`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asignacion"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            /** @description Alguna unidad no está disponible en la ventana del viaje; sin reserva parcial. Único código de rechazo: `codigo` de máquina `recurso_no_disponible` (incluye la carrera contra otro jefe operativo; el dominio no la distingue, DEC-043). La aptitud nunca rechaza en V1 (DEC-055): no existe `recurso_no_apto`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listarUnidades: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de unidades del roster. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaUnidades"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
         };
     };
 }
