@@ -1,4 +1,4 @@
-# Inventario contractual de eventos — tracer `v0.1.0-tracer.17`
+# Inventario contractual de eventos — tracer `v0.1.0-tracer.18`
 
 > **La tabla de abajo es prosa; el dato legible por máquina es
 > `contracts/events/registro.tipos.yaml`.** Desde `tracer.2` el registro es un
