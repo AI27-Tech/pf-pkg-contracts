@@ -3,6 +3,25 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-23 [tracer.19] — `refrescarSesion` declarada pública en el contrato (alinea contrato con runtime)
+
+**Resumen:** Se añade `security: []` a `refrescarSesion` en `identidad.yaml`, igual que ya lo tenía `emitirSesion`. Hasta ahora `refrescarSesion` heredaba el `security` global (`bearerCognito`), así que el contrato la declaraba protegida; pero el servidor de `pf-svc-identidad` la monta SIN middleware de auth (es pública, como `emitirSesion`), porque el refresh usa el refresh token del cuerpo, no un access token válido en el header. El contrato y el runtime se contradecían; esta ola los alinea.
+
+**Contexto:** La brecha se detectó al unificar el passthrough del token en el `bff` (`pf-svc-bff` PR #29): al decidir qué aristas propagan el Bearer, se verificó contra el servidor que `refrescarSesion` es pública en runtime (`identidad.go`: `mux.HandleFunc` sin `protegido`) y que el contrato no lo reflejaba. El riesgo del desajuste es un consumidor generado desde el contrato que exija un `Authorization` para refrescar, justo cuando el access token suele estar vencido. ADR 26 trata el refresh como el punto de reevaluación de claims a partir del refresh token, no del access token.
+
+Número de ola: `tracer.18` (proyección de asignación/roster al `bff`) es la última publicada en `-d`; no hay `19` tomada por tag ni por rama (verificado contra tags, `VERSION` y PRs abiertos), así que toma el siguiente libre, `tracer.19` (regla de versión de contratos §7).
+
+**Cambios:**
+- `contracts/openapi/identidad.yaml`: `refrescarSesion` gana `security: []` con comentario de por qué es pública. Ningún otro cambio de forma: rutas, parámetros, cuerpos y respuestas idénticos.
+- `VERSION`, los ocho specs OpenAPI (`info.version`) y el encabezado de `INVENTARIO.md` a `0.1.0-tracer.19`.
+
+**Compatibilidad:** aditivo/relajante. `breaking-openapi` confirma compatible con `tracer.18` (relajar `security` no rompe a ningún consumidor). Los tipos Go/TS generados NO cambian: `security` es metadata de la operación, no genera código; `check-reproducible` confirma que los artefactos generados coinciden byte a byte. `check-tags`, `check-registro` y `contract-tests` en verde.
+
+**Archivos modificados:**
+- `contracts/openapi/identidad.yaml` y los otros siete specs + `_comunes.yaml` (solo `info.version`), `VERSION`, `contracts/events/INVENTARIO.md` (encabezado de ola)
+- `packages/api-client-ts/package.json` (`version`)
+- `CHANGELOG.md`
+
 ## 2026-10-22 [tracer.18] — proyectar asignación de escolta y roster de unidades al `bff` (E8-T10, E1-HU-004)
 
 **Resumen:** Se proyectan al `bff` dos capacidades que ya existían en `operacion` y no estaban expuestas por la puerta única del frontend: asignar la escolta a un viaje (`POST /api/v1/viajes/{id}/asignacion` → `asignarRecursos`) y listar el roster de unidades (`GET /api/v1/unidades` → `listarUnidades`). Es una proyección espejo: mismos verbos, rutas y esquemas que `operacion`, reenviados por el `bff` con sus guardas de alcance/rol, sin lógica de dominio nueva.
