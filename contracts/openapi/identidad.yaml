@@ -17,7 +17,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — identidad
-  version: 0.1.0-tracer.18
+  version: 0.1.0-tracer.20
   description: >-
     Autenticación, sesión y alcance del tracer. Fuente de verdad de la
     revocación (evento `sesion.revocada`, ADR 26).
@@ -76,6 +76,7 @@ paths:
         Punto donde los claims se REEVALÚAN desde el modelo vigente (ADR 16
         cerrado, DEC-031). `sesion_id` permanece estable durante todos los
         refresh de la misma sesión (ADR 26).
+      security: [] # pública: el refresh usa el refresh token del cuerpo, no el access token
       requestBody:
         required: true
         content:
