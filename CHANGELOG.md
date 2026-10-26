@@ -3,6 +3,32 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-23 [tracer.19] — brechas de E8-T11 y E8-T5: selector de cliente, `estado` en `Asignacion`, y segundo factor en el login del `bff` (E1-HU-028, E1-HU-004, E4-HU-017)
+
+**Resumen:** Tres adiciones al `bff` (una con espejo en `operacion`) que desbloquean dos tareas del panel interno, todas aditivas. (1) E8-T11: `GET /api/v1/clientes` → `listarClientes`, proyección de `catalogos.listarClientes` para poblar el selector de cliente al crear un viaje por Operación. (2) E8-T11: `Asignacion` gana `estado` (token de `EstadoViaje`) para afirmar `ASIGNADO` tras asignar sin que el consumidor lo infiera; se agrega en `operacion` y se proyecta al `bff` (espejo completo). (3) E8-T5: `CredencialesEntrada` del `bff` gana `segundo_factor` (TOTP), proyección del campo que ya existía en `identidad`.
+
+**Contexto:** Dos solicitudes de `pf-web-frontend-internal` (E8-T11 el 2026-10-23, E8-T5 el 2026-10-26). Todas las decisiones de diseño están en DEC-101.
+
+Brecha 1 (clientes): el maestro ya vive en `catalogos` (`listarClientes`/`Cliente`/`PaginaClientes`), pero la regla de puerta única impide al frontend llamarlo directo. Se proyecta al `bff` como reenvío, mismo patrón que `listarUnidades`→`operacion` (tracer.18). Paginado por cursor; NO se proyecta el parámetro `ids` de `catalogos` (es la lectura por lote de `mensajeria`). DEC-026 #3 exige limitar la lista al alcance del `jefe_operativo` y DEC-101 añade que el `bff` devuelve SOLO clientes `activo`: ambos filtros los resuelve el servidor, no el frontend ni el schema; la forma del contrato no cambia (`PaginaClientes`/`Cliente`, espejo exacto de `catalogos`).
+
+Brecha 2 (`estado` en `Asignacion`): `Asignacion` era el único miembro de la familia sin `estado`, cuando `ViajeResumen`/`ViajeInterno` ya lo traen. Se agrega como requerido en `operacion.Asignacion` (referencia al enum `EstadoViaje`) y se proyecta al `bff` como `string` token (el `bff` no replica el enum, igual que los otros schemas). Espejo completo sobre solo-`bff` para no crear la incoherencia "el `bff` afirma una forma que el dominio no tiene". Corrección registrada: la respuesta de `asignarRecursos` es `200`, no `201`.
+
+Brecha 3 (segundo factor): `identidad.CredencialesEntrada.segundo_factor` ya existe (TOTP, `nullable`, opcional V1); el `bff` no lo tenía y su `additionalProperties: false` impedía enviarlo. Proyección pura, misma forma y semántica: el IdP (Keycloak) valida, el `bff` transporta (DEC-031/DEC-071). El `codigo` estable que distinguiría "segundo factor inválido" de "credenciales inválidas" en el 401 queda ABIERTO, delegado a identidad/Keycloak (DEC-101 #5): no se define un código que el IdP quizá no pueda emitir. No bloquea E8-T5 (el campo basta para capturar y enviar el TOTP).
+
+Número de ola: `tracer.18` (asignación/roster, E8-T10) es la última publicada en `-d`; no hay ola `19` tomada por tag ni por rama (verificado contra tags y `VERSION`), así que toma el siguiente libre, `tracer.19` (regla de versión §7).
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: ruta `GET /api/v1/clientes` (`listarClientes` → `PaginaClientes`; 401/403); esquemas nuevos `Cliente`/`PaginaClientes` espejo de `catalogos`; `Asignacion.estado` (token `string`, requerido); `CredencialesEntrada.segundo_factor` (TOTP, `nullable`).
+- `contracts/openapi/operacion.yaml`: `Asignacion.estado` (referencia a `EstadoViaje`, requerido).
+- Clientes Go y TS regenerados (`make generate`): `bff.gen.go/ts`, `operacion.gen.go/ts`. `VERSION`, los ocho specs, el paquete TS y el encabezado de `INVENTARIO.md` a `0.1.0-tracer.19`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.18` (`bff` y `operacion` "cambió, compatible"; el resto solo bump de versión). `segundo_factor` es opcional/`nullable`; `Asignacion.estado` y la ruta de clientes son adiciones. Sin entrada en `rompimientos/`. `make lint-openapi`, `check-estados` y `check-registro` en verde; clientes Go compilan y pasan `go vet`.
+
+**Archivos modificados:**
+- `contracts/openapi/bff.yaml`, `contracts/openapi/operacion.yaml`, los otros seis specs y `_comunes.yaml` (solo `info.version`), `VERSION`, `contracts/events/INVENTARIO.md` (encabezado de ola)
+- `packages/api-client-go/bff/bff.gen.go`, `packages/api-client-go/operacion/operacion.gen.go`, `packages/api-client-ts/src/openapi/bff.gen.ts`, `packages/api-client-ts/src/openapi/operacion.gen.ts`, `packages/api-client-ts/package.json`
+- `CHANGELOG.md`
+
 ## 2026-10-22 [tracer.18] — proyectar asignación de escolta y roster de unidades al `bff` (E8-T10, E1-HU-004)
 
 **Resumen:** Se proyectan al `bff` dos capacidades que ya existían en `operacion` y no estaban expuestas por la puerta única del frontend: asignar la escolta a un viaje (`POST /api/v1/viajes/{id}/asignacion` → `asignarRecursos`) y listar el roster de unidades (`GET /api/v1/unidades` → `listarUnidades`). Es una proyección espejo: mismos verbos, rutas y esquemas que `operacion`, reenviados por el `bff` con sus guardas de alcance/rol, sin lógica de dominio nueva.
