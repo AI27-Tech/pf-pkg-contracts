@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.18
+  version: 0.1.0-tracer.20
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -450,6 +450,42 @@ paths:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
 
   # ---------------------------------------------------------------------------
+  # Selector de cliente para la creación de viaje por Operación (E8-T11 /
+  # E1-HU-028 / DEC-026 #3-4). Proyección espejo de `catalogos.listarClientes`
+  # por la puerta única; el frontend no llama a `catalogos` directo. El `bff`
+  # reenvía con las guardas de alcance/rol del `jefe_operativo`: la lista queda
+  # limitada a los clientes de su alcance (DEC-026 #3) y SOLO a los `activo`
+  # (un cliente inactivo no es asignable a un viaje nuevo). El filtro de alcance
+  # y de estado lo resuelve el servidor, no el frontend; un `cliente_id` fuera
+  # de alcance se rechaza al crear. No se proyecta el parámetro `ids` de
+  # `catalogos` (es la lectura por lote de `mensajeria`, no un selector).
+  # ---------------------------------------------------------------------------
+  /api/v1/clientes:
+    get:
+      operationId: listarClientes
+      tags: [viajes]
+      summary: Listar clientes seleccionables para crear un viaje (audiencia interna).
+      description: >-
+        Reenvía a `catalogos.listarClientes`. Devuelve los clientes `activo`
+        dentro del alcance del `jefe_operativo` (DEC-026 #3): los fuera de
+        alcance no se muestran, y asociar uno por `cliente_id` manipulado se
+        rechaza al crear el viaje. Paginado por cursor. El frontend sólo consume
+        la respuesta y envía el `cliente_id` elegido.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de clientes seleccionables.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaClientes"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
+  # ---------------------------------------------------------------------------
   # Asignación de la escolta y roster de unidades (E8-T10 / E1-HU-004).
   # Proyección espejo de `operacion` (asignarRecursos, listarUnidades): mismos
   # verbos, rutas y formas, expuestos por la puerta única del `bff`. El frontend
@@ -535,6 +571,14 @@ components:
         contrasena:
           type: string
           format: password
+        segundo_factor:
+          type: string
+          nullable: true
+          description: >-
+            Código del segundo factor (TOTP). Opcional en V1; requerido en V2+.
+            El IdP (Keycloak) lo valida; `bff`/`identidad` sólo lo transportan.
+            Espejo de `CredencialesEntrada.segundo_factor` de `identidad`
+            (DEC-031/ADR 13, DEC-071).
 
     RefrescoEntrada:
       type: object
@@ -965,13 +1009,20 @@ components:
     Asignacion:
       type: object
       additionalProperties: false
-      required: [viaje_id, unidades]
+      required: [viaje_id, estado, unidades]
       description: >-
         Escolta reservada del viaje; la reserva ya ocurrió y el viaje quedó
         `ASIGNADO`. Cada unidad trae su aptitud informativa por átomo (sólo
         dato). Espejo de `Asignacion` de `operacion`.
       properties:
         viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        estado:
+          type: string
+          description: >-
+            Estado del viaje tras la reserva (token de `EstadoViaje`, ADR 19),
+            tal como lo publica `operacion`. En V1 la asignación exitosa deja
+            `ASIGNADO`. El `bff` no replica el enum; se afirma en el dato para
+            que el consumidor no lo infiera del éxito de la operación.
         unidades:
           type: array
           description: Unidades de la escolta reservada, cada una con su aptitud informativa.
@@ -1016,6 +1067,45 @@ components:
         items:
           type: array
           items: {$ref: "#/components/schemas/Unidad"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    # --- Cliente para el selector de creación de viaje (E8-T11). Espejo de
+    #     `Cliente`/`PaginaClientes` de `catalogos`. Forma ligera: id + nombre
+    #     legible + estado. El BFF sólo expone los `activo` dentro de alcance
+    #     (el filtro vive en el servidor, no en el schema). `contrato_vigente_id`
+    #     se conserva por fidelidad al espejo; el selector usa id y nombre. ---
+    Cliente:
+      type: object
+      additionalProperties: false
+      required: [id, nombre, estado]
+      description: Cliente seleccionable tal como lo expone `catalogos`. Espejo de `Cliente` de `catalogos`.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        nombre: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+          description: >-
+            Estado del cliente. El BFF devuelve sólo `activo` en este selector;
+            `inactivo` no aparece (un cliente inactivo no es asignable a un viaje
+            nuevo). El campo se conserva por fidelidad al espejo de `catalogos`.
+        contrato_vigente_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Opcional; mismo formato que `Id`. null si no aplica.
+
+    PaginaClientes:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Cliente"}
         cursor_siguiente:
           type: string
           nullable: true
