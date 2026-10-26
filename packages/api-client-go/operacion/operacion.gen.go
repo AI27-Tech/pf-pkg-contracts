@@ -150,9 +150,6 @@ type AptitudRecursoRecurso string
 
 // Asignacion defines model for Asignacion.
 type Asignacion struct {
-	// Estado Estado del viaje tras la reserva. En V1 la asignación exitosa deja `ASIGNADO` (APROBADO → ASIGNADO, DEC-026). Se afirma en el dato para que el consumidor no lo infiera del éxito de la operación.
-	Estado EstadoViaje `json:"estado"`
-
 	// Unidades Unidades de la escolta reservada, cada una con su aptitud informativa por átomo (D1). La reserva ya ocurrió: la aptitud es sólo dato.
 	Unidades []UnidadAsignada `json:"unidades"`
 

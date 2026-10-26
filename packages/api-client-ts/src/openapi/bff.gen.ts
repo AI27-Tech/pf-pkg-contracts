@@ -254,26 +254,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/clientes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Listar clientes seleccionables para crear un viaje (audiencia interna).
-         * @description Reenvía a `catalogos.listarClientes`. Devuelve los clientes `activo` dentro del alcance del `jefe_operativo` (DEC-026 #3): los fuera de alcance no se muestran, y asociar uno por `cliente_id` manipulado se rechaza al crear el viaje. Paginado por cursor. El frontend sólo consume la respuesta y envía el `cliente_id` elegido.
-         */
-        get: operations["listarClientes"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/viajes/{id}/asignacion": {
         parameters: {
             query?: never;
@@ -324,8 +304,6 @@ export interface components {
             usuario: string;
             /** Format: password */
             contrasena: string;
-            /** @description Código del segundo factor (TOTP). Opcional en V1; requerido en V2+. El IdP (Keycloak) lo valida; `bff`/`identidad` sólo lo transportan. Espejo de `CredencialesEntrada.segundo_factor` de `identidad` (DEC-031/ADR 13, DEC-071). */
-            segundo_factor?: string | null;
         };
         RefrescoEntrada: {
             refresh_token: string;
@@ -545,8 +523,6 @@ export interface components {
         /** @description Escolta reservada del viaje; la reserva ya ocurrió y el viaje quedó `ASIGNADO`. Cada unidad trae su aptitud informativa por átomo (sólo dato). Espejo de `Asignacion` de `operacion`. */
         Asignacion: {
             viaje_id: components["schemas"]["Id"];
-            /** @description Estado del viaje tras la reserva (token de `EstadoViaje`, ADR 19), tal como lo publica `operacion`. En V1 la asignación exitosa deja `ASIGNADO`. El `bff` no replica el enum; se afirma en el dato para que el consumidor no lo infiera del éxito de la operación. */
-            estado: string;
             /** @description Unidades de la escolta reservada, cada una con su aptitud informativa. */
             unidades: components["schemas"]["UnidadAsignada"][];
         };
@@ -567,26 +543,6 @@ export interface components {
         };
         PaginaUnidades: {
             items: components["schemas"]["Unidad"][];
-            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
-            cursor_siguiente: string | null;
-        };
-        /** @description Cliente seleccionable tal como lo expone `catalogos`. Espejo de `Cliente` de `catalogos`. */
-        Cliente: {
-            id: components["schemas"]["Id"];
-            nombre: string;
-            /**
-             * @description Estado del cliente. El BFF devuelve sólo `activo` en este selector; `inactivo` no aparece (un cliente inactivo no es asignable a un viaje nuevo). El campo se conserva por fidelidad al espejo de `catalogos`.
-             * @enum {string}
-             */
-            estado: "activo" | "inactivo";
-            /**
-             * Format: uuid
-             * @description Opcional; mismo formato que `Id`. null si no aplica.
-             */
-            contrato_vigente_id?: string | null;
-        };
-        PaginaClientes: {
-            items: components["schemas"]["Cliente"][];
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
@@ -1092,30 +1048,6 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-        };
-    };
-    listarClientes: {
-        parameters: {
-            query?: {
-                cursor?: components["schemas"]["Cursor"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Página de clientes seleccionables. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaginaClientes"];
-                };
-            };
-            401: components["responses"]["NoAutorizado"];
-            403: components["responses"]["Prohibido"];
         };
     };
     asignarRecursos: {

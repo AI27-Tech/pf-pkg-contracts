@@ -543,8 +543,6 @@ export interface components {
         };
         Asignacion: {
             viaje_id: components["schemas"]["Id"];
-            /** @description Estado del viaje tras la reserva. En V1 la asignación exitosa deja `ASIGNADO` (APROBADO → ASIGNADO, DEC-026). Se afirma en el dato para que el consumidor no lo infiera del éxito de la operación. */
-            estado: components["schemas"]["EstadoViaje"];
             /** @description Unidades de la escolta reservada, cada una con su aptitud informativa por átomo (D1). La reserva ya ocurrió: la aptitud es sólo dato. */
             unidades: components["schemas"]["UnidadAsignada"][];
         };

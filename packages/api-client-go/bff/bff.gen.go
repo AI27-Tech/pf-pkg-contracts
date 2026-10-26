@@ -35,12 +35,6 @@ const (
 	Vehiculo AptitudRecursoRecurso = "vehiculo"
 )
 
-// Defines values for ClienteEstado.
-const (
-	Activo   ClienteEstado = "activo"
-	Inactivo ClienteEstado = "inactivo"
-)
-
 // Defines values for CondicionAbiertaTipo.
 const (
 	INCIDENCIA CondicionAbiertaTipo = "INCIDENCIA"
@@ -95,9 +89,6 @@ type AptitudRecursoRecurso string
 
 // Asignacion Escolta reservada del viaje; la reserva ya ocurrió y el viaje quedó `ASIGNADO`. Cada unidad trae su aptitud informativa por átomo (sólo dato). Espejo de `Asignacion` de `operacion`.
 type Asignacion struct {
-	// Estado Estado del viaje tras la reserva (token de `EstadoViaje`, ADR 19), tal como lo publica `operacion`. En V1 la asignación exitosa deja `ASIGNADO`. El `bff` no replica el enum; se afirma en el dato para que el consumidor no lo infiera del éxito de la operación.
-	Estado string `json:"estado"`
-
 	// Unidades Unidades de la escolta reservada, cada una con su aptitud informativa.
 	Unidades []UnidadAsignada `json:"unidades"`
 
@@ -110,22 +101,6 @@ type AsignacionEntrada struct {
 	// UnidadesIds Identificadores de las unidades del roster que forman la escolta.
 	UnidadesIds []Id `json:"unidades_ids"`
 }
-
-// Cliente Cliente seleccionable tal como lo expone `catalogos`. Espejo de `Cliente` de `catalogos`.
-type Cliente struct {
-	// ContratoVigenteId Opcional; mismo formato que `Id`. null si no aplica.
-	ContratoVigenteId *openapi_types.UUID `json:"contrato_vigente_id"`
-
-	// Estado Estado del cliente. El BFF devuelve sólo `activo` en este selector; `inactivo` no aparece (un cliente inactivo no es asignable a un viaje nuevo). El campo se conserva por fidelidad al espejo de `catalogos`.
-	Estado ClienteEstado `json:"estado"`
-
-	// Id Identificador único (UUID). Nunca un correlativo expuesto.
-	Id     Id     `json:"id"`
-	Nombre string `json:"nombre"`
-}
-
-// ClienteEstado Estado del cliente. El BFF devuelve sólo `activo` en este selector; `inactivo` no aparece (un cliente inactivo no es asignable a un viaje nuevo). El campo se conserva por fidelidad al espejo de `catalogos`.
-type ClienteEstado string
 
 // CondicionAbierta Condición ortogonal abierta. Espejo de `CondicionAbierta` de `operacion`.
 type CondicionAbierta struct {
@@ -157,10 +132,7 @@ type CrearViajeEntrada struct {
 // CredencialesEntrada defines model for CredencialesEntrada.
 type CredencialesEntrada struct {
 	Contrasena string `json:"contrasena"`
-
-	// SegundoFactor Código del segundo factor (TOTP). Opcional en V1; requerido en V2+. El IdP (Keycloak) lo valida; `bff`/`identidad` sólo lo transportan. Espejo de `CredencialesEntrada.segundo_factor` de `identidad` (DEC-031/ADR 13, DEC-071).
-	SegundoFactor *string `json:"segundo_factor"`
-	Usuario       string  `json:"usuario"`
+	Usuario    string `json:"usuario"`
 }
 
 // Cursor Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato.
@@ -294,13 +266,6 @@ type MarcaTiempo = time.Time
 // NotaEmergenciaClienteEntrada defines model for NotaEmergenciaClienteEntrada.
 type NotaEmergenciaClienteEntrada struct {
 	Cuerpo string `json:"cuerpo"`
-}
-
-// PaginaClientes defines model for PaginaClientes.
-type PaginaClientes struct {
-	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
-	CursorSiguiente *string   `json:"cursor_siguiente"`
-	Items           []Cliente `json:"items"`
 }
 
 // PaginaUnidades defines model for PaginaUnidades.
@@ -460,11 +425,6 @@ type Prohibido = Error
 // SolicitudInvalida defines model for SolicitudInvalida.
 type SolicitudInvalida = Error
 
-// ListarClientesParams defines parameters for ListarClientes.
-type ListarClientesParams struct {
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-}
-
 // ListarUnidadesParams defines parameters for ListarUnidades.
 type ListarUnidadesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -576,9 +536,6 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
-	// ListarClientes request
-	ListarClientes(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// CerrarSesion request
 	CerrarSesion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -644,18 +601,6 @@ type ClientInterface interface {
 	TransicionarViajeWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	TransicionarViaje(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-}
-
-func (c *Client) ListarClientes(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListarClientesRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
 }
 
 func (c *Client) CerrarSesion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -956,55 +901,6 @@ func (c *Client) TransicionarViaje(ctx context.Context, id Id, body Transicionar
 		return nil, err
 	}
 	return c.Client.Do(req)
-}
-
-// NewListarClientesRequest generates requests for ListarClientes
-func NewListarClientesRequest(server string, params *ListarClientesParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/clientes")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.Cursor != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
 }
 
 // NewCerrarSesionRequest generates requests for CerrarSesion
@@ -1736,9 +1632,6 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
-	// ListarClientesWithResponse request
-	ListarClientesWithResponse(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*ListarClientesResponse, error)
-
 	// CerrarSesionWithResponse request
 	CerrarSesionWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*CerrarSesionResponse, error)
 
@@ -1804,30 +1697,6 @@ type ClientWithResponsesInterface interface {
 	TransicionarViajeWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
 
 	TransicionarViajeWithResponse(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
-}
-
-type ListarClientesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *PaginaClientes
-	JSON401      *NoAutorizado
-	JSON403      *Prohibido
-}
-
-// Status returns HTTPResponse.Status
-func (r ListarClientesResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListarClientesResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
 }
 
 type CerrarSesionResponse struct {
@@ -2230,15 +2099,6 @@ func (r TransicionarViajeResponse) StatusCode() int {
 	return 0
 }
 
-// ListarClientesWithResponse request returning *ListarClientesResponse
-func (c *ClientWithResponses) ListarClientesWithResponse(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*ListarClientesResponse, error) {
-	rsp, err := c.ListarClientes(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListarClientesResponse(rsp)
-}
-
 // CerrarSesionWithResponse request returning *CerrarSesionResponse
 func (c *ClientWithResponses) CerrarSesionWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*CerrarSesionResponse, error) {
 	rsp, err := c.CerrarSesion(ctx, reqEditors...)
@@ -2453,46 +2313,6 @@ func (c *ClientWithResponses) TransicionarViajeWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseTransicionarViajeResponse(rsp)
-}
-
-// ParseListarClientesResponse parses an HTTP response from a ListarClientesWithResponse call
-func ParseListarClientesResponse(rsp *http.Response) (*ListarClientesResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListarClientesResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest PaginaClientes
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest NoAutorizado
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Prohibido
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	}
-
-	return response, nil
 }
 
 // ParseCerrarSesionResponse parses an HTTP response from a CerrarSesionWithResponse call
