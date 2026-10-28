@@ -220,6 +220,18 @@ type CustodioEntrada struct {
 // CustodioEntradaEstado defines model for CustodioEntrada.Estado.
 type CustodioEntradaEstado string
 
+// DispositivoGps Dispositivo GPS del catálogo registrado (DEC-047 #2). La ficha del viaje lo referencia por `id` (DEC-012), sin posición en vivo.
+type DispositivoGps struct {
+	// Activo Si el dispositivo está activo (disponible para seleccionarse).
+	Activo bool `json:"activo"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// Identificador Alias operativo del dispositivo (p. ej. "MOVIL ST7916").
+	Identificador string `json:"identificador"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	// Codigo Código de máquina, estable y en snake_case. Los consumidores ramifican sobre este valor, no sobre `mensaje`.
@@ -253,6 +265,13 @@ type PaginaCustodios struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
 	CursorSiguiente *string    `json:"cursor_siguiente"`
 	Items           []Custodio `json:"items"`
+}
+
+// PaginaGps defines model for PaginaGps.
+type PaginaGps struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string          `json:"cursor_siguiente"`
+	Items           []DispositivoGps `json:"items"`
 }
 
 // PaginaValoresCatalogo defines model for PaginaValoresCatalogo.
@@ -454,6 +473,11 @@ type AptitudCustodioParams struct {
 	ClienteId Id `form:"cliente_id" json:"cliente_id"`
 }
 
+// ListarGpsParams defines parameters for ListarGps.
+type ListarGpsParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ObtenerSlaParams defines parameters for ObtenerSla.
 type ObtenerSlaParams struct {
 	AFecha *MarcaTiempo `form:"a_fecha,omitempty" json:"a_fecha,omitempty"`
@@ -632,6 +656,9 @@ type ClientInterface interface {
 
 	// AptitudCustodio request
 	AptitudCustodio(ctx context.Context, id Id, params *AptitudCustodioParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListarGps request
+	ListarGps(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CrearSlaWithBody request with any body
 	CrearSlaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -884,6 +911,18 @@ func (c *Client) ActualizarCustodio(ctx context.Context, id Id, body ActualizarC
 
 func (c *Client) AptitudCustodio(ctx context.Context, id Id, params *AptitudCustodioParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAptitudCustodioRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarGps(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarGpsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1697,6 +1736,55 @@ func NewAptitudCustodioRequest(server string, id Id, params *AptitudCustodioPara
 	return req, nil
 }
 
+// NewListarGpsRequest generates requests for ListarGps
+func NewListarGpsRequest(server string, params *ListarGpsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/gps")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewCrearSlaRequest calls the generic CrearSla builder with application/json body
 func NewCrearSlaRequest(server string, body CrearSlaJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2194,6 +2282,9 @@ type ClientWithResponsesInterface interface {
 	// AptitudCustodioWithResponse request
 	AptitudCustodioWithResponse(ctx context.Context, id Id, params *AptitudCustodioParams, reqEditors ...RequestEditorFn) (*AptitudCustodioResponse, error)
 
+	// ListarGpsWithResponse request
+	ListarGpsWithResponse(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*ListarGpsResponse, error)
+
 	// CrearSlaWithBodyWithResponse request with any body
 	CrearSlaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearSlaResponse, error)
 
@@ -2550,6 +2641,30 @@ func (r AptitudCustodioResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r AptitudCustodioResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarGpsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaGps
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarGpsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarGpsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2920,6 +3035,15 @@ func (c *ClientWithResponses) AptitudCustodioWithResponse(ctx context.Context, i
 		return nil, err
 	}
 	return ParseAptitudCustodioResponse(rsp)
+}
+
+// ListarGpsWithResponse request returning *ListarGpsResponse
+func (c *ClientWithResponses) ListarGpsWithResponse(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*ListarGpsResponse, error) {
+	rsp, err := c.ListarGps(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarGpsResponse(rsp)
 }
 
 // CrearSlaWithBodyWithResponse request with arbitrary body returning *CrearSlaResponse
@@ -3659,6 +3783,46 @@ func ParseAptitudCustodioResponse(rsp *http.Response) (*AptitudCustodioResponse,
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarGpsResponse parses an HTTP response from a ListarGpsWithResponse call
+func ParseListarGpsResponse(rsp *http.Response) (*ListarGpsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarGpsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaGps
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	}
 

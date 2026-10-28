@@ -3,6 +3,29 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-23 [tracer.21] — ficha técnica del viaje (E8-T12) e histórico operativo en el `bff` (E8-T13)
+
+**Resumen:** Ola aditiva que combina dos solicitudes del panel interno. (1) **E8-T12 / DEC-104:** la ficha técnica del viaje gana lectura y escritura parcial. En `operacion`: ruta `GET|PATCH /api/v1/viajes/{id}/ficha` (`obtenerFicha`/`guardarFicha`), esquemas `FichaTecnica`/`FichaTecnicaEntrada`/`Tracto`/`Contenedor`; `tipo_servicio` ahora se lee en `Viaje` (solo lectura); `tracto` se captura en `CrearViajeEntrada`; `Destino` gana `arribo`. En `catalogos`: catálogo de GPS nuevo `GET /api/v1/gps` (`listarGps`→`PaginaGps`/`DispositivoGps`). Todo proyectado al `bff`. (2) **E8-T13 / DEC-105:** siete reenvíos del histórico al `bff` (bitácora, incidencias, estadías), espejo de operaciones que ya existían en `operacion`.
+
+**Contexto:** Dos solicitudes de `pf-web-frontend-internal` (E8-T12 ficha técnica, E8-T13 histórico), decididas en DEC-104 y DEC-105. Se publican en una sola ola porque no se solapan (tocan zonas distintas de `bff.yaml`, sin colisión de nombres) y ambas estaban cerradas. Ambas DEC apuntaban al "siguiente tracer libre tras `.20`": es `tracer.21`.
+
+**E8-T12 (ficha, DEC-104):** el tracto pasa a objeto `{placas, economico, marca, modelo, color}` (texto libre, opcional) porque Operación buscará por placa/económico — supera el "texto libre" de DEC-011 #2; como el cliente también lo captura, entra además en `CrearViajeEntrada`. Contenedores `0..N` con los campos del sistema actual (`economico/placas/sello/color`). La ficha es editable e incremental (DEC-043 #3): el PATCH no exige ningún campo y en V1 ningún campo de ficha gatea transiciones de estado. La escolta NO se recaptura: se deriva de la asignación (DEC-044). `tipo_servicio` es solo lectura (valores de catálogo aún pendientes, por eso `string` y no enum). GPS como referencia al catálogo registrado, sin posición en vivo (DEC-012/047); el selector recibe solo dispositivos activos (filtro en servidor); no se gatea exclusividad de GPS por viaje.
+
+**E8-T13 (histórico, DEC-105):** siete reenvíos con guardas de alcance/rol del `bff`, sin lógica de dominio, `operationId` idénticos a `operacion`: `listarBitacora`, `registrarEntradaBitacora`, `abrirIncidencia` (`409 condicion_ya_abierta`), `resolverIncidencia`, `listarEstadias`, `abrirEstadia`, `cerrarEstadia` (`409 estadia_ya_cerrada`). `operacion.yaml` no cambia para esto (las siete ya existían). `tipo_interno` de incidencia se mantiene `string` (sin enum aún; se tipificará cuando Operación entregue el catálogo). Se preserva el curado al cliente fuera del contrato interno (DEC-006) y la duración de estadía derivada sin `prolongada` (DEC-038).
+
+**Cambios:**
+- `contracts/openapi/operacion.yaml`: ruta `GET|PATCH /api/v1/viajes/{id}/ficha`; esquemas `FichaTecnica`, `FichaTecnicaEntrada`, `Tracto`, `Contenedor`; `Viaje.tipo_servicio` (lectura, `nullable`); `CrearViajeEntrada.tracto`; `Destino.arribo`.
+- `contracts/openapi/catalogos.yaml`: ruta `GET /api/v1/gps` (`listarGps`); esquemas `DispositivoGps`, `PaginaGps`.
+- `contracts/openapi/bff.yaml`: rutas espejo `GET|PATCH /viajes/{id}/ficha`, `GET /gps`, y las 7 del histórico (`/bitacora`, `/incidencias`, `/incidencias/{iid}`, `/estadias`, `/estadias/{eid}`); esquemas espejo de ficha, GPS y todo el histórico; `ViajeInterno` gana `tipo_servicio` y `arribo` en el destino embebido.
+- Clientes Go y TS regenerados (`make generate`). `VERSION`, los ocho specs, el paquete TS y el encabezado de `INVENTARIO.md` a `0.1.0-tracer.21`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.20`. Todos los campos nuevos son opcionales o rutas/esquemas de adición. Sin entrada en `rompimientos/`. `lint-openapi`, `verify` (incl. `check-estados` 13 estados), `breaking-openapi` y `check-ts-exports` en verde; clientes Go compilan y pasan `go vet`.
+
+**Archivos modificados:**
+- `contracts/openapi/operacion.yaml`, `contracts/openapi/catalogos.yaml`, `contracts/openapi/bff.yaml`, los otros cinco specs y `_comunes.yaml` (solo `info.version`), `VERSION`, `contracts/events/INVENTARIO.md` (encabezado de ola)
+- `packages/api-client-go/{operacion,catalogos,bff}/*.gen.go`, `packages/api-client-ts/src/openapi/{operacion,catalogos,bff}.gen.ts`, `packages/api-client-ts/package.json`
+- `CHANGELOG.md`
+
 ## 2026-10-26 [tracer.20] — brechas de E8-T11 y E8-T5: selector de cliente, `estado` en `Asignacion`, y segundo factor en el login del `bff` (E1-HU-028, E1-HU-004, E4-HU-017)
 
 **Resumen:** Tres adiciones al `bff` (una con espejo en `operacion`) que desbloquean dos tareas del panel interno, todas aditivas. (1) E8-T11: `GET /api/v1/clientes` → `listarClientes`, proyección de `catalogos.listarClientes` para poblar el selector de cliente al crear un viaje por Operación. (2) E8-T11: `Asignacion` gana `estado` (token de `EstadoViaje`) para afirmar `ASIGNADO` tras asignar sin que el consumidor lo infiera; se agrega en `operacion` y se proyecta al `bff` (espejo completo). (3) E8-T5: `CredencialesEntrada` del `bff` gana `segundo_factor` (TOTP), proyección del campo que ya existía en `identidad`.

@@ -22,7 +22,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — catalogos
-  version: 0.1.0-tracer.20
+  version: 0.1.0-tracer.21
   description: Registro maestro. Lectura para el tracer y afirmación de aptitud.
   x-ai27-servicio: catalogos
   x-ai27-capa: catalogo
@@ -640,6 +640,36 @@ paths:
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
         "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
 
+  # ---------------------------------------------------------------------------
+  # Catálogo de dispositivos GPS (DEC-047 #2 / DEC-104 #5). Dato maestro: ~100
+  # dispositivos que Operación carga. La ficha del viaje los REFERENCIA por id
+  # (DEC-012), sin ingestión de posición en vivo (V2). En V1 solo lectura: la
+  # carga de los valores reales es trabajo de datos de Operación, no superficie
+  # de esta ola.
+  # ---------------------------------------------------------------------------
+  /api/v1/gps:
+    get:
+      operationId: listarGps
+      tags: [recursos]
+      summary: Listar dispositivos GPS del catálogo registrado.
+      description: >-
+        Página de dispositivos para poblar el selector de GPS de la ficha. El
+        selector ofrece solo dispositivos `activo` (DEC-104 #5); el filtro lo
+        aplica el servidor.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de dispositivos GPS.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaGps"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
 components:
   schemas:
     Cliente:
@@ -1040,6 +1070,35 @@ components:
         items:
           type: array
           items: {$ref: "#/components/schemas/ValorCatalogo"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    DispositivoGps:
+      type: object
+      additionalProperties: false
+      required: [id, identificador, activo]
+      description: >-
+        Dispositivo GPS del catálogo registrado (DEC-047 #2). La ficha del viaje
+        lo referencia por `id` (DEC-012), sin posición en vivo.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        identificador:
+          type: string
+          description: Alias operativo del dispositivo (p. ej. "MOVIL ST7916").
+        activo:
+          type: boolean
+          description: Si el dispositivo está activo (disponible para seleccionarse).
+
+    PaginaGps:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/DispositivoGps"}
         cursor_siguiente:
           type: string
           nullable: true

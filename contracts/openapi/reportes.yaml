@@ -12,7 +12,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — reportes
-  version: 0.1.0-tracer.20
+  version: 0.1.0-tracer.21
   description: Proyección de lectura por eventos. Reportes operativos del tracer.
   x-ai27-servicio: reportes
   x-ai27-capa: soporte

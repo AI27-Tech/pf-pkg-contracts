@@ -138,6 +138,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/viajes/{id}/ficha": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Leer la ficha técnica del viaje (audiencia interna).
+         * @description Reenvía a `operacion.obtenerFicha`.
+         */
+        get: operations["obtenerFicha"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Guardar parcialmente la ficha técnica (audiencia interna).
+         * @description Reenvía a `operacion.guardarFicha`. Edición incremental: ningún campo obligatorio; colecciones por reemplazo (DEC-104).
+         */
+        patch: operations["guardarFicha"];
+        trace?: never;
+    };
     "/api/v1/viajes/{id}/transiciones": {
         parameters: {
             query?: never;
@@ -316,6 +342,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/viajes/{id}/bitacora": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Listar entradas de bitácora del viaje (audiencia interna).
+         * @description Reenvía a `operacion.listarBitacora`.
+         */
+        get: operations["listarBitacora"];
+        put?: never;
+        /**
+         * Registrar una entrada de bitácora (append-only, audiencia interna).
+         * @description Reenvía a `operacion.registrarEntradaBitacora`.
+         */
+        post: operations["registrarEntradaBitacora"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/incidencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Abrir una incidencia del viaje (audiencia interna).
+         * @description Reenvía a `operacion.abrirIncidencia`. El `tipo_interno` es el catálogo operativo interno; la vista curada al cliente la compone `bff` (DEC-006).
+         */
+        post: operations["abrirIncidencia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/incidencias/{iid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                iid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Resolver una incidencia (audiencia interna).
+         * @description Reenvía a `operacion.resolverIncidencia`. Resolver es facultad de Supervisor/Coordinador: un rol sin ella recibe 403 (lo impone el servidor, no el esquema).
+         */
+        patch: operations["resolverIncidencia"];
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/estadias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Listar estadías del viaje (audiencia interna).
+         * @description Reenvía a `operacion.listarEstadias`. La duración se deriva de `inicio`/`cierre`; no hay campo de duración ni `prolongada` (DEC-038).
+         */
+        get: operations["listarEstadias"];
+        put?: never;
+        /**
+         * Abrir una estadía del viaje (audiencia interna).
+         * @description Reenvía a `operacion.abrirEstadia`.
+         */
+        post: operations["abrirEstadia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/estadias/{eid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Cerrar una estadía del viaje (audiencia interna).
+         * @description Reenvía a `operacion.cerrarEstadia`.
+         */
+        patch: operations["cerrarEstadia"];
+        trace?: never;
+    };
+    "/api/v1/gps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar dispositivos GPS del catálogo (audiencia interna).
+         * @description Reenvía a `catalogos.listarGps`. Solo dispositivos activos.
+         */
+        get: operations["listarGps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -385,12 +551,16 @@ export interface components {
             destinos: {
                 nombre: string;
                 numero_envio?: string;
+                /** @description Si la unidad arribó a este destino (DEC-012). Espejo de `Destino.arribo` de `operacion`. */
+                arribo?: boolean;
             }[];
             /**
              * Format: date-time
              * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
              */
             fecha_hora_servicio?: string | null;
+            /** @description Tipo de servicio/monitoreo elegido por el cliente en la solicitud (DEC-010 #3). Solo lectura; el monitorista lo visualiza (DEC-104 #4). Espejo de `Viaje.tipo_servicio` de `operacion`. */
+            tipo_servicio?: string | null;
             /**
              * Format: date-time
              * @description ETA estimado capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado. El `bff` deriva `stale` sólo en la vista de cliente (`seguirViaje`), no aquí.
@@ -587,6 +757,120 @@ export interface components {
         };
         PaginaClientes: {
             items: components["schemas"]["Cliente"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
+        };
+        /** @description Tracto del cliente, texto libre. Espejo de `Tracto` de `operacion` (DEC-104 */
+        Tracto: {
+            placas?: string;
+            economico?: string;
+            marca?: string;
+            modelo?: string;
+            color?: string;
+        };
+        /** @description Contenedor del viaje (0..N). Espejo de `Contenedor` de `operacion` (DEC-104 */
+        Contenedor: {
+            economico?: string;
+            placas?: string;
+            sello?: string;
+            color?: string;
+        };
+        /** @description Ficha técnica del viaje (lectura). Espejo de `FichaTecnica` de `operacion`. */
+        FichaTecnica: {
+            viaje_id: components["schemas"]["Id"];
+            tracto?: components["schemas"]["Tracto"] | null;
+            contenedores?: components["schemas"]["Contenedor"][];
+            gps_ids?: components["schemas"]["Id"][];
+        };
+        /** @description Guardado parcial de la ficha. Ningún campo obligatorio; colecciones por reemplazo (DEC-104 #3). Espejo de `FichaTecnicaEntrada` de `operacion`. */
+        FichaTecnicaEntrada: {
+            tracto?: components["schemas"]["Tracto"] | null;
+            contenedores?: components["schemas"]["Contenedor"][];
+            gps_ids?: components["schemas"]["Id"][];
+        };
+        /** @description Dispositivo GPS del catálogo. Espejo de `DispositivoGps` de `catalogos`. */
+        DispositivoGps: {
+            id: components["schemas"]["Id"];
+            identificador: string;
+            activo: boolean;
+        };
+        PaginaGps: {
+            items: components["schemas"]["DispositivoGps"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
+        };
+        /** @description Espejo de `EntradaBitacoraEntrada` de `operacion`. */
+        EntradaBitacoraEntrada: {
+            texto: string;
+        };
+        /** @description Espejo de `EntradaBitacora` de `operacion`. */
+        EntradaBitacora: {
+            id: components["schemas"]["Id"];
+            viaje_id: components["schemas"]["Id"];
+            texto: string;
+            autor: string;
+            ts: components["schemas"]["MarcaTiempo"];
+        };
+        PaginaBitacora: {
+            items: components["schemas"]["EntradaBitacora"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
+        };
+        /** @description Espejo de `IncidenciaEntrada` de `operacion`. `tipo_interno` es `string` en V1: la lista de tipos existe y está validada (DEC-003, propuesta de clasificación §2), pero aún no se tipa a enum —faltan la forma del token, el cierre del pendiente de DEC-003 y la curación de dimensiones (DEC-105)—; se tipará en una ola aditiva. La vista curada al cliente la compone `bff` (DEC-006), no este contrato. */
+        IncidenciaEntrada: {
+            tipo_interno: string;
+            descripcion?: string;
+        };
+        /** @description Espejo de `Incidencia` de `operacion`. */
+        Incidencia: {
+            id: components["schemas"]["Id"];
+            viaje_id: components["schemas"]["Id"];
+            tipo_interno: string;
+            /** @enum {string} */
+            estado: "en_atencion" | "resuelta";
+            abierta_en: components["schemas"]["MarcaTiempo"];
+            /**
+             * Format: date-time
+             * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+             */
+            resuelta_en?: string | null;
+        };
+        /** @description Espejo de `ResolucionIncidenciaEntrada` de `operacion`. */
+        ResolucionIncidenciaEntrada: {
+            resolucion: string;
+        };
+        /**
+         * @description Motivo de la estadía. Espejo de `MotivoEstadia` de `operacion`.
+         * @enum {string}
+         */
+        MotivoEstadia: "combustible" | "descanso" | "alimentos" | "sanitario" | "reten" | "revision_autoridades" | "gastos" | "espera_entrega";
+        /**
+         * @description Eje de autorización de la estadía. Espejo de `EjeAutorizacionEstadia` de `operacion`.
+         * @enum {string}
+         */
+        EjeAutorizacionEstadia: "autorizada" | "no_autorizada" | "antes_200km";
+        /** @description Estadía del viaje. La duración se deriva de `inicio` y `cierre`; sin `prolongada` ni umbral (DEC-038). Espejo de `Estadia` de `operacion`. */
+        Estadia: {
+            id: components["schemas"]["Id"];
+            viaje_id: components["schemas"]["Id"];
+            motivo: components["schemas"]["MotivoEstadia"];
+            eje_autorizacion: components["schemas"]["EjeAutorizacionEstadia"];
+            inicio: components["schemas"]["MarcaTiempo"];
+            /**
+             * Format: date-time
+             * @description Cierre de la estadía, o null si sigue abierta. Mismo formato que `MarcaTiempo`.
+             */
+            cierre?: string | null;
+        };
+        /** @description Espejo de `EstadiaEntrada` de `operacion`. */
+        EstadiaEntrada: {
+            motivo: components["schemas"]["MotivoEstadia"];
+            eje_autorizacion: components["schemas"]["EjeAutorizacionEstadia"];
+        };
+        /** @description Cuerpo de cierre (vacío válido). Espejo de `CierreEstadiaEntrada` de `operacion`. */
+        CierreEstadiaEntrada: Record<string, never>;
+        PaginaEstadias: {
+            items: components["schemas"]["Estadia"][];
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
@@ -863,6 +1147,61 @@ export interface operations {
                     "application/json": components["schemas"]["ViajeDetalle"];
                 };
             };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    obtenerFicha: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ficha técnica del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FichaTecnica"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    guardarFicha: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FichaTecnicaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Ficha actualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FichaTecnica"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
@@ -1174,6 +1513,249 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginaUnidades"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    listarBitacora: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de entradas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaBitacora"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    registrarEntradaBitacora: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntradaBitacoraEntrada"];
+            };
+        };
+        responses: {
+            /** @description Entrada registrada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntradaBitacora"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    abrirIncidencia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidenciaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Incidencia abierta. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incidencia"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            /** @description Ya existe una condición `INCIDENCIA` abierta para este viaje. `codigo` `condicion_ya_abierta`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    resolverIncidencia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                iid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolucionIncidenciaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Incidencia resuelta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Incidencia"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    listarEstadias: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de estadías. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaEstadias"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    abrirEstadia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EstadiaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Estadía abierta. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Estadia"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    cerrarEstadia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CierreEstadiaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Estadía cerrada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Estadia"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description La estadía ya está cerrada. `codigo` `estadia_ya_cerrada`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listarGps: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de dispositivos GPS. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaGps"];
                 };
             };
             401: components["responses"]["NoAutorizado"];
