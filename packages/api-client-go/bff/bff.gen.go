@@ -423,7 +423,7 @@ type IncidenciaCurada struct {
 // IncidenciaCuradaEstado defines model for IncidenciaCurada.Estado.
 type IncidenciaCuradaEstado string
 
-// IncidenciaEntrada Espejo de `IncidenciaEntrada` de `operacion`. `tipo_interno` es `string` libre en V1 (sin enum aún, DEC-105 #5); la vista curada al cliente la compone `bff` (DEC-006), no este contrato.
+// IncidenciaEntrada Espejo de `IncidenciaEntrada` de `operacion`. `tipo_interno` es `string` en V1: la lista de tipos existe y está validada (DEC-003, propuesta de clasificación §2), pero aún no se tipa a enum —faltan la forma del token, el cierre del pendiente de DEC-003 y la curación de dimensiones (DEC-105)—; se tipará en una ola aditiva. La vista curada al cliente la compone `bff` (DEC-006), no este contrato.
 type IncidenciaEntrada struct {
 	Descripcion *string `json:"descripcion,omitempty"`
 	TipoInterno string  `json:"tipo_interno"`
