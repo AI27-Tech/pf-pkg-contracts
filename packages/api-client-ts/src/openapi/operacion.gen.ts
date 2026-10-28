@@ -50,6 +50,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/viajes/{id}/ficha": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /** Leer la ficha técnica del viaje. */
+        get: operations["obtenerFicha"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Guardar parcialmente la ficha técnica (edición incremental).
+         * @description Edición incremental (DEC-043 #3): ningún campo es obligatorio. Las propiedades presentes forman el nuevo valor; las ausentes no se tocan. Las colecciones (`contenedores`, `gps_ids`) se REEMPLAZAN por completo con el arreglo recibido; un arreglo vacío borra la lista. Un contenedor sin ningún dato se descarta. No cambia `estado`: la ficha no gatea transiciones en V1 (DEC-104 #3).
+         */
+        patch: operations["guardarFicha"];
+        trace?: never;
+    };
     "/api/v1/viajes/{id}/transiciones": {
         parameters: {
             query?: never;
@@ -434,6 +457,8 @@ export interface components {
              * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
              */
             fecha_cita?: string | null;
+            /** @description Si la unidad arribó a este destino (DEC-012). Captura del operador, no derivado del estado. */
+            arribo?: boolean;
         };
         CrearViajeEntrada: {
             /** @description Origen en texto libre (DEC-010 */
@@ -451,6 +476,8 @@ export interface components {
              */
             fecha_hora_servicio?: string | null;
             tipo_servicio?: string;
+            /** @description Tracto del cliente (unidad escoltada). Opcional: el cliente puede capturarlo en la solicitud y el operador completarlo luego en la ficha (DEC-104 #1 / DEC-010 #4). */
+            tracto?: components["schemas"]["Tracto"] | null;
             asignacion?: components["schemas"]["AsignacionEntrada"];
         };
         Viaje: {
@@ -464,6 +491,8 @@ export interface components {
              * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
              */
             fecha_hora_servicio?: string | null;
+            /** @description Tipo de servicio/monitoreo que el cliente eligió en la solicitud (DEC-010 #3). SOLO LECTURA en E8-T12: el monitorista lo visualiza, no lo edita. `string` (no enum) porque los valores de catálogo siguen pendientes (DEC-104 #4); estrechar a enum después es breaking. */
+            tipo_servicio?: string | null;
             /**
              * Format: date-time
              * @description ETA estimado del viaje, capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado. `operacion` no calcula ni expone `stale`: eso lo hace el `bff`.
@@ -579,6 +608,38 @@ export interface components {
             items: components["schemas"]["Unidad"][];
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
+        };
+        /** @description Tracto del cliente (unidad escoltada). Texto libre: no es recurso de AI27 ni viene de catálogo. `placas`/`economico` separados para permitir búsqueda (DEC-104 #1, supera el "texto libre" de DEC-011 #2). Todos los campos opcionales. Mismo shape en lectura y en entrada. */
+        Tracto: {
+            placas?: string;
+            economico?: string;
+            marca?: string;
+            modelo?: string;
+            color?: string;
+        };
+        /** @description Contenedor del viaje (0..N, DEC-012). Campos del sistema actual (DEC-104 #2), todos texto libre y opcionales. Un contenedor sin ningún dato se descarta al guardar. */
+        Contenedor: {
+            economico?: string;
+            placas?: string;
+            sello?: string;
+            color?: string;
+        };
+        /** @description Ficha técnica del viaje (lectura). La escolta NO va aquí (se deriva de la asignación, DEC-044); `tipo_servicio`, `origen` y `destinos` son del viaje (`obtenerViaje`), no de la ficha. */
+        FichaTecnica: {
+            viaje_id: components["schemas"]["Id"];
+            /** @description Tracto del cliente, o null si no se ha capturado. */
+            tracto?: components["schemas"]["Tracto"] | null;
+            /** @description Contenedores del viaje (0..N). */
+            contenedores?: components["schemas"]["Contenedor"][];
+            /** @description Referencias a dispositivos del catálogo de GPS (DEC-012/047). Solo referencia, sin posición en vivo. */
+            gps_ids?: components["schemas"]["Id"][];
+        };
+        /** @description Guardado parcial de la ficha (PATCH). NINGÚN campo obligatorio (DEC-043 #3). Propiedad ausente = no se toca; colección presente = reemplaza la lista completa; `[]` borra la lista; contenedor vacío se descarta. */
+        FichaTecnicaEntrada: {
+            /** @description Objeto para fijarlo; `null` para borrarlo. */
+            tracto?: components["schemas"]["Tracto"] | null;
+            contenedores?: components["schemas"]["Contenedor"][];
+            gps_ids?: components["schemas"]["Id"][];
         };
         EntradaBitacoraEntrada: {
             texto: string;
@@ -863,6 +924,60 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    obtenerFicha: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ficha técnica del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FichaTecnica"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    guardarFicha: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FichaTecnicaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Ficha actualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FichaTecnica"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };

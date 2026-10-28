@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.20
+  version: 0.1.0-tracer.21
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -235,6 +235,52 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/ViajeDetalle"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  # Ficha técnica (E8-T12). Dos reenvíos a `operacion` con las guardas de
+  # alcance/rol del `bff`. La ficha es editable e incremental (DEC-104); el `bff`
+  # no añade lógica. La escolta se lee de la asignación, no de aquí (DEC-044).
+  /api/v1/viajes/{id}/ficha:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerFicha
+      tags: [viajes]
+      summary: Leer la ficha técnica del viaje (audiencia interna).
+      description: Reenvía a `operacion.obtenerFicha`.
+      responses:
+        "200":
+          description: Ficha técnica del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FichaTecnica"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: guardarFicha
+      tags: [viajes]
+      summary: Guardar parcialmente la ficha técnica (audiencia interna).
+      description: >-
+        Reenvía a `operacion.guardarFicha`. Edición incremental: ningún campo
+        obligatorio; colecciones por reemplazo (DEC-104).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/FichaTecnicaEntrada"}
+      responses:
+        "200":
+          description: Ficha actualizada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FichaTecnica"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
@@ -560,6 +606,231 @@ paths:
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
+  # ===========================================================================
+  # Histórico operativo del viaje (E8-T13 / DEC-105). Siete reenvíos a
+  # `operacion` (bitácora, incidencias, estadías) con las guardas de alcance/rol
+  # del `bff`; sin lógica de dominio. Son superficie INTERNA: la vista curada
+  # para el cliente (`seguirViaje`/`IncidenciaCurada`, DEC-006) es otra cosa y no
+  # se toca. `operationId` idénticos a `operacion`. Los `409`
+  # (`condicion_ya_abierta`, `estadia_ya_cerrada`) y `403` se preservan.
+  # ===========================================================================
+  /api/v1/viajes/{id}/bitacora:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarBitacora
+      tags: [viajes]
+      summary: Listar entradas de bitácora del viaje (audiencia interna).
+      description: Reenvía a `operacion.listarBitacora`.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de entradas.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaBitacora"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    post:
+      operationId: registrarEntradaBitacora
+      tags: [viajes]
+      summary: Registrar una entrada de bitácora (append-only, audiencia interna).
+      description: Reenvía a `operacion.registrarEntradaBitacora`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EntradaBitacoraEntrada"}
+      responses:
+        "201":
+          description: Entrada registrada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EntradaBitacora"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
+  /api/v1/viajes/{id}/incidencias:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: abrirIncidencia
+      tags: [viajes]
+      summary: Abrir una incidencia del viaje (audiencia interna).
+      description: >-
+        Reenvía a `operacion.abrirIncidencia`. El `tipo_interno` es el catálogo
+        operativo interno; la vista curada al cliente la compone `bff` (DEC-006).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/IncidenciaEntrada"}
+      responses:
+        "201":
+          description: Incidencia abierta.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Incidencia"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409":
+          description: >-
+            Ya existe una condición `INCIDENCIA` abierta para este viaje.
+            `codigo` `condicion_ya_abierta`.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/viajes/{id}/incidencias/{iid}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    - name: iid
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    patch:
+      operationId: resolverIncidencia
+      tags: [viajes]
+      summary: Resolver una incidencia (audiencia interna).
+      description: >-
+        Reenvía a `operacion.resolverIncidencia`. Resolver es facultad de
+        Supervisor/Coordinador: un rol sin ella recibe 403 (lo impone el
+        servidor, no el esquema).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ResolucionIncidenciaEntrada"}
+      responses:
+        "200":
+          description: Incidencia resuelta.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Incidencia"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/viajes/{id}/estadias:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarEstadias
+      tags: [viajes]
+      summary: Listar estadías del viaje (audiencia interna).
+      description: >-
+        Reenvía a `operacion.listarEstadias`. La duración se deriva de
+        `inicio`/`cierre`; no hay campo de duración ni `prolongada` (DEC-038).
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de estadías.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaEstadias"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    post:
+      operationId: abrirEstadia
+      tags: [viajes]
+      summary: Abrir una estadía del viaje (audiencia interna).
+      description: Reenvía a `operacion.abrirEstadia`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EstadiaEntrada"}
+      responses:
+        "201":
+          description: Estadía abierta.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Estadia"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
+  /api/v1/viajes/{id}/estadias/{eid}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    - name: eid
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    patch:
+      operationId: cerrarEstadia
+      tags: [viajes]
+      summary: Cerrar una estadía del viaje (audiencia interna).
+      description: Reenvía a `operacion.cerrarEstadia`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CierreEstadiaEntrada"}
+      responses:
+        "200":
+          description: Estadía cerrada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Estadia"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: La estadía ya está cerrada. `codigo` `estadia_ya_cerrada`.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  # Catálogo de GPS (E8-T12). Reenvío a `catalogos.listarGps`; el selector de la
+  # ficha solo recibe dispositivos activos (filtro en servidor, DEC-104 #5).
+  /api/v1/gps:
+    get:
+      operationId: listarGps
+      tags: [viajes]
+      summary: Listar dispositivos GPS del catálogo (audiencia interna).
+      description: Reenvía a `catalogos.listarGps`. Solo dispositivos activos.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de dispositivos GPS.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaGps"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
 components:
   schemas:
     CredencialesEntrada:
@@ -701,11 +972,21 @@ components:
             properties:
               nombre: {type: string}
               numero_envio: {type: string}
+              arribo:
+                type: boolean
+                description: Si la unidad arribó a este destino (DEC-012). Espejo de `Destino.arribo` de `operacion`.
         fecha_hora_servicio:
           type: string
           format: date-time
           nullable: true
           description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+        tipo_servicio:
+          type: string
+          nullable: true
+          description: >-
+            Tipo de servicio/monitoreo elegido por el cliente en la solicitud
+            (DEC-010 #3). Solo lectura; el monitorista lo visualiza (DEC-104 #4).
+            Espejo de `Viaje.tipo_servicio` de `operacion`.
         eta_estimado:
           type: string
           format: date-time
@@ -1106,6 +1387,226 @@ components:
         items:
           type: array
           items: {$ref: "#/components/schemas/Cliente"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    # --- Ficha técnica (E8-T12). Espejo de los esquemas de `operacion`. ---
+    Tracto:
+      type: object
+      additionalProperties: false
+      description: Tracto del cliente, texto libre. Espejo de `Tracto` de `operacion` (DEC-104 #1).
+      properties:
+        placas:    {type: string}
+        economico: {type: string}
+        marca:     {type: string}
+        modelo:    {type: string}
+        color:     {type: string}
+
+    Contenedor:
+      type: object
+      additionalProperties: false
+      description: Contenedor del viaje (0..N). Espejo de `Contenedor` de `operacion` (DEC-104 #2).
+      properties:
+        economico: {type: string}
+        placas:    {type: string}
+        sello:     {type: string}
+        color:     {type: string}
+
+    FichaTecnica:
+      type: object
+      additionalProperties: false
+      required: [viaje_id]
+      description: Ficha técnica del viaje (lectura). Espejo de `FichaTecnica` de `operacion`.
+      properties:
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        tracto:
+          allOf: [{$ref: "#/components/schemas/Tracto"}]
+          nullable: true
+        contenedores:
+          type: array
+          items: {$ref: "#/components/schemas/Contenedor"}
+        gps_ids:
+          type: array
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+
+    FichaTecnicaEntrada:
+      type: object
+      additionalProperties: false
+      description: >-
+        Guardado parcial de la ficha. Ningún campo obligatorio; colecciones por
+        reemplazo (DEC-104 #3). Espejo de `FichaTecnicaEntrada` de `operacion`.
+      properties:
+        tracto:
+          allOf: [{$ref: "#/components/schemas/Tracto"}]
+          nullable: true
+        contenedores:
+          type: array
+          items: {$ref: "#/components/schemas/Contenedor"}
+        gps_ids:
+          type: array
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+
+    DispositivoGps:
+      type: object
+      additionalProperties: false
+      required: [id, identificador, activo]
+      description: Dispositivo GPS del catálogo. Espejo de `DispositivoGps` de `catalogos`.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        identificador: {type: string}
+        activo: {type: boolean}
+
+    PaginaGps:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/DispositivoGps"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    # --- Histórico operativo (E8-T13). Espejo de los esquemas de `operacion`. ---
+    EntradaBitacoraEntrada:
+      type: object
+      additionalProperties: false
+      required: [texto]
+      description: Espejo de `EntradaBitacoraEntrada` de `operacion`.
+      properties:
+        texto: {type: string}
+
+    EntradaBitacora:
+      type: object
+      additionalProperties: false
+      required: [id, viaje_id, texto, autor, ts]
+      description: Espejo de `EntradaBitacora` de `operacion`.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        texto: {type: string}
+        autor: {type: string}
+        ts: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    PaginaBitacora:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/EntradaBitacora"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    IncidenciaEntrada:
+      type: object
+      additionalProperties: false
+      required: [tipo_interno]
+      description: >-
+        Espejo de `IncidenciaEntrada` de `operacion`. `tipo_interno` es `string`
+        libre en V1 (sin enum aún, DEC-105 #5); la vista curada al cliente la
+        compone `bff` (DEC-006), no este contrato.
+      properties:
+        tipo_interno: {type: string}
+        descripcion: {type: string}
+
+    Incidencia:
+      type: object
+      additionalProperties: false
+      required: [id, viaje_id, tipo_interno, estado, abierta_en]
+      description: Espejo de `Incidencia` de `operacion`.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        tipo_interno: {type: string}
+        estado:
+          type: string
+          enum: [en_atencion, resuelta]
+        abierta_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        resuelta_en:
+          type: string
+          format: date-time
+          nullable: true
+          description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+
+    ResolucionIncidenciaEntrada:
+      type: object
+      additionalProperties: false
+      required: [resolucion]
+      description: Espejo de `ResolucionIncidenciaEntrada` de `operacion`.
+      properties:
+        resolucion: {type: string}
+
+    MotivoEstadia:
+      type: string
+      description: Motivo de la estadía. Espejo de `MotivoEstadia` de `operacion`.
+      enum:
+        - combustible
+        - descanso
+        - alimentos
+        - sanitario
+        - reten
+        - revision_autoridades
+        - gastos
+        - espera_entrega
+
+    EjeAutorizacionEstadia:
+      type: string
+      description: Eje de autorización de la estadía. Espejo de `EjeAutorizacionEstadia` de `operacion`.
+      enum:
+        - autorizada
+        - no_autorizada
+        - antes_200km
+
+    Estadia:
+      type: object
+      additionalProperties: false
+      required: [id, viaje_id, motivo, eje_autorizacion, inicio]
+      description: >-
+        Estadía del viaje. La duración se deriva de `inicio` y `cierre`; sin
+        `prolongada` ni umbral (DEC-038). Espejo de `Estadia` de `operacion`.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        motivo: {$ref: "#/components/schemas/MotivoEstadia"}
+        eje_autorizacion: {$ref: "#/components/schemas/EjeAutorizacionEstadia"}
+        inicio: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        cierre:
+          type: string
+          format: date-time
+          nullable: true
+          description: Cierre de la estadía, o null si sigue abierta. Mismo formato que `MarcaTiempo`.
+
+    EstadiaEntrada:
+      type: object
+      additionalProperties: false
+      required: [motivo, eje_autorizacion]
+      description: Espejo de `EstadiaEntrada` de `operacion`.
+      properties:
+        motivo: {$ref: "#/components/schemas/MotivoEstadia"}
+        eje_autorizacion: {$ref: "#/components/schemas/EjeAutorizacionEstadia"}
+
+    CierreEstadiaEntrada:
+      type: object
+      additionalProperties: false
+      description: Cuerpo de cierre (vacío válido). Espejo de `CierreEstadiaEntrada` de `operacion`.
+      properties: {}
+
+    PaginaEstadias:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Estadia"}
         cursor_siguiente:
           type: string
           nullable: true

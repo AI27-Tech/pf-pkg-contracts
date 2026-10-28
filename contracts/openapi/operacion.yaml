@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — operacion
-  version: 0.1.0-tracer.20
+  version: 0.1.0-tracer.21
   description: >-
     Progreso del viaje: creación, transiciones, asignación, bitácora,
     incidencias y auditoría. Consumido por `bff`, nunca por el frontend directo.
@@ -119,6 +119,60 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/ViajeDetalle"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  # ---------------------------------------------------------------------------
+  # Ficha técnica del viaje (E8-T12 / DEC-104). El monitorista la captura y edita
+  # incrementalmente. Es EDITABLE y admite datos faltantes (DEC-043 #3): el PATCH
+  # no exige ningún campo; en V1 NINGÚN campo de ficha es guarda de transición de
+  # estado (DEC-104 #3). La escolta NO vive aquí: se deriva de la asignación
+  # (DEC-044). `tipo_servicio`, `origen` y `destinos` son del viaje, no de la
+  # ficha: se leen de `obtenerViaje`. La ficha serializa lo que la solicitud y la
+  # asignación no cubren: tracto del cliente, contenedores y la referencia de GPS.
+  # ---------------------------------------------------------------------------
+  /api/v1/viajes/{id}/ficha:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerFicha
+      tags: [bitacora]
+      summary: Leer la ficha técnica del viaje.
+      responses:
+        "200":
+          description: Ficha técnica del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FichaTecnica"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: guardarFicha
+      tags: [bitacora]
+      summary: Guardar parcialmente la ficha técnica (edición incremental).
+      description: >-
+        Edición incremental (DEC-043 #3): ningún campo es obligatorio. Las
+        propiedades presentes forman el nuevo valor; las ausentes no se tocan.
+        Las colecciones (`contenedores`, `gps_ids`) se REEMPLAZAN por completo
+        con el arreglo recibido; un arreglo vacío borra la lista. Un contenedor
+        sin ningún dato se descarta. No cambia `estado`: la ficha no gatea
+        transiciones en V1 (DEC-104 #3).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/FichaTecnicaEntrada"}
+      responses:
+        "200":
+          description: Ficha actualizada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FichaTecnica"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/viajes/{id}/transiciones:
@@ -799,6 +853,9 @@ components:
           format: date-time
           nullable: true
           description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+        arribo:
+          type: boolean
+          description: Si la unidad arribó a este destino (DEC-012). Captura del operador, no derivado del estado.
     CrearViajeEntrada:
       type: object
       additionalProperties: false
@@ -823,6 +880,13 @@ components:
           nullable: true
           description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
         tipo_servicio: {type: string}
+        tracto:
+          allOf: [{$ref: "#/components/schemas/Tracto"}]
+          nullable: true
+          description: >-
+            Tracto del cliente (unidad escoltada). Opcional: el cliente puede
+            capturarlo en la solicitud y el operador completarlo luego en la
+            ficha (DEC-104 #1 / DEC-010 #4).
         # asignacion es opcional: sólo Operación puede asignar en el mismo acto
         # (DEC-026). Ausente = sin asignación (equivale a null en 3.0.x).
         asignacion:
@@ -844,6 +908,14 @@ components:
           format: date-time
           nullable: true
           description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+        tipo_servicio:
+          type: string
+          nullable: true
+          description: >-
+            Tipo de servicio/monitoreo que el cliente eligió en la solicitud
+            (DEC-010 #3). SOLO LECTURA en E8-T12: el monitorista lo visualiza, no
+            lo edita. `string` (no enum) porque los valores de catálogo siguen
+            pendientes (DEC-104 #4); estrechar a enum después es breaking.
         # eta_estimado es nullable: ETA A->B capturado manualmente por el operador
         # (ADR 20 / DEC-007). null = sin ETA aún. `operacion` guarda y devuelve el
         # valor crudo; la obsolescencia (`stale`) la deriva el `bff` al leer.
@@ -1129,6 +1201,80 @@ components:
           type: string
           nullable: true
           description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    # --- Ficha técnica del viaje (E8-T12 / DEC-104). Tracto, contenedores y
+    #     referencia de GPS. Todo opcional (edición incremental, DEC-043 #3). ---
+    Tracto:
+      type: object
+      additionalProperties: false
+      description: >-
+        Tracto del cliente (unidad escoltada). Texto libre: no es recurso de AI27
+        ni viene de catálogo. `placas`/`economico` separados para permitir
+        búsqueda (DEC-104 #1, supera el "texto libre" de DEC-011 #2). Todos los
+        campos opcionales. Mismo shape en lectura y en entrada.
+      properties:
+        placas:    {type: string}
+        economico: {type: string}
+        marca:     {type: string}
+        modelo:    {type: string}
+        color:     {type: string}
+
+    Contenedor:
+      type: object
+      additionalProperties: false
+      description: >-
+        Contenedor del viaje (0..N, DEC-012). Campos del sistema actual (DEC-104
+        #2), todos texto libre y opcionales. Un contenedor sin ningún dato se
+        descarta al guardar.
+      properties:
+        economico: {type: string}
+        placas:    {type: string}
+        sello:     {type: string}
+        color:     {type: string}
+
+    FichaTecnica:
+      type: object
+      additionalProperties: false
+      required: [viaje_id]
+      description: >-
+        Ficha técnica del viaje (lectura). La escolta NO va aquí (se deriva de la
+        asignación, DEC-044); `tipo_servicio`, `origen` y `destinos` son del
+        viaje (`obtenerViaje`), no de la ficha.
+      properties:
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        tracto:
+          allOf: [{$ref: "#/components/schemas/Tracto"}]
+          nullable: true
+          description: Tracto del cliente, o null si no se ha capturado.
+        contenedores:
+          type: array
+          description: Contenedores del viaje (0..N).
+          items: {$ref: "#/components/schemas/Contenedor"}
+        gps_ids:
+          type: array
+          description: >-
+            Referencias a dispositivos del catálogo de GPS (DEC-012/047). Solo
+            referencia, sin posición en vivo.
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+
+    FichaTecnicaEntrada:
+      type: object
+      additionalProperties: false
+      description: >-
+        Guardado parcial de la ficha (PATCH). NINGÚN campo obligatorio (DEC-043
+        #3). Propiedad ausente = no se toca; colección presente = reemplaza la
+        lista completa; `[]` borra la lista; contenedor vacío se descarta.
+      properties:
+        tracto:
+          allOf: [{$ref: "#/components/schemas/Tracto"}]
+          nullable: true
+          description: Objeto para fijarlo; `null` para borrarlo.
+        contenedores:
+          type: array
+          items: {$ref: "#/components/schemas/Contenedor"}
+        gps_ids:
+          type: array
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
 
     EntradaBitacoraEntrada:
       type: object
