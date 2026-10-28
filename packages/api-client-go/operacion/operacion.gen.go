@@ -181,6 +181,14 @@ type CondicionAbierta struct {
 // CondicionViaje Condición ortogonal al progreso (§C.2). Nunca es un estado.
 type CondicionViaje string
 
+// Contenedor Contenedor del viaje (0..N, DEC-012). Campos del sistema actual (DEC-104 #2), todos texto libre y opcionales. Un contenedor sin ningún dato se descarta al guardar.
+type Contenedor struct {
+	Color     *string `json:"color,omitempty"`
+	Economico *string `json:"economico,omitempty"`
+	Placas    *string `json:"placas,omitempty"`
+	Sello     *string `json:"sello,omitempty"`
+}
+
 // CrearViajeEntrada defines model for CrearViajeEntrada.
 type CrearViajeEntrada struct {
 	// Asignacion Escolta a reservar: una o más `unidades` del roster (D2). Reemplaza el par `unidad_id` + `custodios_ids`: la reserva es por unidad completa (paquete vehículo + custodios), no por recursos sueltos (ADR 31).
@@ -198,6 +206,9 @@ type CrearViajeEntrada struct {
 	// Origen Origen en texto libre (DEC-010
 	Origen       string  `json:"origen"`
 	TipoServicio *string `json:"tipo_servicio,omitempty"`
+
+	// Tracto Tracto del cliente (unidad escoltada). Opcional: el cliente puede capturarlo en la solicitud y el operador completarlo luego en la ficha (DEC-104 #1 / DEC-010 #4).
+	Tracto *Tracto `json:"tracto"`
 }
 
 // Cursor Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato.
@@ -214,6 +225,9 @@ type DescargaAdjunto struct {
 
 // Destino defines model for Destino.
 type Destino struct {
+	// Arribo Si la unidad arribó a este destino (DEC-012). Captura del operador, no derivado del estado.
+	Arribo *bool `json:"arribo,omitempty"`
+
 	// FechaCita Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
 	FechaCita *time.Time `json:"fecha_cita"`
 
@@ -303,6 +317,30 @@ type EtaEntrada struct {
 type FechaHoraEntrada struct {
 	// FechaHoraServicio Fecha/hora del servicio a completar o editar sobre un viaje ya creado (E1-HU-003, DEC-010 #2). Reemplaza el valor previo.
 	FechaHoraServicio MarcaTiempo `json:"fecha_hora_servicio"`
+}
+
+// FichaTecnica Ficha técnica del viaje (lectura). La escolta NO va aquí (se deriva de la asignación, DEC-044); `tipo_servicio`, `origen` y `destinos` son del viaje (`obtenerViaje`), no de la ficha.
+type FichaTecnica struct {
+	// Contenedores Contenedores del viaje (0..N).
+	Contenedores *[]Contenedor `json:"contenedores,omitempty"`
+
+	// GpsIds Referencias a dispositivos del catálogo de GPS (DEC-012/047). Solo referencia, sin posición en vivo.
+	GpsIds *[]Id `json:"gps_ids,omitempty"`
+
+	// Tracto Tracto del cliente, o null si no se ha capturado.
+	Tracto *Tracto `json:"tracto"`
+
+	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.
+	ViajeId Id `json:"viaje_id"`
+}
+
+// FichaTecnicaEntrada Guardado parcial de la ficha (PATCH). NINGÚN campo obligatorio (DEC-043 #3). Propiedad ausente = no se toca; colección presente = reemplaza la lista completa; `[]` borra la lista; contenedor vacío se descarta.
+type FichaTecnicaEntrada struct {
+	Contenedores *[]Contenedor `json:"contenedores,omitempty"`
+	GpsIds       *[]Id         `json:"gps_ids,omitempty"`
+
+	// Tracto Objeto para fijarlo; `null` para borrarlo.
+	Tracto *Tracto `json:"tracto"`
 }
 
 // Id Identificador único (UUID). Nunca un correlativo expuesto.
@@ -445,6 +483,15 @@ type ResolucionIncidenciaEntrada struct {
 	Resolucion string `json:"resolucion"`
 }
 
+// Tracto Tracto del cliente (unidad escoltada). Texto libre: no es recurso de AI27 ni viene de catálogo. `placas`/`economico` separados para permitir búsqueda (DEC-104 #1, supera el "texto libre" de DEC-011 #2). Todos los campos opcionales. Mismo shape en lectura y en entrada.
+type Tracto struct {
+	Color     *string `json:"color,omitempty"`
+	Economico *string `json:"economico,omitempty"`
+	Marca     *string `json:"marca,omitempty"`
+	Modelo    *string `json:"modelo,omitempty"`
+	Placas    *string `json:"placas,omitempty"`
+}
+
 // TransicionEntrada defines model for TransicionEntrada.
 type TransicionEntrada struct {
 	// AEstado Estado destino. Se valida contra la máquina de estados.
@@ -524,6 +571,9 @@ type Viaje struct {
 	// Id Identificador único (UUID). Nunca un correlativo expuesto.
 	Id     Id     `json:"id"`
 	Origen string `json:"origen"`
+
+	// TipoServicio Tipo de servicio/monitoreo que el cliente eligió en la solicitud (DEC-010 #3). SOLO LECTURA en E8-T12: el monitorista lo visualiza, no lo edita. `string` (no enum) porque los valores de catálogo siguen pendientes (DEC-104 #4); estrechar a enum después es breaking.
+	TipoServicio *string `json:"tipo_servicio"`
 }
 
 // ViajeDetalle defines model for ViajeDetalle.
@@ -610,6 +660,9 @@ type FijarEtaJSONRequestBody = EtaEntrada
 
 // CompletarFechaHoraJSONRequestBody defines body for CompletarFechaHora for application/json ContentType.
 type CompletarFechaHoraJSONRequestBody = FechaHoraEntrada
+
+// GuardarFichaJSONRequestBody defines body for GuardarFicha for application/json ContentType.
+type GuardarFichaJSONRequestBody = FichaTecnicaEntrada
 
 // AbrirIncidenciaJSONRequestBody defines body for AbrirIncidencia for application/json ContentType.
 type AbrirIncidenciaJSONRequestBody = IncidenciaEntrada
@@ -777,6 +830,14 @@ type ClientInterface interface {
 	CompletarFechaHoraWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	CompletarFechaHora(ctx context.Context, id Id, body CompletarFechaHoraJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerFicha request
+	ObtenerFicha(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GuardarFichaWithBody request with any body
+	GuardarFichaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	GuardarFicha(ctx context.Context, id Id, body GuardarFichaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AbrirIncidenciaWithBody request with any body
 	AbrirIncidenciaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1168,6 +1229,42 @@ func (c *Client) CompletarFechaHoraWithBody(ctx context.Context, id Id, contentT
 
 func (c *Client) CompletarFechaHora(ctx context.Context, id Id, body CompletarFechaHoraJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCompletarFechaHoraRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerFicha(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerFichaRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GuardarFichaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGuardarFichaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GuardarFicha(ctx context.Context, id Id, body GuardarFichaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGuardarFichaRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2219,6 +2316,87 @@ func NewCompletarFechaHoraRequestWithBody(server string, id Id, contentType stri
 	return req, nil
 }
 
+// NewObtenerFichaRequest generates requests for ObtenerFicha
+func NewObtenerFichaRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/ficha", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGuardarFichaRequest calls the generic GuardarFicha builder with application/json body
+func NewGuardarFichaRequest(server string, id Id, body GuardarFichaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewGuardarFichaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewGuardarFichaRequestWithBody generates requests for GuardarFicha with any type of body
+func NewGuardarFichaRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/ficha", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewAbrirIncidenciaRequest calls the generic AbrirIncidencia builder with application/json body
 func NewAbrirIncidenciaRequest(server string, id Id, body AbrirIncidenciaJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2494,6 +2672,14 @@ type ClientWithResponsesInterface interface {
 	CompletarFechaHoraWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CompletarFechaHoraResponse, error)
 
 	CompletarFechaHoraWithResponse(ctx context.Context, id Id, body CompletarFechaHoraJSONRequestBody, reqEditors ...RequestEditorFn) (*CompletarFechaHoraResponse, error)
+
+	// ObtenerFichaWithResponse request
+	ObtenerFichaWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerFichaResponse, error)
+
+	// GuardarFichaWithBodyWithResponse request with any body
+	GuardarFichaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GuardarFichaResponse, error)
+
+	GuardarFichaWithResponse(ctx context.Context, id Id, body GuardarFichaJSONRequestBody, reqEditors ...RequestEditorFn) (*GuardarFichaResponse, error)
 
 	// AbrirIncidenciaWithBodyWithResponse request with any body
 	AbrirIncidenciaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AbrirIncidenciaResponse, error)
@@ -3038,6 +3224,56 @@ func (r CompletarFechaHoraResponse) StatusCode() int {
 	return 0
 }
 
+type ObtenerFichaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *FichaTecnica
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerFichaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerFichaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GuardarFichaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *FichaTecnica
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r GuardarFichaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GuardarFichaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type AbrirIncidenciaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3391,6 +3627,32 @@ func (c *ClientWithResponses) CompletarFechaHoraWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseCompletarFechaHoraResponse(rsp)
+}
+
+// ObtenerFichaWithResponse request returning *ObtenerFichaResponse
+func (c *ClientWithResponses) ObtenerFichaWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerFichaResponse, error) {
+	rsp, err := c.ObtenerFicha(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerFichaResponse(rsp)
+}
+
+// GuardarFichaWithBodyWithResponse request with arbitrary body returning *GuardarFichaResponse
+func (c *ClientWithResponses) GuardarFichaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GuardarFichaResponse, error) {
+	rsp, err := c.GuardarFichaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGuardarFichaResponse(rsp)
+}
+
+func (c *ClientWithResponses) GuardarFichaWithResponse(ctx context.Context, id Id, body GuardarFichaJSONRequestBody, reqEditors ...RequestEditorFn) (*GuardarFichaResponse, error) {
+	rsp, err := c.GuardarFicha(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGuardarFichaResponse(rsp)
 }
 
 // AbrirIncidenciaWithBodyWithResponse request with arbitrary body returning *AbrirIncidenciaResponse
@@ -4439,6 +4701,100 @@ func ParseCompletarFechaHoraResponse(rsp *http.Response) (*CompletarFechaHoraRes
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerFichaResponse parses an HTTP response from a ObtenerFichaWithResponse call
+func ParseObtenerFichaResponse(rsp *http.Response) (*ObtenerFichaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerFichaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FichaTecnica
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGuardarFichaResponse parses an HTTP response from a GuardarFichaWithResponse call
+func ParseGuardarFichaResponse(rsp *http.Response) (*GuardarFichaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GuardarFichaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FichaTecnica
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
