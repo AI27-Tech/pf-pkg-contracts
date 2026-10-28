@@ -326,6 +326,26 @@ export interface paths {
         patch: operations["actualizarValorCatalogo"];
         trace?: never;
     };
+    "/api/v1/gps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar dispositivos GPS del catálogo registrado.
+         * @description Página de dispositivos para poblar el selector de GPS de la ficha. El selector ofrece solo dispositivos `activo` (DEC-104 #5); el filtro lo aplica el servidor.
+         */
+        get: operations["listarGps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -527,6 +547,19 @@ export interface components {
         };
         PaginaValoresCatalogo: {
             items: components["schemas"]["ValorCatalogo"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
+        };
+        /** @description Dispositivo GPS del catálogo registrado (DEC-047 #2). La ficha del viaje lo referencia por `id` (DEC-012), sin posición en vivo. */
+        DispositivoGps: {
+            id: components["schemas"]["Id"];
+            /** @description Alias operativo del dispositivo (p. ej. "MOVIL ST7916"). */
+            identificador: string;
+            /** @description Si el dispositivo está activo (disponible para seleccionarse). */
+            activo: boolean;
+        };
+        PaginaGps: {
+            items: components["schemas"]["DispositivoGps"][];
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
@@ -1198,6 +1231,30 @@ export interface operations {
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
             409: components["responses"]["Conflicto"];
+        };
+    };
+    listarGps: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de dispositivos GPS. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaGps"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
         };
     };
 }
