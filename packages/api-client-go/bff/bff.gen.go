@@ -732,6 +732,9 @@ type ResolverIncidenciaJSONRequestBody = ResolucionIncidenciaEntrada
 // TransicionarViajeJSONRequestBody defines body for TransicionarViaje for application/json ContentType.
 type TransicionarViajeJSONRequestBody = TransicionEntrada
 
+// TransicionarViajeClienteJSONRequestBody defines body for TransicionarViajeCliente for application/json ContentType.
+type TransicionarViajeClienteJSONRequestBody = TransicionEntrada
+
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
 
@@ -918,6 +921,11 @@ type ClientInterface interface {
 	TransicionarViajeWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	TransicionarViaje(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TransicionarViajeClienteWithBody request with any body
+	TransicionarViajeClienteWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	TransicionarViajeCliente(ctx context.Context, id Id, body TransicionarViajeClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) ListarClientes(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1426,6 +1434,30 @@ func (c *Client) TransicionarViajeWithBody(ctx context.Context, id Id, contentTy
 
 func (c *Client) TransicionarViaje(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTransicionarViajeRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TransicionarViajeClienteWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTransicionarViajeClienteRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TransicionarViajeCliente(ctx context.Context, id Id, body TransicionarViajeClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTransicionarViajeClienteRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2718,6 +2750,53 @@ func NewTransicionarViajeRequestWithBody(server string, id Id, contentType strin
 	return req, nil
 }
 
+// NewTransicionarViajeClienteRequest calls the generic TransicionarViajeCliente builder with application/json body
+func NewTransicionarViajeClienteRequest(server string, id Id, body TransicionarViajeClienteJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTransicionarViajeClienteRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewTransicionarViajeClienteRequestWithBody generates requests for TransicionarViajeCliente with any type of body
+func NewTransicionarViajeClienteRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/transiciones-cliente", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -2874,6 +2953,11 @@ type ClientWithResponsesInterface interface {
 	TransicionarViajeWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
 
 	TransicionarViajeWithResponse(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
+
+	// TransicionarViajeClienteWithBodyWithResponse request with any body
+	TransicionarViajeClienteWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransicionarViajeClienteResponse, error)
+
+	TransicionarViajeClienteWithResponse(ctx context.Context, id Id, body TransicionarViajeClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeClienteResponse, error)
 }
 
 type ListarClientesResponse struct {
@@ -3576,6 +3660,33 @@ func (r TransicionarViajeResponse) StatusCode() int {
 	return 0
 }
 
+type TransicionarViajeClienteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ViajeSeguimiento
+	JSON400      *Error
+	JSON401      *NoAutorizado
+	JSON403      *Error
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r TransicionarViajeClienteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TransicionarViajeClienteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // ListarClientesWithResponse request returning *ListarClientesResponse
 func (c *ClientWithResponses) ListarClientesWithResponse(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*ListarClientesResponse, error) {
 	rsp, err := c.ListarClientes(ctx, params, reqEditors...)
@@ -3946,6 +4057,23 @@ func (c *ClientWithResponses) TransicionarViajeWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseTransicionarViajeResponse(rsp)
+}
+
+// TransicionarViajeClienteWithBodyWithResponse request with arbitrary body returning *TransicionarViajeClienteResponse
+func (c *ClientWithResponses) TransicionarViajeClienteWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransicionarViajeClienteResponse, error) {
+	rsp, err := c.TransicionarViajeClienteWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTransicionarViajeClienteResponse(rsp)
+}
+
+func (c *ClientWithResponses) TransicionarViajeClienteWithResponse(ctx context.Context, id Id, body TransicionarViajeClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeClienteResponse, error) {
+	rsp, err := c.TransicionarViajeCliente(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTransicionarViajeClienteResponse(rsp)
 }
 
 // ParseListarClientesResponse parses an HTTP response from a ListarClientesWithResponse call
@@ -5251,6 +5379,67 @@ func ParseTransicionarViajeResponse(rsp *http.Response) (*TransicionarViajeRespo
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTransicionarViajeClienteResponse parses an HTTP response from a TransicionarViajeClienteWithResponse call
+func ParseTransicionarViajeClienteResponse(rsp *http.Response) (*TransicionarViajeClienteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TransicionarViajeClienteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ViajeSeguimiento
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error
