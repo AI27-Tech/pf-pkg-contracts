@@ -241,7 +241,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Listar incidencias del viaje (ordenadas por apertura).
+         * @description Devuelve el histórico de incidencias del viaje, append-only: cada incidencia conserva su apertura y, si se resolvió, su cierre. Incluye tanto las `en_atencion` como las `resuelta`. `tipo_interno` es el catálogo operativo interno (DEC-006): la vista curada para el cliente la compone `bff`, no este contrato.
+         */
+        get: operations["listarIncidencias"];
         put?: never;
         /** Abrir una incidencia (abre la condición ortogonal INCIDENCIA). */
         post: operations["abrirIncidencia"];
@@ -673,6 +677,11 @@ export interface components {
              * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
              */
             resuelta_en?: string | null;
+        };
+        PaginaIncidencias: {
+            items: components["schemas"]["Incidencia"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
         };
         ResolucionIncidenciaEntrada: {
             resolucion: string;
@@ -1322,6 +1331,32 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+        };
+    };
+    listarIncidencias: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de incidencias. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaIncidencias"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
         };
     };
     abrirIncidencia: {
