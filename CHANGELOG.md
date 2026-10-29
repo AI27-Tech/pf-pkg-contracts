@@ -3,6 +3,26 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-29 [tracer.22] — lectura de incidencias del viaje (E8-T13 / DEC-110)
+
+**Resumen:** Ola aditiva que cierra la última pieza del histórico operativo del panel interno: la **lectura** de incidencias. Agrega `listarIncidencias` = `GET /api/v1/viajes/{id}/incidencias` en `operacion` y su espejo de reenvío en `bff`, más el esquema `PaginaIncidencias` en ambos. Espejo exacto de `listarEstadias`/`listarBitacora`: paginación por `cursor`, respuestas `200 PaginaIncidencias` / `401` / `404`. El esquema `Incidencia` no cambia.
+
+**Contexto:** Solicitud de `pf-web-frontend-internal` (E8-T13, DEC-110), verificada contra `tracer.21`. En `.21` el histórico quedó con abrir/resolver incidencia pero sin lectura: el frontend podía mostrar incidencias abiertas/resueltas en la sesión viva, pero al recargar el histórico de incidencias previas quedaba invisible. DEC-105 proyectó siete operaciones del histórico pero no incluyó la lectura de incidencias; DEC-110 la autoriza. A diferencia de lo que suponía el brief, `operacion` **no** exponía `listarIncidencias`: hubo que agregarla ahí primero, porque el `bff` es reenvío puro (DEC-105 §1).
+
+**Decisión de forma (DEC-110):** `operationId` idéntico en `operacion` y `bff` (`listarIncidencias`), patrón DEC-105 §2. Paginación por `cursor` por consistencia con bitácora/estadías. Respuestas `200/401/404`, iguales a `listarEstadias`/`listarBitacora` del `bff` (sin `403` por paridad con los otros dos espejos de lectura del histórico). `tipo_interno` sigue `string` crudo (audiencia interna, DEC-105 §5); el curado al cliente (DEC-006) queda fuera de esta superficie. El histórico es append-only: la lista incluye incidencias `en_atencion` y `resuelta`. No se agrega ningún campo a `Incidencia`.
+
+**Cambios:**
+- `contracts/openapi/operacion.yaml`: ruta `GET /api/v1/viajes/{id}/incidencias` (`listarIncidencias`); esquema `PaginaIncidencias`.
+- `contracts/openapi/bff.yaml`: ruta espejo `GET /api/v1/viajes/{id}/incidencias` (`listarIncidencias`, reenvía a `operacion`); esquema espejo `PaginaIncidencias`.
+- Clientes Go y TS regenerados (`make generate`). `VERSION`, los ocho specs y `_comunes.yaml`, el paquete TS y el encabezado de `INVENTARIO.md` a `0.1.0-tracer.22`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.21` (solo se agregó un `GET` y un esquema; nada se estrechó ni se quitó). Sin entrada en `rompimientos/`. `lint-openapi` y `breaking-openapi` en verde; clientes Go compilan y pasan `go vet`.
+
+**Archivos modificados:**
+- `contracts/openapi/operacion.yaml`, `contracts/openapi/bff.yaml`, los otros seis specs y `_comunes.yaml` (solo `info.version`), `VERSION`, `contracts/events/INVENTARIO.md` (encabezado de ola)
+- `packages/api-client-go/{operacion,bff}/*.gen.go`, `packages/api-client-ts/src/openapi/{operacion,bff}.gen.ts`, `packages/api-client-ts/package.json`
+- `CHANGELOG.md`
+
 ## 2026-10-23 [tracer.21] — ficha técnica del viaje (E8-T12) e histórico operativo en el `bff` (E8-T13)
 
 **Resumen:** Ola aditiva que combina dos solicitudes del panel interno. (1) **E8-T12 / DEC-104:** la ficha técnica del viaje gana lectura y escritura parcial. En `operacion`: ruta `GET|PATCH /api/v1/viajes/{id}/ficha` (`obtenerFicha`/`guardarFicha`), esquemas `FichaTecnica`/`FichaTecnicaEntrada`/`Tracto`/`Contenedor`; `tipo_servicio` ahora se lee en `Viaje` (solo lectura); `tracto` se captura en `CrearViajeEntrada`; `Destino` gana `arribo`. En `catalogos`: catálogo de GPS nuevo `GET /api/v1/gps` (`listarGps`→`PaginaGps`/`DispositivoGps`). Todo proyectado al `bff`. (2) **E8-T13 / DEC-105:** siete reenvíos del histórico al `bff` (bitácora, incidencias, estadías), espejo de operaciones que ya existían en `operacion`.

@@ -468,6 +468,13 @@ type PaginaGps struct {
 	Items           []DispositivoGps `json:"items"`
 }
 
+// PaginaIncidencias defines model for PaginaIncidencias.
+type PaginaIncidencias struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string      `json:"cursor_siguiente"`
+	Items           []Incidencia `json:"items"`
+}
+
 // PaginaUnidades defines model for PaginaUnidades.
 type PaginaUnidades struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
@@ -672,6 +679,11 @@ type ListarBitacoraParams struct {
 
 // ListarEstadiasParams defines parameters for ListarEstadias.
 type ListarEstadiasParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListarIncidenciasParams defines parameters for ListarIncidencias.
+type ListarIncidenciasParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
@@ -888,6 +900,9 @@ type ClientInterface interface {
 	GuardarFichaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	GuardarFicha(ctx context.Context, id Id, body GuardarFichaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListarIncidencias request
+	ListarIncidencias(ctx context.Context, id Id, params *ListarIncidenciasParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AbrirIncidenciaWithBody request with any body
 	AbrirIncidenciaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1327,6 +1342,18 @@ func (c *Client) GuardarFichaWithBody(ctx context.Context, id Id, contentType st
 
 func (c *Client) GuardarFicha(ctx context.Context, id Id, body GuardarFichaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGuardarFichaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarIncidencias(ctx context.Context, id Id, params *ListarIncidenciasParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarIncidenciasRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2487,6 +2514,62 @@ func NewGuardarFichaRequestWithBody(server string, id Id, contentType string, bo
 	return req, nil
 }
 
+// NewListarIncidenciasRequest generates requests for ListarIncidencias
+func NewListarIncidenciasRequest(server string, id Id, params *ListarIncidenciasParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/incidencias", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewAbrirIncidenciaRequest calls the generic AbrirIncidencia builder with application/json body
 func NewAbrirIncidenciaRequest(server string, id Id, body AbrirIncidenciaJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2773,6 +2856,9 @@ type ClientWithResponsesInterface interface {
 	GuardarFichaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GuardarFichaResponse, error)
 
 	GuardarFichaWithResponse(ctx context.Context, id Id, body GuardarFichaJSONRequestBody, reqEditors ...RequestEditorFn) (*GuardarFichaResponse, error)
+
+	// ListarIncidenciasWithResponse request
+	ListarIncidenciasWithResponse(ctx context.Context, id Id, params *ListarIncidenciasParams, reqEditors ...RequestEditorFn) (*ListarIncidenciasResponse, error)
 
 	// AbrirIncidenciaWithBodyWithResponse request with any body
 	AbrirIncidenciaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AbrirIncidenciaResponse, error)
@@ -3388,6 +3474,30 @@ func (r GuardarFichaResponse) StatusCode() int {
 	return 0
 }
 
+type ListarIncidenciasResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaIncidencias
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarIncidenciasResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarIncidenciasResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type AbrirIncidenciaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3776,6 +3886,15 @@ func (c *ClientWithResponses) GuardarFichaWithResponse(ctx context.Context, id I
 		return nil, err
 	}
 	return ParseGuardarFichaResponse(rsp)
+}
+
+// ListarIncidenciasWithResponse request returning *ListarIncidenciasResponse
+func (c *ClientWithResponses) ListarIncidenciasWithResponse(ctx context.Context, id Id, params *ListarIncidenciasParams, reqEditors ...RequestEditorFn) (*ListarIncidenciasResponse, error) {
+	rsp, err := c.ListarIncidencias(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarIncidenciasResponse(rsp)
 }
 
 // AbrirIncidenciaWithBodyWithResponse request with arbitrary body returning *AbrirIncidenciaResponse
@@ -4930,6 +5049,46 @@ func ParseGuardarFichaResponse(rsp *http.Response) (*GuardarFichaResponse, error
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarIncidenciasResponse parses an HTTP response from a ListarIncidenciasWithResponse call
+func ParseListarIncidenciasResponse(rsp *http.Response) (*ListarIncidenciasResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarIncidenciasResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaIncidencias
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado

@@ -377,7 +377,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Listar incidencias del viaje (audiencia interna).
+         * @description Reenvía a `operacion.listarIncidencias`. Histórico append-only: incluye incidencias `en_atencion` y `resuelta`. `tipo_interno` crudo (audiencia interna); la vista curada al cliente la compone `bff` (DEC-006).
+         */
+        get: operations["listarIncidencias"];
         put?: never;
         /**
          * Abrir una incidencia del viaje (audiencia interna).
@@ -834,6 +838,11 @@ export interface components {
              * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
              */
             resuelta_en?: string | null;
+        };
+        PaginaIncidencias: {
+            items: components["schemas"]["Incidencia"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
         };
         /** @description Espejo de `ResolucionIncidenciaEntrada` de `operacion`. */
         ResolucionIncidenciaEntrada: {
@@ -1572,6 +1581,32 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+        };
+    };
+    listarIncidencias: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de incidencias. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaIncidencias"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
         };
     };
     abrirIncidencia: {
