@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.22
+  version: 0.1.0-tracer.23
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -318,6 +318,77 @@ paths:
             Transición no permitida por la máquina de estados. `codigo` de
             máquina `transicion_no_permitida` en el cuerpo: la UI distingue el
             rechazo por carrera a partir de él, no del `mensaje`.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  # ---------------------------------------------------------------------------
+  # Transición del viaje para audiencia CLIENTE (E9-T7 / E1-HU-002 / DEC-111).
+  # El portal cliente solo habla con el `bff`. Ruta y operationId PROPIOS, con
+  # sufijo `Cliente` (patrón de la familia `emergencias`), separados de la
+  # superficie interna `transicionarViaje`: aquella devuelve `ViajeDetalle`
+  # (estado canónico + condiciones) que la vista de cliente oculta a propósito
+  # (DEC-006), y acepta cualquier arista. Esta operación está acotada a lo que el
+  # cliente origina: cancelar o rechazar su propio viaje. `operacion` sigue
+  # siendo la única autoridad de transición y aplica el aislamiento por tenant
+  # (un cliente solo su viaje, tenant=cliente DEC-112; viaje ajeno -> 404) y la
+  # guarda de facultad (solo CANCELADO / RECHAZADO_POR_CLIENTE; otra arista ->
+  # 403*); el `bff` filtra audiencia Cliente y reenvía. Devuelve la vista de
+  # seguimiento del cliente (`ViajeSeguimiento`), no el detalle interno.
+  # (*) Nota: en V1 `operacion` responde 401 a la arista no permitida porque la
+  # plataforma aún no tiene un 403 propio; el contrato declara 403 por fidelidad
+  # a la facultad. Alinear 401->403 es un pendiente (DEC-111, notas).
+  # ---------------------------------------------------------------------------
+  /api/v1/viajes/{id}/transiciones-cliente:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: transicionarViajeCliente
+      tags: [viajes]
+      summary: Cancelar o rechazar el viaje (audiencia cliente).
+      description: >-
+        Reenvía a `operacion.transicionarViaje` con audiencia Cliente. El cliente
+        solo puede llevar SU viaje a `CANCELADO` (ya no lo quiere, hasta antes de
+        la salida) o `RECHAZADO_POR_CLIENTE` (no acepta el servicio asignado),
+        DEC-005/DEC-111. El `motivo` (campo `causa`) es OBLIGATORIO en ambas
+        acciones (DEC-111, supera DEC-020 #7). El aislamiento por tenant y la
+        máquina de estados se validan en `operacion`; el `bff` no replica el
+        grafo. Devuelve la vista de seguimiento del cliente para refrescar sin un
+        segundo GET; nunca el estado canónico ni las condiciones (DEC-006).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TransicionEntrada"}
+      responses:
+        "200":
+          description: Transición aplicada; vista de seguimiento del cliente.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ViajeSeguimiento"}
+        "400":
+          description: >-
+            Cuerpo inválido, o falta el `motivo` obligatorio al cancelar o
+            rechazar (DEC-111).
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403":
+          description: >-
+            El cliente pidió una arista que no le corresponde (solo `CANCELADO` o
+            `RECHAZADO_POR_CLIENTE`), o el viaje está fuera de su alcance.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            Transición no permitida por la máquina de estados (p. ej. el viaje ya
+            salió o ya es terminal). `codigo` de máquina `transicion_no_permitida`.
           content:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}

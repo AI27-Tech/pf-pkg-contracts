@@ -3,6 +3,29 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-29 [tracer.23] — transición del viaje para audiencia Cliente: cancelar / rechazar (E9-T7 / DEC-111)
+
+**Resumen:** Ola aditiva que da al portal cliente la única acción de escritura que le faltaba sobre el ciclo de vida del viaje: cancelar o rechazar. Agrega `transicionarViajeCliente` = `POST /api/v1/viajes/{id}/transiciones-cliente` en `bff.yaml`, reenvío a `operacion.transicionarViaje` con audiencia Cliente. Ruta y `operationId` propios (sufijo `Cliente`, patrón de la familia `emergencias`), separados de la superficie interna `transicionarViaje`. Devuelve `ViajeSeguimiento` (la vista de cliente), no `ViajeDetalle`. Reusa `TransicionEntrada`; no agrega esquemas.
+
+**Contexto:** Solicitud de `pf-web-frontend-client` (E9-T7, DEC-111), verificada contra `tracer.21`. El `bff` no exponía ninguna transición de cliente; la única `transicionarViaje` es superficie interna (E8-T8) y devuelve el detalle canónico que la vista de cliente oculta (DEC-006). La máquina de estados ya tiene las aristas de disparador `cliente` (`→ CANCELADO`, `→ RECHAZADO_POR_CLIENTE`); el hueco era de superficie y audiencia.
+
+**Decisión de forma (DEC-111):** operación separada, no ampliar la interna. Acotada a lo que el cliente origina. `operacion` es la única autoridad de transición y aplica el aislamiento por tenant (un cliente solo su viaje, tenant = cliente DEC-112; viaje ajeno → 404) y la facultad (solo `CANCELADO`/`RECHAZADO_POR_CLIENTE`); el `bff` filtra audiencia Cliente y reenvía. El `motivo` (`causa`) es obligatorio en ambas acciones (DEC-111, supera DEC-020 #7); lo valida `operacion`.
+
+**Respuestas:** `200 ViajeSeguimiento` / `400` (cuerpo inválido o motivo faltante) / `401` / `403` (arista no permitida o fuera de alcance) / `404` / `409 transicion_no_permitida`.
+
+**Nota 401 vs 403:** `operacion` responde `401` a la arista no permitida porque la plataforma aún no tiene un `403` propio (categorías 400/401/404/409); el contrato declara `403` por fidelidad a la facultad. Alinear 401→403 en `pf-pkg-platform-go/errors` es un pendiente ratificado (DEC-111, notas). No bloquea E9-T7.
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: ruta `POST /api/v1/viajes/{id}/transiciones-cliente` (`transicionarViajeCliente`), reenvía a `operacion.transicionarViaje`; respuesta `ViajeSeguimiento`. `operacion.yaml` sin cambios (la transición y sus guardas ya viven ahí; el motivo obligatorio del cliente es guarda de servidor, no de contrato).
+- Clientes Go y TS regenerados (`make generate`). `VERSION`, los ocho specs y `_comunes.yaml`, el paquete TS y el encabezado de `INVENTARIO.md` a `0.1.0-tracer.23`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` confirma los ocho specs compatibles con `tracer.22` (solo se agregó una ruta nueva). Sin entrada en `rompimientos/`. `lint-openapi` y `breaking-openapi` en verde; clientes Go compilan y pasan `go vet`.
+
+**Archivos modificados:**
+- `contracts/openapi/bff.yaml`, los otros siete specs y `_comunes.yaml` (solo `info.version`), `VERSION`, `contracts/events/INVENTARIO.md` (encabezado de ola)
+- `packages/api-client-go/bff/bff.gen.go`, `packages/api-client-ts/src/openapi/bff.gen.ts`, `packages/api-client-ts/package.json`
+- `CHANGELOG.md`
+
 ## 2026-10-29 [tracer.22] — lectura de incidencias del viaje (E8-T13 / DEC-110)
 
 **Resumen:** Ola aditiva que cierra la última pieza del histórico operativo del panel interno: la **lectura** de incidencias. Agrega `listarIncidencias` = `GET /api/v1/viajes/{id}/incidencias` en `operacion` y su espejo de reenvío en `bff`, más el esquema `PaginaIncidencias` en ambos. Espejo exacto de `listarEstadias`/`listarBitacora`: paginación por `cursor`, respuestas `200 PaginaIncidencias` / `401` / `404`. El esquema `Incidencia` no cambia.

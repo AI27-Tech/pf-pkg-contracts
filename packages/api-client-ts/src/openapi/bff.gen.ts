@@ -186,6 +186,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/viajes/{id}/transiciones-cliente": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancelar o rechazar el viaje (audiencia cliente).
+         * @description Reenvía a `operacion.transicionarViaje` con audiencia Cliente. El cliente solo puede llevar SU viaje a `CANCELADO` (ya no lo quiere, hasta antes de la salida) o `RECHAZADO_POR_CLIENTE` (no acepta el servicio asignado), DEC-005/DEC-111. El `motivo` (campo `causa`) es OBLIGATORIO en ambas acciones (DEC-111, supera DEC-020 #7). El aislamiento por tenant y la máquina de estados se validan en `operacion`; el `bff` no replica el grafo. Devuelve la vista de seguimiento del cliente para refrescar sin un segundo GET; nunca el estado canónico ni las condiciones (DEC-006).
+         */
+        post: operations["transicionarViajeCliente"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/viajes/{id}/eta": {
         parameters: {
             query?: never;
@@ -1244,6 +1266,61 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             /** @description Transición no permitida por la máquina de estados. `codigo` de máquina `transicion_no_permitida` en el cuerpo: la UI distingue el rechazo por carrera a partir de él, no del `mensaje`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    transicionarViajeCliente: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransicionEntrada"];
+            };
+        };
+        responses: {
+            /** @description Transición aplicada; vista de seguimiento del cliente. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViajeSeguimiento"];
+                };
+            };
+            /** @description Cuerpo inválido, o falta el `motivo` obligatorio al cancelar o rechazar (DEC-111). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            /** @description El cliente pidió una arista que no le corresponde (solo `CANCELADO` o `RECHAZADO_POR_CLIENTE`), o el viaje está fuera de su alcance. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            404: components["responses"]["NoEncontrado"];
+            /** @description Transición no permitida por la máquina de estados (p. ej. el viaje ya salió o ya es terminal). `codigo` de máquina `transicion_no_permitida`. */
             409: {
                 headers: {
                     [name: string]: unknown;
