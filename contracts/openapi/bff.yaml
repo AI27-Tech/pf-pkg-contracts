@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.21
+  version: 0.1.0-tracer.22
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -664,6 +664,27 @@ paths:
       in: path
       required: true
       schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarIncidencias
+      tags: [viajes]
+      summary: Listar incidencias del viaje (audiencia interna).
+      description: >-
+        Reenvía a `operacion.listarIncidencias`. Histórico append-only: incluye
+        incidencias `en_atencion` y `resuelta`. `tipo_interno` crudo (audiencia
+        interna); la vista curada al cliente la compone `bff` (DEC-006).
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de incidencias.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaIncidencias"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
     post:
       operationId: abrirIncidencia
       tags: [viajes]
@@ -1538,6 +1559,19 @@ components:
           format: date-time
           nullable: true
           description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+
+    PaginaIncidencias:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Incidencia"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
 
     ResolucionIncidenciaEntrada:
       type: object

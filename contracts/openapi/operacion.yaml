@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — operacion
-  version: 0.1.0-tracer.21
+  version: 0.1.0-tracer.22
   description: >-
     Progreso del viaje: creación, transiciones, asignación, bitácora,
     incidencias y auditoría. Consumido por `bff`, nunca por el frontend directo.
@@ -490,6 +490,29 @@ paths:
       in: path
       required: true
       schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarIncidencias
+      tags: [incidencias]
+      summary: Listar incidencias del viaje (ordenadas por apertura).
+      description: >-
+        Devuelve el histórico de incidencias del viaje, append-only: cada
+        incidencia conserva su apertura y, si se resolvió, su cierre. Incluye
+        tanto las `en_atencion` como las `resuelta`. `tipo_interno` es el
+        catálogo operativo interno (DEC-006): la vista curada para el cliente la
+        compone `bff`, no este contrato.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de incidencias.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaIncidencias"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
     post:
       operationId: abrirIncidencia
       tags: [incidencias]
@@ -1335,6 +1358,18 @@ components:
           format: date-time
           nullable: true
           description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+    PaginaIncidencias:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Incidencia"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
     ResolucionIncidenciaEntrada:
       type: object
       additionalProperties: false
