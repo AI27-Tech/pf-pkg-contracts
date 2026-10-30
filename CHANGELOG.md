@@ -3,6 +3,21 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-29 [tracer.26] — corrección: paginación de la conversación cliente por secuencia (E9-T8)
+
+**Resumen:** Corrige `listarMensajesViaje` (`bff.yaml`), introducida en tracer.25: se había definido con cursor opaco (`cursor` + `PaginaMensajesCliente.cursor_siguiente`), pero `mensajeria.listarMensajes` pagina **por secuencia de dominio** (`antes_de`/`despues_de`/`limite`, respuesta con `hay_mas`). El `bff` ahora refleja esa forma en vez de esconderla tras un cursor que tendría que fabricar.
+
+**Contexto:** Al implementar el reenvío del `bff` (paso B.2) se detectó el desajuste: mensajería pagina un chat por secuencia canónica a propósito (Addendum §9), para que el cliente pida "lo nuevo desde la secuencia N" con `despues_de` al reconectar (catch-up). El cursor opaco de tracer.25 ocultaba justo esa capacidad y obligaba al `bff` a codificar/decodificar secuencias. Corregir el contrato es lo correcto; no hay consumidor que romper: ningún frontend había cableado la op (grep vacío en `pf-web-frontend-client`/`internal`).
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: `listarMensajesViaje` cambia el query `cursor` por `antes_de`/`despues_de`/`limite` (mutuamente excluyentes; sin ninguno, los más recientes). `PaginaMensajesCliente` cambia `cursor_siguiente` por `hay_mas` (bool).
+- `rompimientos/v0.1.0-tracer.26.yaml`: declara la única ruptura intencional (quitar `cursor`/`cursor_siguiente` de esa ruta).
+- Clientes Go y TS regenerados. `VERSION`, 8 specs + `_comunes`, paquete TS e `INVENTARIO.md` a `0.1.0-tracer.26`.
+
+**Compatibilidad:** una ruptura intencional declarada en la allowlist de tracer.26 (ningún consumidor afectado). `lint-openapi` en verde; clientes Go compilan y pasan `go vet`.
+
+**Siguiente (fuera de esta ola):** `pf-svc-bff` sube pin a `tracer.26` y monta las tres rutas de conversación reenviando los params de paginación por secuencia tal cual (paso B.2).
+
 ## 2026-10-29 [tracer.25] — conversación del viaje para audiencia Cliente (E9-T8 / DEC-029)
 
 **Resumen:** Ola aditiva que da al portal cliente la conversación del viaje. Agrega tres operaciones en `bff.yaml` ancladas al viaje (nunca al `conversacion_id`): `obtenerConversacionViaje` (`GET /viajes/{id}/conversacion`), `listarMensajesViaje` (`GET /viajes/{id}/conversacion/mensajes`), `enviarMensajeViaje` (`POST` misma ruta). Schemas nuevos recortados: `ConversacionCliente`, `MensajeCliente`, `PaginaMensajesCliente`, `EnviarMensajeClienteEntrada`. Patrón de la familia `emergencias`: el `bff` reenvía a `mensajeria` con audiencia Cliente y recorta la vista.

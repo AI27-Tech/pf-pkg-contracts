@@ -1,0 +1,25 @@
+# =============================================================================
+# rompimientos/v0.1.0-tracer.26.yaml
+# -----------------------------------------------------------------------------
+# ALLOWLIST DE RUPTURAS INTENCIONALES de `v0.1.0-tracer.26`.
+#
+# El gate de compatibilidad falla ante CUALQUIER cambio incompatible. Esta
+# allowlist es la ÚNICA forma de que una ruptura pase, y sólo mientras `VERSION`
+# sea exactamente `v0.1.0-tracer.26`. Una ruptura no declarada aquí DEBE seguir
+# fallando. Ver la cabecera de v0.1.0-tracer.4.yaml para el contrato completo.
+# =============================================================================
+version: v0.1.0-tracer.26
+
+# --- Rupturas de OpenAPI (oasdiff). ---
+# Corrección de la paginación de la conversación cliente introducida en
+# tracer.25 (E9-T8 B.1): `listarMensajesViaje` se había definido con cursor
+# opaco (`cursor` + `cursor_siguiente`), pero `mensajeria.listarMensajes` pagina
+# por secuencia de dominio (`antes_de`/`despues_de`/`hay_mas`, Addendum §9 de
+# mensajería) para permitir el catch-up tras reconexión del chat. El bff debe
+# reflejar esa forma, no esconderla tras un cursor que tendría que fabricar.
+# Ruptura segura: tracer.25 se publicó sin que ningún frontend cableara la op
+# (grep vacío en pf-web-frontend-client/internal al corregir).
+openapi:
+  - servicio: bff
+    match: "GET /api/v1/viajes/{id}/conversacion/mensajes"
+    fuente: E9-T8 B.1 — paginación de chat por secuencia (Addendum §9 mensajería); corrige el cursor opaco de tracer.25

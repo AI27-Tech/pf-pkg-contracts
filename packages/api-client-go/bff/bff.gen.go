@@ -530,11 +530,11 @@ type PaginaIncidencias struct {
 	Items           []Incidencia `json:"items"`
 }
 
-// PaginaMensajesCliente defines model for PaginaMensajesCliente.
+// PaginaMensajesCliente Página de la historia de mensajes, paginada por secuencia de dominio (espejo de `mensajeria.listarMensajes`). No usa cursor opaco: un chat se recorre por `secuencia` para permitir el catch-up tras reconexión con `despues_de` (Addendum §9 de mensajería).
 type PaginaMensajesCliente struct {
-	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más.
-	CursorSiguiente *string          `json:"cursor_siguiente"`
-	Items           []MensajeCliente `json:"items"`
+	// HayMas true si hay más mensajes en la dirección pedida.
+	HayMas bool             `json:"hay_mas"`
+	Items  []MensajeCliente `json:"items"`
 }
 
 // PaginaUnidades defines model for PaginaUnidades.
@@ -744,7 +744,12 @@ type ListarBitacoraParams struct {
 
 // ListarMensajesViajeParams defines parameters for ListarMensajesViaje.
 type ListarMensajesViajeParams struct {
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	// AntesDe Devuelve mensajes con secuencia menor a este valor.
+	AntesDe *int64 `form:"antes_de,omitempty" json:"antes_de,omitempty"`
+
+	// DespuesDe Devuelve mensajes con secuencia mayor a este valor.
+	DespuesDe *int64 `form:"despues_de,omitempty" json:"despues_de,omitempty"`
+	Limite    *int   `form:"limite,omitempty" json:"limite,omitempty"`
 }
 
 // ListarEstadiasParams defines parameters for ListarEstadias.
@@ -2206,9 +2211,41 @@ func NewListarMensajesViajeRequest(server string, id Id, params *ListarMensajesV
 	if params != nil {
 		queryValues := queryURL.Query()
 
-		if params.Cursor != nil {
+		if params.AntesDe != nil {
 
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "antes_de", runtime.ParamLocationQuery, *params.AntesDe); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.DespuesDe != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "despues_de", runtime.ParamLocationQuery, *params.DespuesDe); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limite != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limite", runtime.ParamLocationQuery, *params.Limite); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err

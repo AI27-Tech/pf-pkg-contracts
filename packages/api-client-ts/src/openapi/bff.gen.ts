@@ -335,7 +335,7 @@ export interface paths {
         };
         /**
          * Listar los mensajes de la conversación del viaje (audiencia cliente).
-         * @description Reenvía a `mensajeria.listarMensajes` con audiencia Cliente. Historia por secuencia de dominio; el cliente nunca ve `actor_real` ni el rol interno: solo `de_cliente` (true = cliente, false = AI27, alias "AI27 Operations").
+         * @description Reenvía a `mensajeria.listarMensajes` con audiencia Cliente. Historia por secuencia de dominio; el cliente nunca ve `actor_real` ni el rol interno: solo `de_cliente` (true = cliente, false = AI27, alias "AI27 Operations"). Se pagina por secuencia, no por cursor opaco: `antes_de` lee la historia hacia atrás y `despues_de` recupera lo nuevo tras reconexión (catch-up, Addendum §9 de mensajería). Son mutuamente excluyentes; sin ninguno, devuelve los más recientes.
          */
         get: operations["listarMensajesViaje"];
         put?: never;
@@ -790,10 +790,11 @@ export interface components {
             /** @description true si lo escribió el cliente; false si lo escribió AI27. */
             de_cliente: boolean;
         };
+        /** @description Página de la historia de mensajes, paginada por secuencia de dominio (espejo de `mensajeria.listarMensajes`). No usa cursor opaco: un chat se recorre por `secuencia` para permitir el catch-up tras reconexión con `despues_de` (Addendum §9 de mensajería). */
         PaginaMensajesCliente: {
             items: components["schemas"]["MensajeCliente"][];
-            /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
-            cursor_siguiente: string | null;
+            /** @description true si hay más mensajes en la dirección pedida. */
+            hay_mas: boolean;
         };
         /** @description Cuerpo del envío del cliente. `client_message_id` es la clave de idempotencia que genera el cliente (E3-T2). No lleva `version_reclamo_esperada` ni `motivo_override` (superficie interna). */
         EnviarMensajeClienteEntrada: {
@@ -1637,7 +1638,11 @@ export interface operations {
     listarMensajesViaje: {
         parameters: {
             query?: {
-                cursor?: components["schemas"]["Cursor"];
+                /** @description Devuelve mensajes con secuencia menor a este valor. */
+                antes_de?: number;
+                /** @description Devuelve mensajes con secuencia mayor a este valor. */
+                despues_de?: number;
+                limite?: number;
             };
             header?: never;
             path: {
