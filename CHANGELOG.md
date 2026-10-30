@@ -3,6 +3,28 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-29 [tracer.24] — motivo de cierre tipado y códigos de 409 del cierre (E8-T14 / DEC-113)
+
+**Resumen:** Ola aditiva que cierra el atajo del motivo de cierre y hace distinguibles los rechazos del cierre. (1) `TransicionEntrada` (operacion y bff) gana `motivo_cierre` opcional, enum `MotivoCierre` = `[normal, por_incidencia]`; sustituye el puente que leía el motivo de `causa`. Se retira `bitacora` del catálogo (DEC-113: era una cita a DEC-013 sin respaldo). (2) El 409 de `transicionarViaje` (operacion y bff) declara los códigos de máquina por causa: `transicion_no_permitida`, `cierre_anticipado_solo_por_incidencia`, `cierre_anticipado_requiere_incidencia`.
+
+**Contexto:** Brief de cierre de `pf-web-frontend-internal` (E8-T14), secciones A1 y A2. El motivo de cierre viajaba en `causa` (texto libre) por un atajo que el propio código de `operacion` marcaba; `bitacora` era un tercer motivo citado a DEC-013 sin que DEC-013 lo respalde (DEC-113 lo retira). Los distintos 409 del cierre solo se distinguían por mensaje libre.
+
+**Alcance y límite (importante):** esta ola solo DECLARA los códigos de 409 en el contrato. Emitirlos de verdad en runtime (que `operacion` pueble el código y el `bff` lo propague en vez de aplanar a `conflicto` genérico) es una tarea de plataforma aparte (A3/B1 del brief, DEC-111, diferida): requiere un código de máquina en `PlatformError`, que afecta a todos los servicios. Hasta entonces el cliente recibe `codigo: conflicto`; el contrato ya fija los nombres para cuando el runtime los emita.
+
+**Cambios:**
+- `contracts/openapi/operacion.yaml`: schema `MotivoCierre` (enum); `TransicionEntrada.motivo_cierre`; códigos de 409 en `transicionarViaje`.
+- `contracts/openapi/bff.yaml`: espejo de `MotivoCierre` + `motivo_cierre` en `TransicionEntrada`; códigos de 409 en `transicionarViaje` (la interna; `transicionarViajeCliente` no cambia).
+- Clientes Go y TS regenerados (`make generate`). `VERSION`, los 8 specs y `_comunes`, el paquete TS y el encabezado de `INVENTARIO.md` a `0.1.0-tracer.24`.
+
+**Compatibilidad:** aditivo. `motivo_cierre` es opcional; los códigos de 409 son documentación de un `Error` que ya existía. `make breaking-openapi` compatible con `tracer.23`. `lint-openapi` y `breaking-openapi` en verde; clientes Go compilan y pasan `go vet`.
+
+**Siguiente (fuera de esta ola):** `pf-svc-operacion` migra `validarCierre` a leer `motivo_cierre` y retira `bitacora` del catálogo (pasa a 400); `pf-svc-bff` sube pin y propaga el campo. Son los pasos A.2 y A.3 del plan de la Ola A.
+
+**Archivos modificados:**
+- `contracts/openapi/operacion.yaml`, `contracts/openapi/bff.yaml`, los otros seis specs y `_comunes.yaml` (solo `info.version`), `VERSION`, `contracts/events/INVENTARIO.md`
+- `packages/api-client-go/{operacion,bff}/*.gen.go`, `packages/api-client-ts/src/openapi/{operacion,bff}.gen.ts`, `packages/api-client-ts/package.json`
+- `CHANGELOG.md`
+
 ## 2026-10-29 [tracer.23] — transición del viaje para audiencia Cliente: cancelar / rechazar (E9-T7 / DEC-111)
 
 **Resumen:** Ola aditiva que da al portal cliente la única acción de escritura que le faltaba sobre el ciclo de vida del viaje: cancelar o rechazar. Agrega `transicionarViajeCliente` = `POST /api/v1/viajes/{id}/transiciones-cliente` en `bff.yaml`, reenvío a `operacion.transicionarViaje` con audiencia Cliente. Ruta y `operationId` propios (sufijo `Cliente`, patrón de la familia `emergencias`), separados de la superficie interna `transicionarViaje`. Devuelve `ViajeSeguimiento` (la vista de cliente), no `ViajeDetalle`. Reusa `TransicionEntrada`; no agrega esquemas.
