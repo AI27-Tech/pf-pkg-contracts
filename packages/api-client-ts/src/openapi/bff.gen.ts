@@ -603,12 +603,19 @@ export interface components {
             tipo: "INCIDENCIA" | "SIN_SENAL";
             abierta_en: components["schemas"]["MarcaTiempo"];
         };
+        /**
+         * @description Motivo del cierre del viaje (DEC-113). Catálogo cerrado de V1: `normal` o `por_incidencia`. Espejo de `MotivoCierre` de `operacion`.
+         * @enum {string}
+         */
+        MotivoCierre: "normal" | "por_incidencia";
         /** @description Entrada de una transición de estado. Espejo de `TransicionEntrada` de `operacion`. */
         TransicionEntrada: {
             /** @description Estado destino (token de `EstadoViaje`, ADR 19). Se valida contra la máquina de estados en `operacion`. */
             a_estado: string;
             /** @description Causa de la transición. Obligatoria cuando el destino la requiere; la validación fina vive en `operacion`. */
             causa?: string;
+            /** @description Obligatorio al transicionar a `CERRADO` (E8-T14, DEC-113); ignorado en otras aristas. La validación vive en `operacion`. */
+            motivo_cierre?: components["schemas"]["MotivoCierre"];
         };
         /** @description Entrada para fijar el ETA. Espejo de `EtaEntrada` de `operacion`. */
         EtaEntrada: {
@@ -1265,7 +1272,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
-            /** @description Transición no permitida por la máquina de estados. `codigo` de máquina `transicion_no_permitida` en el cuerpo: la UI distingue el rechazo por carrera a partir de él, no del `mensaje`. */
+            /** @description Transición no permitida. `codigo` de máquina en el cuerpo: `transicion_no_permitida` (arista inexistente o carrera), `cierre_anticipado_solo_por_incidencia` (cierre desde `EN_TRANSITO` con motivo distinto de `por_incidencia`) o `cierre_anticipado_requiere_incidencia` (cierre anticipado sin `INCIDENCIA` abierta). La UI ramifica por el `codigo`, no por el `mensaje` (DEC-020 #6 / DEC-113). */
             409: {
                 headers: {
                     [name: string]: unknown;

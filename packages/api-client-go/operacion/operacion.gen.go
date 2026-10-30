@@ -84,6 +84,12 @@ const (
 	IncidenciaActivaEstadoResuelta   IncidenciaActivaEstado = "resuelta"
 )
 
+// Defines values for MotivoCierre.
+const (
+	Normal        MotivoCierre = "normal"
+	PorIncidencia MotivoCierre = "por_incidencia"
+)
+
 // Defines values for MotivoEstadia.
 const (
 	Alimentos           MotivoEstadia = "alimentos"
@@ -412,6 +418,9 @@ type IntencionSubidaAdjuntoEntrada struct {
 // MarcaTiempo Instante en UTC, RFC 3339.
 type MarcaTiempo = time.Time
 
+// MotivoCierre Motivo del cierre del viaje (DEC-113). Catálogo cerrado de V1: `normal` (cierre tras la última parada) o `por_incidencia` (habilita el cierre anticipado, DEC-020 #6). Se retiró `bitacora` (era una cita a DEC-013 sin respaldo, DEC-113). La ventana de escritura de la conversación la decide `mensajeria` por el motivo (3 días / 6 meses, DEC-030/DEC-041).
+type MotivoCierre string
+
 // MotivoEstadia Motivo de la estadía (parada). Lista cerrada de V1; se amplía por ola aditiva si el negocio lo decide.
 type MotivoEstadia string
 
@@ -506,6 +515,9 @@ type TransicionEntrada struct {
 
 	// Causa Causa de la transición. Obligatoria cuando el destino la requiere (p. ej. motivo de rechazo, DEC-020 #2). La validación fina vive en el servicio.
 	Causa *string `json:"causa,omitempty"`
+
+	// MotivoCierre Obligatorio al transicionar a `CERRADO` (E8-T14, DEC-113); ignorado en cualquier otra arista. Sustituye el puente previo que leía el motivo de `causa`.
+	MotivoCierre *MotivoCierre `json:"motivo_cierre,omitempty"`
 }
 
 // Unidad defines model for Unidad.

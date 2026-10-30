@@ -536,11 +536,18 @@ export interface components {
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
+        /**
+         * @description Motivo del cierre del viaje (DEC-113). Catálogo cerrado de V1: `normal` (cierre tras la última parada) o `por_incidencia` (habilita el cierre anticipado, DEC-020 #6). Se retiró `bitacora` (era una cita a DEC-013 sin respaldo, DEC-113). La ventana de escritura de la conversación la decide `mensajeria` por el motivo (3 días / 6 meses, DEC-030/DEC-041).
+         * @enum {string}
+         */
+        MotivoCierre: "normal" | "por_incidencia";
         TransicionEntrada: {
             /** @description Estado destino. Se valida contra la máquina de estados. */
             a_estado: components["schemas"]["EstadoViaje"];
             /** @description Causa de la transición. Obligatoria cuando el destino la requiere (p. ej. motivo de rechazo, DEC-020 #2). La validación fina vive en el servicio. */
             causa?: string;
+            /** @description Obligatorio al transicionar a `CERRADO` (E8-T14, DEC-113); ignorado en cualquier otra arista. Sustituye el puente previo que leía el motivo de `causa`. */
+            motivo_cierre?: components["schemas"]["MotivoCierre"];
         };
         /** @description Escolta a reservar: una o más `unidades` del roster (D2). Reemplaza el par `unidad_id` + `custodios_ids`: la reserva es por unidad completa (paquete vehículo + custodios), no por recursos sueltos (ADR 31). */
         AsignacionEntrada: {
@@ -1017,7 +1024,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
-            /** @description Transición no permitida por la máquina de estados. `codigo` de máquina `transicion_no_permitida`. */
+            /** @description Transición no permitida. `codigo` de máquina en el cuerpo: `transicion_no_permitida` (la arista no existe, p. ej. el viaje ya es terminal o hay carrera); `cierre_anticipado_solo_por_incidencia` (se pidió cerrar desde `EN_TRANSITO` con un motivo distinto de `por_incidencia`); `cierre_anticipado_requiere_incidencia` (cierre anticipado sin una condición `INCIDENCIA` abierta). DEC-020 #6 / DEC-113. */
             409: {
                 headers: {
                     [name: string]: unknown;
