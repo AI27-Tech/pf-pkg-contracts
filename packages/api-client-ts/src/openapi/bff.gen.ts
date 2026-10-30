@@ -796,6 +796,11 @@ export interface components {
             estado: "abierta" | "solo_lectura" | "cerrada";
             /** @description true si AI27 marcó la conversación como atendida (DEC-014). El cliente ve el estado atendido/resuelto, no recibos de lectura individuales. */
             atendida?: boolean;
+            /**
+             * Format: int64
+             * @description Cursor de dominio del bootstrap (ADR 28 §2): secuencia canónica del último mensaje de la conversación, monotónica por conversación. El cliente abre con esta lectura y pide el catch-up con `listarMensajes?despues_de=`. No es el `seq` de transporte de `realtime`. 0 si la conversación aún no tiene mensajes.
+             */
+            ultima_secuencia: number;
         };
         /** @description Mensaje tal como lo ve el cliente. `de_cliente` distingue quién escribió; AI27 se presenta siempre con el alias "AI27 Operations" (DEC-021), nunca con el actor real ni el rol interno. */
         MensajeCliente: {

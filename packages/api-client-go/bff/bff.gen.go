@@ -196,6 +196,9 @@ type ConversacionCliente struct {
 	// Estado Ciclo de vida de la conversación. `solo_lectura` tras vencer la ventana de escritura del cierre del viaje (DEC-030/DEC-041).
 	Estado ConversacionClienteEstado `json:"estado"`
 
+	// UltimaSecuencia Cursor de dominio del bootstrap (ADR 28 §2): secuencia canónica del último mensaje de la conversación, monotónica por conversación. El cliente abre con esta lectura y pide el catch-up con `listarMensajes?despues_de=`. No es el `seq` de transporte de `realtime`. 0 si la conversación aún no tiene mensajes.
+	UltimaSecuencia int64 `json:"ultima_secuencia"`
+
 	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.
 	ViajeId Id `json:"viaje_id"`
 }
