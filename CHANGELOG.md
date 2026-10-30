@@ -3,6 +3,31 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-29 [tracer.25] — conversación del viaje para audiencia Cliente (E9-T8 / DEC-029)
+
+**Resumen:** Ola aditiva que da al portal cliente la conversación del viaje. Agrega tres operaciones en `bff.yaml` ancladas al viaje (nunca al `conversacion_id`): `obtenerConversacionViaje` (`GET /viajes/{id}/conversacion`), `listarMensajesViaje` (`GET /viajes/{id}/conversacion/mensajes`), `enviarMensajeViaje` (`POST` misma ruta). Schemas nuevos recortados: `ConversacionCliente`, `MensajeCliente`, `PaginaMensajesCliente`, `EnviarMensajeClienteEntrada`. Patrón de la familia `emergencias`: el `bff` reenvía a `mensajeria` con audiencia Cliente y recorta la vista.
+
+**Contexto:** Solicitud de `pf-web-frontend-client` (E9-T8), decidida en DEC-029 (chat por viaje), DEC-021 (alias "AI27 Operations", nunca el actor real) y DEC-014 (el cliente ve atendido/resuelto, no recibos individuales). El servicio ya monta los GET de lectura (`mensajeria` B.0); esta ola proyecta la superficie de cliente al `bff`.
+
+**Forma de la vista de cliente:**
+- `MensajeCliente` expone `id`, `secuencia` (dominio), `cuerpo`, `enviado_en`, `de_cliente` (bool). NUNCA `actor_real`, rol interno, reclamo ni alias crudo: AI27 se presenta como "AI27 Operations" del lado del frontend (DEC-021).
+- `ConversacionCliente` expone `viaje_id`, `estado` (`abierta`/`solo_lectura`/`cerrada`) y `atendida` (bool, DEC-014). Sin `conversacion_id`, bandeja, reclamo ni pool.
+- Envío idempotente por `client_message_id`; sin `version_reclamo_esperada` ni `motivo_override` (superficie interna).
+- `409 conversacion_solo_lectura` al enviar tras vencer la ventana del cierre (DEC-030/DEC-041). SSE fuera de alcance (V1 = HTTP + polling).
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: tres rutas bajo `/api/v1/viajes/{id}/conversacion[...]`; schemas `ConversacionCliente`, `MensajeCliente`, `PaginaMensajesCliente`, `EnviarMensajeClienteEntrada`. `mensajeria.yaml` sin cambios (la superficie interna ya existe; B.0 montó sus GET en el servicio).
+- Clientes Go y TS regenerados. `VERSION`, 8 specs + `_comunes`, paquete TS e `INVENTARIO.md` a `0.1.0-tracer.25`.
+
+**Compatibilidad:** aditivo. `make breaking-openapi` compatible con `tracer.24`. `lint-openapi` y `breaking-openapi` en verde; clientes Go compilan y pasan `go vet`.
+
+**Siguiente (fuera de esta ola):** `pf-svc-bff` sube pin a `tracer.25` y monta las tres rutas (check de audiencia Cliente + reenvío a `mensajeria` + recorte al schema de cliente). Es el paso B.2.
+
+**Archivos modificados:**
+- `contracts/openapi/bff.yaml`, los otros siete specs y `_comunes.yaml` (solo `info.version`), `VERSION`, `contracts/events/INVENTARIO.md`
+- `packages/api-client-go/bff/bff.gen.go`, `packages/api-client-ts/src/openapi/bff.gen.ts`, `packages/api-client-ts/package.json`
+- `CHANGELOG.md`
+
 ## 2026-10-29 [tracer.24] — motivo de cierre tipado y códigos de 409 del cierre (E8-T14 / DEC-113)
 
 **Resumen:** Ola aditiva que cierra el atajo del motivo de cierre y hace distinguibles los rechazos del cierre. (1) `TransicionEntrada` (operacion y bff) gana `motivo_cierre` opcional, enum `MotivoCierre` = `[normal, por_incidencia]`; sustituye el puente que leía el motivo de `causa`. Se retira `bitacora` del catálogo (DEC-113: era una cita a DEC-013 sin respaldo). (2) El 409 de `transicionarViaje` (operacion y bff) declara los códigos de máquina por causa: `transicion_no_permitida`, `cierre_anticipado_solo_por_incidencia`, `cierre_anticipado_requiere_incidencia`.

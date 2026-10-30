@@ -302,6 +302,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/viajes/{id}/conversacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Obtener la conversación del viaje (audiencia cliente).
+         * @description Reenvía a `mensajeria.obtenerConversacion` con audiencia Cliente, resolviendo la conversación por el viaje. Vista mínima del cliente: sin bandeja, reclamo, pool ni actor interno.
+         */
+        get: operations["obtenerConversacionViaje"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/conversacion/mensajes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Listar los mensajes de la conversación del viaje (audiencia cliente).
+         * @description Reenvía a `mensajeria.listarMensajes` con audiencia Cliente. Historia por secuencia de dominio; el cliente nunca ve `actor_real` ni el rol interno: solo `de_cliente` (true = cliente, false = AI27, alias "AI27 Operations").
+         */
+        get: operations["listarMensajesViaje"];
+        put?: never;
+        /**
+         * Enviar un mensaje a la conversación del viaje (audiencia cliente).
+         * @description Reenvía a `mensajeria.enviarMensaje` con audiencia Cliente. Idempotente por `client_message_id` (reintentar el mismo devuelve el mensaje original). El cliente no envía `version_reclamo_esperada` ni `motivo_override` (son de la superficie interna).
+         */
+        post: operations["enviarMensajeViaje"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clientes": {
         parameters: {
             query?: never;
@@ -717,6 +765,41 @@ export interface components {
         };
         NotaEmergenciaClienteEntrada: {
             cuerpo: string;
+        };
+        /** @description Conversación del viaje tal como la ve el cliente: el viaje al que pertenece, su estado de ciclo de vida y si AI27 ya la atendió. Sin `conversacion_id`, bandeja, reclamo ni actor interno. */
+        ConversacionCliente: {
+            viaje_id: components["schemas"]["Id"];
+            /**
+             * @description Ciclo de vida de la conversación. `solo_lectura` tras vencer la ventana de escritura del cierre del viaje (DEC-030/DEC-041).
+             * @enum {string}
+             */
+            estado: "abierta" | "solo_lectura" | "cerrada";
+            /** @description true si AI27 marcó la conversación como atendida (DEC-014). El cliente ve el estado atendido/resuelto, no recibos de lectura individuales. */
+            atendida?: boolean;
+        };
+        /** @description Mensaje tal como lo ve el cliente. `de_cliente` distingue quién escribió; AI27 se presenta siempre con el alias "AI27 Operations" (DEC-021), nunca con el actor real ni el rol interno. */
+        MensajeCliente: {
+            id: components["schemas"]["Id"];
+            /**
+             * Format: int64
+             * @description Secuencia canónica de dominio por conversación; ordena en pantalla. No es el `seq` de transporte de `realtime`.
+             */
+            secuencia: number;
+            cuerpo: string;
+            enviado_en: components["schemas"]["MarcaTiempo"];
+            /** @description true si lo escribió el cliente; false si lo escribió AI27. */
+            de_cliente: boolean;
+        };
+        PaginaMensajesCliente: {
+            items: components["schemas"]["MensajeCliente"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
+            cursor_siguiente: string | null;
+        };
+        /** @description Cuerpo del envío del cliente. `client_message_id` es la clave de idempotencia que genera el cliente (E3-T2). No lleva `version_reclamo_esperada` ni `motivo_override` (superficie interna). */
+        EnviarMensajeClienteEntrada: {
+            cuerpo: string;
+            /** @description Generado por el cliente; clave de idempotencia del envío. */
+            client_message_id: components["schemas"]["Id"];
         };
         /** @description Escolta a reservar: una o más `unidades` del roster. La reserva es por unidad completa (paquete vehículo + custodios), no por recursos sueltos (ADR 31). Espejo de `AsignacionEntrada` de `operacion`. */
         AsignacionEntrada: {
@@ -1516,6 +1599,106 @@ export interface operations {
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
             /** @description `codigo` de máquina `emergencia_cerrada`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    obtenerConversacionViaje: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversación del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversacionCliente"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    listarMensajesViaje: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de mensajes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaMensajesCliente"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    enviarMensajeViaje: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnviarMensajeClienteEntrada"];
+            };
+        };
+        responses: {
+            /** @description Reintento idempotente; mensaje original. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MensajeCliente"];
+                };
+            };
+            /** @description Mensaje creado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MensajeCliente"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description La conversación no admite escritura (venció la ventana tras el cierre del viaje, DEC-030/DEC-041). `codigo` de máquina `conversacion_solo_lectura`. */
             409: {
                 headers: {
                     [name: string]: unknown;
