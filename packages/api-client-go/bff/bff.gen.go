@@ -537,6 +537,13 @@ type PaginaMensajesCliente struct {
 	Items  []MensajeCliente `json:"items"`
 }
 
+// PaginaTiposServicio defines model for PaginaTiposServicio.
+type PaginaTiposServicio struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string               `json:"cursor_siguiente"`
+	Items           []TipoServicioCliente `json:"items"`
+}
+
 // PaginaUnidades defines model for PaginaUnidades.
 type PaginaUnidades struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
@@ -580,6 +587,15 @@ type Sesion struct {
 
 	// SesionId Identificador único (UUID). Nunca un correlativo expuesto.
 	SesionId Id `json:"sesion_id"`
+}
+
+// TipoServicioCliente Tipo de servicio seleccionable en el wizard de solicitud. Vista mínima del valor de catálogo: `codigo` (el que se manda en `tipo_servicio` al crear) y `etiqueta` (lo que se muestra). Sin `estado` ni `version`: el BFF ya filtró a los `activo`.
+type TipoServicioCliente struct {
+	// Codigo Código estable del valor; es lo que el cliente envía en tipo_servicio.
+	Codigo string `json:"codigo"`
+
+	// Etiqueta Etiqueta legible para el selector.
+	Etiqueta string `json:"etiqueta"`
 }
 
 // Tracto Tracto del cliente, texto libre. Espejo de `Tracto` de `operacion` (DEC-104
@@ -715,6 +731,11 @@ type Prohibido = Error
 
 // SolicitudInvalida defines model for SolicitudInvalida.
 type SolicitudInvalida = Error
+
+// ListarTiposServicioParams defines parameters for ListarTiposServicio.
+type ListarTiposServicioParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
 
 // ListarClientesParams defines parameters for ListarClientes.
 type ListarClientesParams struct {
@@ -886,6 +907,9 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// ListarTiposServicio request
+	ListarTiposServicio(ctx context.Context, params *ListarTiposServicioParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarClientes request
 	ListarClientes(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1015,6 +1039,18 @@ type ClientInterface interface {
 	TransicionarViajeClienteWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	TransicionarViajeCliente(ctx context.Context, id Id, body TransicionarViajeClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) ListarTiposServicio(ctx context.Context, params *ListarTiposServicioParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarTiposServicioRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) ListarClientes(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1603,6 +1639,55 @@ func (c *Client) TransicionarViajeCliente(ctx context.Context, id Id, body Trans
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewListarTiposServicioRequest generates requests for ListarTiposServicio
+func NewListarTiposServicioRequest(server string, params *ListarTiposServicioParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalogos/tipos-servicio")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewListarClientesRequest generates requests for ListarClientes
@@ -3146,6 +3231,9 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// ListarTiposServicioWithResponse request
+	ListarTiposServicioWithResponse(ctx context.Context, params *ListarTiposServicioParams, reqEditors ...RequestEditorFn) (*ListarTiposServicioResponse, error)
+
 	// ListarClientesWithResponse request
 	ListarClientesWithResponse(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*ListarClientesResponse, error)
 
@@ -3275,6 +3363,30 @@ type ClientWithResponsesInterface interface {
 	TransicionarViajeClienteWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransicionarViajeClienteResponse, error)
 
 	TransicionarViajeClienteWithResponse(ctx context.Context, id Id, body TransicionarViajeClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeClienteResponse, error)
+}
+
+type ListarTiposServicioResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaTiposServicio
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarTiposServicioResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarTiposServicioResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type ListarClientesResponse struct {
@@ -4082,6 +4194,15 @@ func (r TransicionarViajeClienteResponse) StatusCode() int {
 	return 0
 }
 
+// ListarTiposServicioWithResponse request returning *ListarTiposServicioResponse
+func (c *ClientWithResponses) ListarTiposServicioWithResponse(ctx context.Context, params *ListarTiposServicioParams, reqEditors ...RequestEditorFn) (*ListarTiposServicioResponse, error) {
+	rsp, err := c.ListarTiposServicio(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarTiposServicioResponse(rsp)
+}
+
 // ListarClientesWithResponse request returning *ListarClientesResponse
 func (c *ClientWithResponses) ListarClientesWithResponse(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*ListarClientesResponse, error) {
 	rsp, err := c.ListarClientes(ctx, params, reqEditors...)
@@ -4504,6 +4625,46 @@ func (c *ClientWithResponses) TransicionarViajeClienteWithResponse(ctx context.C
 		return nil, err
 	}
 	return ParseTransicionarViajeClienteResponse(rsp)
+}
+
+// ParseListarTiposServicioResponse parses an HTTP response from a ListarTiposServicioWithResponse call
+func ParseListarTiposServicioResponse(rsp *http.Response) (*ListarTiposServicioResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarTiposServicioResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaTiposServicio
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseListarClientesResponse parses an HTTP response from a ListarClientesWithResponse call

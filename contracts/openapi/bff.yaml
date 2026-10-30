@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.27
+  version: 0.1.0-tracer.28
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -724,7 +724,38 @@ paths:
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
   # ---------------------------------------------------------------------------
-  # Asignación de la escolta y roster de unidades (E8-T10 / E1-HU-004).
+  # Catálogo de tipos de servicio para el wizard de solicitud del cliente
+  # (E9-T4 / E1-HU-001). Proyección espejo de `catalogos.listarValoresCatalogo`
+  # para el único tipo que el portal cliente necesita: `tipos_servicio`
+  # (DEC-017: rutas/marcas/kit son texto libre, no catálogo). El `bff` NO expone
+  # el `{tipo}` genérico al cliente: las otras familias (zonas_riesgo, etc.) son
+  # operativas internas y no deben llegar al portal. Devuelve SOLO los valores
+  # `activo` (un valor inactivo no es seleccionable), mismo criterio que
+  # `listarClientes`. El cliente elige el `codigo` y lo manda en `tipo_servicio`
+  # al crear el viaje.
+  # ---------------------------------------------------------------------------
+  /api/v1/catalogos/tipos-servicio:
+    get:
+      operationId: listarTiposServicio
+      tags: [viajes]
+      summary: Listar los tipos de servicio seleccionables (audiencia cliente).
+      description: >-
+        Reenvía a `catalogos.listarValoresCatalogo` con `tipo=tipos_servicio` y
+        recorta a la vista mínima del selector: `codigo` y `etiqueta` de los
+        valores `activo`. Paginado por cursor.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de tipos de servicio seleccionables.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaTiposServicio"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
   # Proyección espejo de `operacion` (asignarRecursos, listarUnidades): mismos
   # verbos, rutas y formas, expuestos por la puerta única del `bff`. El frontend
   # interno habla sólo con el `bff` y no puede llamar a `operacion` directo. El
@@ -1694,6 +1725,36 @@ components:
         items:
           type: array
           items: {$ref: "#/components/schemas/Cliente"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    TipoServicioCliente:
+      type: object
+      additionalProperties: false
+      required: [codigo, etiqueta]
+      description: >-
+        Tipo de servicio seleccionable en el wizard de solicitud. Vista mínima
+        del valor de catálogo: `codigo` (el que se manda en `tipo_servicio` al
+        crear) y `etiqueta` (lo que se muestra). Sin `estado` ni `version`: el
+        BFF ya filtró a los `activo`.
+      properties:
+        codigo:
+          type: string
+          description: Código estable del valor; es lo que el cliente envía en tipo_servicio.
+        etiqueta:
+          type: string
+          description: Etiqueta legible para el selector.
+
+    PaginaTiposServicio:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/TipoServicioCliente"}
         cursor_siguiente:
           type: string
           nullable: true
