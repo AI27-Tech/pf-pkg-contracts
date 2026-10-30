@@ -3,6 +3,16 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026:10:30 12:45 — corrección: `check-tags.sh` acepta tags Go ligeros
+
+**Resumen:** El check del tag del módulo Go (`--verificar-tag-go`) consultaba al origen sólo la ref pelada `^{}`, que únicamente resuelve tags **anotados**. Cuando el paso de publicación salta la creación del tag porque ya existe en el origen como tag **ligero** (creado fuera de banda), el check lo daba por inexistente y fallaba. Así reventó el job `publicar` de `v0.1.0-tracer.26` (su tag Go `packages/api-client-go/v0.1.0-tracer.26` era ligero), aunque el tag apuntaba al commit correcto del release.
+
+**Cambios:**
+- `scripts/check-tags.sh`: la consulta a `git ls-remote` pide ambas refs (plano y `^{}`) y `awk 'END{print}'` toma la pelada si existe (anotado) o la plana si no (ligero). El check pasa con cualquiera de los dos tipos de tag.
+
+**Archivos modificados:**
+- `scripts/check-tags.sh`
+
 ## 2026-10-29 [tracer.26] — corrección: paginación de la conversación cliente por secuencia (E9-T8)
 
 **Resumen:** Corrige `listarMensajesViaje` (`bff.yaml`), introducida en tracer.25: se había definido con cursor opaco (`cursor` + `PaginaMensajesCliente.cursor_siguiente`), pero `mensajeria.listarMensajes` pagina **por secuencia de dominio** (`antes_de`/`despues_de`/`limite`, respuesta con `hay_mas`). El `bff` ahora refleja esa forma en vez de esconderla tras un cursor que tendría que fabricar.
