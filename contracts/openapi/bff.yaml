@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.23
+  version: 0.1.0-tracer.24
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -315,9 +315,13 @@ paths:
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "409":
           description: >-
-            Transición no permitida por la máquina de estados. `codigo` de
-            máquina `transicion_no_permitida` en el cuerpo: la UI distingue el
-            rechazo por carrera a partir de él, no del `mensaje`.
+            Transición no permitida. `codigo` de máquina en el cuerpo:
+            `transicion_no_permitida` (arista inexistente o carrera),
+            `cierre_anticipado_solo_por_incidencia` (cierre desde `EN_TRANSITO`
+            con motivo distinto de `por_incidencia`) o
+            `cierre_anticipado_requiere_incidencia` (cierre anticipado sin
+            `INCIDENCIA` abierta). La UI ramifica por el `codigo`, no por el
+            `mensaje` (DEC-020 #6 / DEC-113).
           content:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
@@ -1101,6 +1105,13 @@ components:
           description: Condición ortogonal al progreso. Nunca es un estado.
         abierta_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
 
+    MotivoCierre:
+      type: string
+      description: >-
+        Motivo del cierre del viaje (DEC-113). Catálogo cerrado de V1: `normal` o
+        `por_incidencia`. Espejo de `MotivoCierre` de `operacion`.
+      enum: [normal, por_incidencia]
+
     TransicionEntrada:
       type: object
       additionalProperties: false
@@ -1117,6 +1128,11 @@ components:
           description: >-
             Causa de la transición. Obligatoria cuando el destino la requiere;
             la validación fina vive en `operacion`.
+        motivo_cierre:
+          allOf: [{$ref: "#/components/schemas/MotivoCierre"}]
+          description: >-
+            Obligatorio al transicionar a `CERRADO` (E8-T14, DEC-113); ignorado en
+            otras aristas. La validación vive en `operacion`.
 
     EtaEntrada:
       type: object

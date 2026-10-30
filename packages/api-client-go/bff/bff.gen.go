@@ -73,6 +73,12 @@ const (
 	Resuelta   IncidenciaCuradaEstado = "resuelta"
 )
 
+// Defines values for MotivoCierre.
+const (
+	Normal        MotivoCierre = "normal"
+	PorIncidencia MotivoCierre = "por_incidencia"
+)
+
 // Defines values for MotivoEstadia.
 const (
 	Alimentos           MotivoEstadia = "alimentos"
@@ -432,6 +438,9 @@ type IncidenciaEntrada struct {
 // MarcaTiempo Instante en UTC, RFC 3339.
 type MarcaTiempo = time.Time
 
+// MotivoCierre Motivo del cierre del viaje (DEC-113). Catálogo cerrado de V1: `normal` o `por_incidencia`. Espejo de `MotivoCierre` de `operacion`.
+type MotivoCierre string
+
 // MotivoEstadia Motivo de la estadía. Espejo de `MotivoEstadia` de `operacion`.
 type MotivoEstadia string
 
@@ -536,6 +545,9 @@ type TransicionEntrada struct {
 
 	// Causa Causa de la transición. Obligatoria cuando el destino la requiere; la validación fina vive en `operacion`.
 	Causa *string `json:"causa,omitempty"`
+
+	// MotivoCierre Obligatorio al transicionar a `CERRADO` (E8-T14, DEC-113); ignorado en otras aristas. La validación vive en `operacion`.
+	MotivoCierre *MotivoCierre `json:"motivo_cierre,omitempty"`
 }
 
 // Unidad Unidad del roster tal como la expone `operacion`. Espejo de `Unidad` de `operacion`.
