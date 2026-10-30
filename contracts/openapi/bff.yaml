@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.24
+  version: 0.1.0-tracer.25
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -569,6 +569,109 @@ paths:
           content:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  # ---------------------------------------------------------------------------
+  # Conversación del viaje para audiencia CLIENTE (E9-T8 / E3-HU-014 / DEC-029).
+  # El portal cliente habla solo con el `bff`. Ruta anclada al VIAJE, nunca al
+  # `conversacion_id` (el cliente navega por viaje; la conversación se crea
+  # dirigida por el evento del viaje, E3-T1). Patrón de la familia `emergencias`:
+  # el `bff` reenvía a `mensajeria` con audiencia Cliente y recorta a un schema
+  # `*Cliente` propio, que NUNCA expone `actor_real`, rol interno, reclamo,
+  # bandeja ni pool (DEC-021: el cliente ve el alias "AI27 Operations", no al
+  # operador real). El cliente ve el estado "atendido/resuelto" (DEC-014), no
+  # recibos de lectura individuales. Entrega viva (SSE) fuera de alcance: V1 es
+  # lectura HTTP + polling.
+  # ---------------------------------------------------------------------------
+  /api/v1/viajes/{id}/conversacion:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerConversacionViaje
+      tags: [conversacion]
+      summary: Obtener la conversación del viaje (audiencia cliente).
+      description: >-
+        Reenvía a `mensajeria.obtenerConversacion` con audiencia Cliente,
+        resolviendo la conversación por el viaje. Vista mínima del cliente: sin
+        bandeja, reclamo, pool ni actor interno.
+      responses:
+        "200":
+          description: Conversación del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ConversacionCliente"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/viajes/{id}/conversacion/mensajes:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarMensajesViaje
+      tags: [conversacion]
+      summary: Listar los mensajes de la conversación del viaje (audiencia cliente).
+      description: >-
+        Reenvía a `mensajeria.listarMensajes` con audiencia Cliente. Historia por
+        secuencia de dominio; el cliente nunca ve `actor_real` ni el rol interno:
+        solo `de_cliente` (true = cliente, false = AI27, alias "AI27 Operations").
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de mensajes.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaMensajesCliente"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    post:
+      operationId: enviarMensajeViaje
+      tags: [conversacion]
+      summary: Enviar un mensaje a la conversación del viaje (audiencia cliente).
+      description: >-
+        Reenvía a `mensajeria.enviarMensaje` con audiencia Cliente. Idempotente
+        por `client_message_id` (reintentar el mismo devuelve el mensaje
+        original). El cliente no envía `version_reclamo_esperada` ni
+        `motivo_override` (son de la superficie interna).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EnviarMensajeClienteEntrada"}
+      responses:
+        "201":
+          description: Mensaje creado.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MensajeCliente"}
+        "200":
+          description: Reintento idempotente; mensaje original.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MensajeCliente"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            La conversación no admite escritura (venció la ventana tras el cierre
+            del viaje, DEC-030/DEC-041). `codigo` de máquina
+            `conversacion_solo_lectura`.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
 
   # ---------------------------------------------------------------------------
   # Selector de cliente para la creación de viaje por Operación (E8-T11 /
@@ -1336,6 +1439,84 @@ components:
           type: string
           minLength: 1
           maxLength: 1000
+
+    # --- Conversación del viaje para el cliente (E9-T8). Vista mínima: nunca
+    #     expone actor_real, rol interno, reclamo, bandeja ni pool. Recorte del
+    #     `bff` sobre `mensajeria.Conversacion`/`Mensaje` (DEC-021/DEC-014). ---
+    ConversacionCliente:
+      type: object
+      additionalProperties: false
+      required: [viaje_id, estado]
+      description: >-
+        Conversación del viaje tal como la ve el cliente: el viaje al que
+        pertenece, su estado de ciclo de vida y si AI27 ya la atendió. Sin
+        `conversacion_id`, bandeja, reclamo ni actor interno.
+      properties:
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        estado:
+          type: string
+          enum: [abierta, solo_lectura, cerrada]
+          description: >-
+            Ciclo de vida de la conversación. `solo_lectura` tras vencer la
+            ventana de escritura del cierre del viaje (DEC-030/DEC-041).
+        atendida:
+          type: boolean
+          description: >-
+            true si AI27 marcó la conversación como atendida (DEC-014). El cliente
+            ve el estado atendido/resuelto, no recibos de lectura individuales.
+
+    MensajeCliente:
+      type: object
+      additionalProperties: false
+      required: [id, secuencia, cuerpo, enviado_en, de_cliente]
+      description: >-
+        Mensaje tal como lo ve el cliente. `de_cliente` distingue quién escribió;
+        AI27 se presenta siempre con el alias "AI27 Operations" (DEC-021), nunca
+        con el actor real ni el rol interno.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        secuencia:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Secuencia canónica de dominio por conversación; ordena en pantalla.
+            No es el `seq` de transporte de `realtime`.
+        cuerpo: {type: string}
+        enviado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        de_cliente:
+          type: boolean
+          description: true si lo escribió el cliente; false si lo escribió AI27.
+
+    PaginaMensajesCliente:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/MensajeCliente"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no hay más.
+
+    EnviarMensajeClienteEntrada:
+      type: object
+      additionalProperties: false
+      required: [cuerpo, client_message_id]
+      description: >-
+        Cuerpo del envío del cliente. `client_message_id` es la clave de
+        idempotencia que genera el cliente (E3-T2). No lleva
+        `version_reclamo_esperada` ni `motivo_override` (superficie interna).
+      properties:
+        cuerpo:
+          type: string
+          minLength: 1
+        client_message_id:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/Id"}]
+          description: Generado por el cliente; clave de idempotencia del envío.
+
 
     # --- Asignación de la escolta y roster (E8-T10). Espejo de las formas de
     #     `operacion` (AsignacionEntrada, Asignacion, UnidadAsignada,
