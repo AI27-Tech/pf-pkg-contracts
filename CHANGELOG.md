@@ -3,6 +3,24 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-30 [tracer.28] — tipos de servicio para el wizard de solicitud del cliente (E9-T4)
+
+**Para quién:** el portal cliente (`pf-web-frontend-client`), que ya puede poblar el selector de tipo de servicio del wizard de solicitud (E1-HU-001) desde el `bff`, sin llamar a `catalogos` directo.
+
+**Resumen:** ola aditiva en `bff.yaml`. Agrega `GET /api/v1/catalogos/tipos-servicio` (`listarTiposServicio`), proyección espejo de `catalogos.listarValoresCatalogo` para el único tipo que el portal cliente necesita: `tipos_servicio`. Schemas nuevos recortados: `TipoServicioCliente` (`codigo`, `etiqueta`) y `PaginaTiposServicio`.
+
+**Decisiones de forma:**
+- El `bff` NO expone el `{tipo}` genérico al cliente. De las cinco familias del enum `TipoCatalogo`, solo `tipos_servicio` es de cara al cliente; las otras (`zonas_riesgo`, etc.) son operativas internas y no deben llegar al portal. Por DEC-017, rutas/marcas/kit son texto libre, no catálogo.
+- Vista mínima: `codigo` y `etiqueta`, sin `estado` ni `version`. El `bff` filtra a los `activo` al reenviar (un valor inactivo no es seleccionable), mismo criterio que `listarClientes`.
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: ruta `listarTiposServicio`; schemas `TipoServicioCliente`, `PaginaTiposServicio`.
+- Clientes Go y TS regenerados. `VERSION`, 8 specs + `_comunes`, paquete TS e `INVENTARIO.md` a `0.1.0-tracer.28`.
+
+**Compatibilidad:** aditivo. `breaking-openapi` compatible con `tracer.27`; `lint-openapi` en verde; clientes Go compilan y pasan `go vet`.
+
+**Siguiente (fuera de esta ola):** `pf-svc-bff` sube pin a `tracer.28` y monta la ruta (reenvío a `catalogos.listarValoresCatalogo` con `tipo=tipos_servicio`, filtro a activos, recorte a la vista de cliente).
+
 ## 2026:10:30 13:10 [tracer.27] — republicación de tracer.26 (el release de .26 quedó a medias)
 
 **Resumen:** Ola de republicación: sube la versión contractual a `0.1.0-tracer.27` sin cambiar ninguna superficie. El job `publicar` de `tracer.26` falló antes de publicar el paquete npm, el GitHub Release y los contract tests (murió en el check del tag Go, corregido aparte). Los tags de `.26` quedaron en el origen pero el release quedó a medias y una prerelease es inmutable (no se recrea: así se retiraron tracer.1 y .2). `.27` reempaqueta el mismo árbol de contrato bajo un número publicable y limpio.

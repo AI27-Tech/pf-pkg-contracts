@@ -370,6 +370,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/catalogos/tipos-servicio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar los tipos de servicio seleccionables (audiencia cliente).
+         * @description Reenvía a `catalogos.listarValoresCatalogo` con `tipo=tipos_servicio` y recorta a la vista mínima del selector: `codigo` y `etiqueta` de los valores `activo`. Paginado por cursor.
+         */
+        get: operations["listarTiposServicio"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/viajes/{id}/asignacion": {
         parameters: {
             query?: never;
@@ -874,6 +894,18 @@ export interface components {
         };
         PaginaClientes: {
             items: components["schemas"]["Cliente"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
+        };
+        /** @description Tipo de servicio seleccionable en el wizard de solicitud. Vista mínima del valor de catálogo: `codigo` (el que se manda en `tipo_servicio` al crear) y `etiqueta` (lo que se muestra). Sin `estado` ni `version`: el BFF ya filtró a los `activo`. */
+        TipoServicioCliente: {
+            /** @description Código estable del valor; es lo que el cliente envía en tipo_servicio. */
+            codigo: string;
+            /** @description Etiqueta legible para el selector. */
+            etiqueta: string;
+        };
+        PaginaTiposServicio: {
+            items: components["schemas"]["TipoServicioCliente"][];
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
@@ -1732,6 +1764,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginaClientes"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    listarTiposServicio: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de tipos de servicio seleccionables. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaTiposServicio"];
                 };
             };
             401: components["responses"]["NoAutorizado"];
