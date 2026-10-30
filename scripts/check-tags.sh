@@ -87,7 +87,11 @@ if [ "$verificar_tag_go" -eq 1 ]; then
   sha_ref="$(git rev-parse "$REF^{commit}")"
   # Se consulta al ORIGEN: en el job publicar el tag lo acaba de crear el paso
   # anterior empujándolo, y el clon del runner no lo tiene en sus refs locales.
-  sha_tag="$(git ls-remote --tags origin "refs/tags/${tag_prefijado}^{}" 2>/dev/null | awk '{print $1}')"
+  # Se piden ambas refs (plano y pelado `^{}`) porque `^{}` sólo resuelve tags
+  # ANOTADOS; un tag ligero creado fuera de banda no tiene ref pelada y el check
+  # lo daba por inexistente (así falló tracer.26). `END{print}` toma la línea
+  # pelada cuando existe (anotado, apunta al commit) y la plana si no (ligero).
+  sha_tag="$(git ls-remote --tags origin "refs/tags/${tag_prefijado}" "refs/tags/${tag_prefijado}^{}" 2>/dev/null | awk 'END{print $1}')"
   if [ -z "$sha_tag" ]; then
     echo "  FALTA  el tag $tag_prefijado no existe en el origen"
     fallos=1
