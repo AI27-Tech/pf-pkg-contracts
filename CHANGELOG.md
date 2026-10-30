@@ -3,6 +3,26 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026:10:30 13:10 [tracer.27] — republicación de tracer.26 (el release de .26 quedó a medias)
+
+**Resumen:** Ola de republicación: sube la versión contractual a `0.1.0-tracer.27` sin cambiar ninguna superficie. El job `publicar` de `tracer.26` falló antes de publicar el paquete npm, el GitHub Release y los contract tests (murió en el check del tag Go, corregido aparte). Los tags de `.26` quedaron en el origen pero el release quedó a medias y una prerelease es inmutable (no se recrea: así se retiraron tracer.1 y .2). `.27` reempaqueta el mismo árbol de contrato bajo un número publicable y limpio.
+
+**Contexto:** `.26` traía la paginación por secuencia de la conversación cliente (E9-T8); ese contenido ya está en `-m`. `.27` no agrega superficie: su único diff contra `.26` es el número de versión, así que el breaking check contra la línea base `tracer.26` sale "compatible" y no necesita archivo en `rompimientos/`. Gonzalo, que esperaba `.26`, fija `.27`.
+
+**Cambios:**
+- `VERSION` y `packages/api-client-ts/package.json` a `0.1.0-tracer.27`.
+- `version:` de los 8 specs OpenAPI (`_comunes`, bff, catalogos, identidad, mensajeria, operacion, realtime, reportes) y el encabezado de `contracts/events/INVENTARIO.md` a `0.1.0-tracer.27`.
+- Clientes Go y TS regenerados (`make generate`): sólo cambia la cadena de versión embebida.
+
+**Compatibilidad:** sin rupturas contra `tracer.26` (`breaking-openapi` en verde, "compatible"). Ningún consumidor afectado.
+
+**Archivos modificados:**
+- `VERSION`
+- `packages/api-client-ts/package.json`
+- `contracts/openapi/_comunes.yaml`, `bff.yaml`, `catalogos.yaml`, `identidad.yaml`, `mensajeria.yaml`, `operacion.yaml`, `realtime.yaml`, `reportes.yaml`
+- `contracts/events/INVENTARIO.md`
+- artefactos regenerados en `packages/api-client-go/` y `packages/api-client-ts/`
+
 ## 2026:10:30 12:45 — corrección: `check-tags.sh` acepta tags Go ligeros
 
 **Resumen:** El check del tag del módulo Go (`--verificar-tag-go`) consultaba al origen sólo la ref pelada `^{}`, que únicamente resuelve tags **anotados**. Cuando el paso de publicación salta la creación del tag porque ya existe en el origen como tag **ligero** (creado fuera de banda), el check lo daba por inexistente y fallaba. Así reventó el job `publicar` de `v0.1.0-tracer.26` (su tag Go `packages/api-client-go/v0.1.0-tracer.26` era ligero), aunque el tag apuntaba al commit correcto del release.
