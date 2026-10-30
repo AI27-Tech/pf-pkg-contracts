@@ -3,6 +3,24 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-30 [tracer.29] — cursor de dominio en el bootstrap de la conversación del cliente (E9-T8, ADR 28 §2)
+
+**Para quién:** el portal cliente (`pf-web-frontend-client`), que al abrir una conversación recibe ahora el cursor con el que pedir el catch-up, sin derivarlo del último mensaje listado.
+
+**Resumen:** ola aditiva en `bff.yaml`. Agrega `ultima_secuencia` al schema `ConversacionCliente`, el cursor de dominio que ADR 28 §2 exige en la respuesta de bootstrap. El cliente abre la conversación (`obtenerConversacion` → `ultima_secuencia`) y pide los posteriores con `listarMensajes?despues_de=`. Es el mismo patrón que la vista interna de `mensajeria` ya tenía (`Conversacion.UltimaSecuencia`), ahora proyectado también a la vista de cliente, que lo recortaba.
+
+**Decisiones de forma:**
+- `ultima_secuencia` entra en `required`: un cursor que a veces falta no es un cursor confiable, y `mensajeria` siempre lo calcula (0 si la conversación no tiene mensajes). `breaking-openapi` lo considera compatible porque es un campo de respuesta (solo el servidor lo produce; un cliente que lo ignora no se rompe).
+- Es el gap de §2 que la opción A de DT-01 cierra. El push vivo por SSE (opción C) sigue en `docs/DEUDA-TECNICA.md`.
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: campo `ultima_secuencia` (int64, cursor de dominio) en `ConversacionCliente`, agregado a `required`.
+- Clientes Go y TS regenerados. `VERSION`, 8 specs + `_comunes`, paquete TS e `INVENTARIO.md` a `0.1.0-tracer.29`.
+
+**Compatibilidad:** aditivo. `breaking-openapi` compatible con `tracer.28`; `lint-openapi` en verde; clientes Go compilan y pasan `go vet`.
+
+**Siguiente (fuera de esta ola):** `pf-svc-bff` sube pin a `tracer.29` y mapea `c.UltimaSecuencia` en `aConversacionCliente`.
+
 ## 2026-10-30 [tracer.28] — tipos de servicio para el wizard de solicitud del cliente (E9-T4)
 
 **Para quién:** el portal cliente (`pf-web-frontend-client`), que ya puede poblar el selector de tipo de servicio del wizard de solicitud (E1-HU-001) desde el `bff`, sin llamar a `catalogos` directo.
