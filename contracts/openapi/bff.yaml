@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.28
+  version: 0.1.0-tracer.29
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -1491,7 +1491,7 @@ components:
     ConversacionCliente:
       type: object
       additionalProperties: false
-      required: [viaje_id, estado]
+      required: [viaje_id, estado, ultima_secuencia]
       description: >-
         Conversación del viaje tal como la ve el cliente: el viaje al que
         pertenece, su estado de ciclo de vida y si AI27 ya la atendió. Sin
@@ -1509,6 +1509,16 @@ components:
           description: >-
             true si AI27 marcó la conversación como atendida (DEC-014). El cliente
             ve el estado atendido/resuelto, no recibos de lectura individuales.
+        ultima_secuencia:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Cursor de dominio del bootstrap (ADR 28 §2): secuencia canónica del
+            último mensaje de la conversación, monotónica por conversación. El
+            cliente abre con esta lectura y pide el catch-up con
+            `listarMensajes?despues_de=`. No es el `seq` de transporte de
+            `realtime`. 0 si la conversación aún no tiene mensajes.
 
     MensajeCliente:
       type: object
