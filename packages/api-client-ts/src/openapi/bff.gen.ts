@@ -350,6 +350,209 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bandeja/trabajo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar el trabajo de la bandeja del llamante (bootstrap y catch-up).
+         * @description El `bff` resuelve la bandeja del sujeto desde los claims de la sesión (cola única e implícita, DEC-103) y reenvía a `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja. Requiere MEMBRESÍA EFECTIVA en el pool; el rol `ejecutivo` por sí solo no concede acceso (Addendum §7).
+         *     Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el CATCH-UP: devuelve los cambios de la colección posteriores a esa revisión. Si la revisión pedida quedó fuera de la ventana retenida, responde `409 stream_resync_required` y el cliente repite el bootstrap (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
+         */
+        get: operations["listarTrabajoBandeja"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversaciones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Detalle de una conversación (estado inicial para bootstrap).
+         * @description Reenvía a `mensajeria.obtenerConversacion` con audiencia Interno. Poseer el UUID no autoriza (Addendum §7): sin acceso efectivo responde 404, igual que si no existiera. `ultima_secuencia` es el cursor de dominio del bootstrap (ADR 28 §2).
+         */
+        get: operations["obtenerConversacion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversaciones/{id}/mensajes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Historia de mensajes por secuencia canónica.
+         * @description Reenvía a `mensajeria.listarMensajes` con audiencia Interno. `antes_de` pagina la historia hacia atrás; `despues_de` es la recuperación tras reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin ninguno, devuelve los más recientes. El orden es siempre por `secuencia`, nunca por `creado_en`.
+         */
+        get: operations["listarMensajes"];
+        put?: never;
+        /**
+         * Enviar un mensaje interno (idempotente por client_message_id).
+         * @description Reenvía a `mensajeria.enviarMensaje` con audiencia Interno. El interno requiere RECLAMO ACTIVO y `version_reclamo_esperada` (Addendum §7). Reintentar el mismo `client_message_id` devuelve el mensaje original con 200 y nunca crea un segundo mensaje.
+         */
+        post: operations["enviarMensaje"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversaciones/{id}/reclamos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reclamar la conversación con versión esperada.
+         * @description Reenvía a `mensajeria.reclamarConversacion`. Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo` (Addendum §4 punto 5).
+         */
+        post: operations["reclamarConversacion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversaciones/{id}/reclamos/{rid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                /** @description Identificador del reclamo. */
+                rid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Liberar el reclamo y devolver el trabajo al pool.
+         * @description Reenvía a `mensajeria.liberarReclamo`. Lo hace el responsable o un supervisor dentro de su alcance.
+         */
+        delete: operations["liberarReclamo"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversaciones/{id}/transferencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transferir la responsabilidad a otro miembro del pool.
+         * @description Reenvía a `mensajeria.transferirConversacion`. Cierra el reclamo anterior y abre el siguiente en UNA transacción: no hay ventana sin responsable ni con dos (Addendum §6).
+         */
+        post: operations["transferirConversacion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversaciones/{id}/atendida": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marcar la conversación como atendida por el responsable.
+         * @description Reenvía a `mensajeria.marcarAtendida`.
+         */
+        post: operations["marcarAtendida"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversaciones/{id}/recibos/entregado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Avanzar el cursor de entrega del llamante.
+         * @description Reenvía a `mensajeria.registrarReciboEntregado`.
+         */
+        post: operations["registrarReciboEntregado"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversaciones/{id}/recibos/leido": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Avanzar el cursor de lectura del llamante.
+         * @description Reenvía a `mensajeria.registrarReciboLeido`. Una vista incidental de un miembro no responsable no genera un "leído" visible al cliente (Addendum §8).
+         */
+        post: operations["registrarReciboLeido"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clientes": {
         parameters: {
             query?: never;
@@ -1034,6 +1237,117 @@ export interface components {
             cursor_siguiente: string | null;
         };
         /**
+         * Format: int64
+         * @description Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una versión de reclamo ni el `seq` de transporte de `realtime`.
+         */
+        SecuenciaMensaje: number;
+        /**
+         * Format: int64
+         * @description Revisión monotónica de la COLECCIÓN de trabajo de una bandeja (ADR 28 §3): avanza con cada cambio de la colección (alta, baja, reenrutamiento, reclamo, atención). Es el cursor de dominio del bootstrap y el catch-up de bandeja. No es el cursor de paginación, ni una secuencia de mensaje, ni el `seq` de transporte de `realtime`.
+         */
+        RevisionBandeja: number;
+        /**
+         * Format: int64
+         * @description Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.
+         */
+        VersionReclamo: number;
+        /**
+         * @description Audiencia de dominio del autor (DEC-054), no el claim `aud`.
+         * @enum {string}
+         */
+        Audiencia: "Cliente" | "Interno";
+        /**
+         * @description Ciclo de vida, separado del estado operativo de cola (Addendum §6). `solo_lectura` tras vencer `escritura_hasta` (DEC-030, DEC-041).
+         * @enum {string}
+         */
+        EstadoConversacion: "abierta" | "solo_lectura" | "cerrada";
+        Conversacion: {
+            id: components["schemas"]["Id"];
+            viaje_id: components["schemas"]["Id"];
+            cliente_id: components["schemas"]["Id"];
+            /**
+             * Format: uuid
+             * @description Bandeja de la ruta activa. Solo para audiencia Interno.
+             */
+            bandeja_id?: string | null;
+            estado: components["schemas"]["EstadoConversacion"];
+            /**
+             * Format: date-time
+             * @description Fin de la ventana de escritura. No es fecha de purga.
+             */
+            escritura_hasta?: string | null;
+            ultima_secuencia: components["schemas"]["SecuenciaMensaje"];
+            version_reclamo: components["schemas"]["VersionReclamo"];
+            /** @description Reclamo vigente. Solo para audiencia Interno; null si está en el pool. */
+            reclamo_activo?: components["schemas"]["Reclamo"] | null;
+            /** Format: date-time */
+            atendida_en?: string | null;
+            abierta_en: components["schemas"]["MarcaTiempo"];
+        };
+        /** @description Trabajo de una bandeja con su cursor de dominio. Declara la `revision` de la COLECCIÓN al momento de la respuesta (ADR 28 §3): es el cursor del bootstrap de bandeja y el punto desde el que `desde_revision` pide el catch-up. El cursor de paginación (`cursor_siguiente`) y el cursor de cambios (`revision`) son distintos y no se confunden. */
+        TrabajoBandeja: {
+            items: components["schemas"]["Conversacion"][];
+            /** @description Revisión de la colección que representa esta respuesta. El cliente la usa como `desde_revision` en el siguiente catch-up. */
+            revision: components["schemas"]["RevisionBandeja"];
+            /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
+            cursor_siguiente: string | null;
+        };
+        Mensaje: {
+            id: components["schemas"]["Id"];
+            conversacion_id: components["schemas"]["Id"];
+            secuencia: components["schemas"]["SecuenciaMensaje"];
+            client_message_id: components["schemas"]["Id"];
+            audiencia_autor: components["schemas"]["Audiencia"];
+            /** @description Identidad presentada (comercial de AI27 para el cliente). */
+            alias_mostrado: string;
+            /**
+             * Format: uuid
+             * @description Sujeto que escribió. Siempre se registra (Addendum §4 punto 9), pero solo se entrega a audiencia Interno.
+             */
+            actor_real?: string | null;
+            /** @description Rol del autor al enviar. Solo para audiencia Interno. */
+            rol_al_enviar?: components["schemas"]["Rol"] | null;
+            /** @description Cuerpo del mensaje. Sin edición ni borrado en V1. */
+            cuerpo: string;
+            adjuntos_ids?: components["schemas"]["Id"][];
+            creado_en: components["schemas"]["MarcaTiempo"];
+        };
+        PaginaMensajes: {
+            items: components["schemas"]["Mensaje"][];
+            /** @description true si hay más mensajes en la dirección pedida. */
+            hay_mas: boolean;
+        };
+        /** @description Envío por audiencia Interno. Es `EnviarMensajeEntrada` de `mensajeria` SIN el campo `motivo_override`: DEC-107 cerró el override de supervisor en V1, así que el `bff` no lo expone. `mensajeria` rechaza con 400 todo envío que traiga `motivo_override`. */
+        EnviarMensajeInternaEntrada: {
+            /** @description Generado por el cliente; clave de idempotencia del envío. */
+            client_message_id: components["schemas"]["Id"];
+            cuerpo: string;
+            adjuntos_ids?: components["schemas"]["Id"][];
+            /** @description Obligatoria para audiencia Interno (exige reclamo activo). */
+            version_reclamo_esperada?: components["schemas"]["VersionReclamo"];
+        };
+        Reclamo: {
+            id: components["schemas"]["Id"];
+            conversacion_id: components["schemas"]["Id"];
+            responsable_id: components["schemas"]["Id"];
+            version: components["schemas"]["VersionReclamo"];
+            abierto_en: components["schemas"]["MarcaTiempo"];
+            /** Format: date-time */
+            cerrado_en?: string | null;
+        };
+        VersionEsperadaEntrada: {
+            version_esperada: components["schemas"]["VersionReclamo"];
+        };
+        TransferenciaEntrada: {
+            version_esperada: components["schemas"]["VersionReclamo"];
+            /** @description Miembro del pool con membresía efectiva en la bandeja. */
+            responsable_destino_id: components["schemas"]["Id"];
+            motivo?: string;
+        };
+        ReciboEntrada: {
+            hasta_secuencia: components["schemas"]["SecuenciaMensaje"];
+        };
+        /**
          * Format: uuid
          * @description Identificador único (UUID). Nunca un correlativo expuesto.
          */
@@ -1059,8 +1373,31 @@ export interface components {
         };
         /** @description Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato. */
         Cursor: string;
+        /**
+         * @description Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+         * @enum {string}
+         */
+        Rol: "cliente" | "jefe_operativo" | "monitorista" | "supervisor" | "coordinador" | "ejecutivo" | "reaccion" | "administrador";
     };
     responses: {
+        /** @description La versión esperada del reclamo no coincide con la vigente. `codigo` de máquina `conflicto_version_reclamo`. */
+        ConflictoVersion: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description La `desde_revision` pedida quedó fuera de la ventana de cambios retenida de la colección: el catch-up incremental ya no es posible y el cliente debe repetir el bootstrap (ADR 28 §5). `codigo` de máquina `stream_resync_required`, el mismo que usa `realtime` ante una línea no reanudable; la respuesta no distingue la causa. */
+        ResyncRequerido: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description La petición no cumple el contrato (validación de cuerpo o parámetros). */
         SolicitudInvalida: {
             headers: {
@@ -1749,6 +2086,306 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    listarTrabajoBandeja: {
+        parameters: {
+            query?: {
+                /** @description Cursor de paginación. No es el cursor de cambios de ADR 28. */
+                cursor?: components["schemas"]["Cursor"];
+                /** @description Catch-up: devuelve los cambios de la colección con revisión mayor a este valor. Es la `revision` de una respuesta previa, no el cursor de paginación. */
+                desde_revision?: components["schemas"]["RevisionBandeja"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trabajo de la bandeja con la revisión de la colección. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrabajoBandeja"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            409: components["responses"]["ResyncRequerido"];
+        };
+    };
+    obtenerConversacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversación. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conversacion"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    listarMensajes: {
+        parameters: {
+            query?: {
+                /** @description Devuelve mensajes con secuencia menor a este valor. */
+                antes_de?: components["schemas"]["SecuenciaMensaje"];
+                /** @description Devuelve mensajes con secuencia mayor a este valor. */
+                despues_de?: components["schemas"]["SecuenciaMensaje"];
+                limite?: number;
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mensajes en orden ascendente de secuencia. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaMensajes"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    enviarMensaje: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnviarMensajeInternaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Reintento idempotente; mensaje original. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Mensaje"];
+                };
+            };
+            /** @description Mensaje creado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Mensaje"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina `conflicto_version_reclamo` (otro reclamo ganó o la versión cambió) o `conversacion_solo_lectura` (venció `escritura_hasta`, DEC-030/DEC-041). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    reclamarConversacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionEsperadaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Reclamo abierto. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reclamo"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    liberarReclamo: {
+        parameters: {
+            query: {
+                version_esperada: components["schemas"]["VersionReclamo"];
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                /** @description Identificador del reclamo. */
+                rid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reclamo liberado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    transferirConversacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferenciaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Reclamo nuevo del responsable destino. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reclamo"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    marcarAtendida: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionEsperadaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Conversación atendida. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    registrarReciboEntregado: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReciboEntrada"];
+            };
+        };
+        responses: {
+            /** @description Cursor avanzado (o sin cambio si ya estaba más adelante). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    registrarReciboLeido: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReciboEntrada"];
+            };
+        };
+        responses: {
+            /** @description Cursor avanzado (o sin cambio si ya estaba más adelante). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
         };
     };
     listarClientes: {

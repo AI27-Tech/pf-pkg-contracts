@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.29
+  version: 0.1.0-tracer.30
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -37,6 +37,19 @@ tags:
 - name: viajes
 - name: emergencias
 - name: descarga
+- name: bandejas
+  description: >-
+    Cola de trabajo de la bandeja compartida para audiencia interna (E8-T15 /
+    DEC-103). Proyección espejo de `mensajeria`; cola única e implícita resuelta
+    de los claims, sin `{id}` en la ruta.
+- name: conversaciones
+  description: >-
+    Superficie interna de conversación para el pool (reclamo, transferencia,
+    atención y recibos). Proyección espejo de `mensajeria` para audiencia
+    interna; expone el estado canónico, el reclamo y el actor real (DEC-006
+    invertido), a diferencia de la vista de cliente `conversacion`.
+- name: mensajes
+- name: reclamos
   description: >-
     Descarga del expediente de UN viaje para usuarios internos (E6-T3 / DEC-022
     #7). `bff` compone leyendo de `operacion` (fuente exacta y actual), no de
@@ -686,6 +699,326 @@ paths:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
 
+  # ===========================================================================
+  # SUPERFICIE INTERNA de bandeja y conversación (E8-T15, ola tracer.30).
+  # Proyección espejo de `mensajeria` por la puerta única del `bff`: el frontend
+  # interno habla SOLO con el `bff`, nunca con `mensajeria` directo. Mismos
+  # operationId, schemas y códigos de error que `mensajeria`, con el `bff`
+  # reenviando y aplicando sus guardas de alcance/rol; no añade lógica de
+  # dominio (el reclamo versionado, el orden canónico y la ventana de escritura
+  # viven en `mensajeria`). A diferencia de la familia `conversacion` de cliente
+  # —vista recortada que oculta reclamo, bandeja y actor real (DEC-006)—, esta
+  # superficie expone los schemas COMPLETOS: la audiencia interna sí ve el estado
+  # canónico, el reclamo y el actor real (DEC-006 invertido). No se proyecta
+  # `listarConversaciones` ni adjuntos ni auditoría en esta ola.
+  # ---------------------------------------------------------------------------
+  # DIVERGENCIA vs `mensajeria` (DEC-103): la cola de bandeja es ÚNICA e
+  # IMPLÍCITA. La ruta NO lleva `{id}`: el `bff` resuelve la bandeja del sujeto
+  # desde los claims de la sesión y reenvía a `mensajeria.listarTrabajoBandeja`;
+  # el frontend no pasa identificador de bandeja.
+  # ===========================================================================
+  /api/v1/bandeja/trabajo:
+    get:
+      operationId: listarTrabajoBandeja
+      tags: [bandejas]
+      summary: Listar el trabajo de la bandeja del llamante (bootstrap y catch-up).
+      description: >-
+        El `bff` resuelve la bandeja del sujeto desde los claims de la sesión
+        (cola única e implícita, DEC-103) y reenvía a
+        `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja.
+        Requiere MEMBRESÍA EFECTIVA en el pool; el rol `ejecutivo` por sí solo no
+        concede acceso (Addendum §7).
+
+        Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la
+        `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el
+        CATCH-UP: devuelve los cambios de la colección posteriores a esa
+        revisión. Si la revisión pedida quedó fuera de la ventana retenida,
+        responde `409 stream_resync_required` y el cliente repite el bootstrap
+        (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        description: Cursor de paginación. No es el cursor de cambios de ADR 28.
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      - name: desde_revision
+        in: query
+        required: false
+        description: >-
+          Catch-up: devuelve los cambios de la colección con revisión mayor a
+          este valor. Es la `revision` de una respuesta previa, no el cursor de
+          paginación.
+        schema: {$ref: "#/components/schemas/RevisionBandeja"}
+      responses:
+        "200":
+          description: Trabajo de la bandeja con la revisión de la colección.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TrabajoBandeja"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "#/components/responses/ResyncRequerido"}
+
+  /api/v1/conversaciones/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerConversacion
+      tags: [conversaciones]
+      summary: Detalle de una conversación (estado inicial para bootstrap).
+      description: >-
+        Reenvía a `mensajeria.obtenerConversacion` con audiencia Interno. Poseer
+        el UUID no autoriza (Addendum §7): sin acceso efectivo responde 404,
+        igual que si no existiera. `ultima_secuencia` es el cursor de dominio del
+        bootstrap (ADR 28 §2).
+      responses:
+        "200":
+          description: Conversación.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Conversacion"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/conversaciones/{id}/mensajes:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarMensajes
+      tags: [mensajes]
+      summary: Historia de mensajes por secuencia canónica.
+      description: >-
+        Reenvía a `mensajeria.listarMensajes` con audiencia Interno. `antes_de`
+        pagina la historia hacia atrás; `despues_de` es la recuperación tras
+        reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin
+        ninguno, devuelve los más recientes. El orden es siempre por `secuencia`,
+        nunca por `creado_en`.
+      parameters:
+      - name: antes_de
+        in: query
+        required: false
+        description: Devuelve mensajes con secuencia menor a este valor.
+        schema: {$ref: "#/components/schemas/SecuenciaMensaje"}
+      - name: despues_de
+        in: query
+        required: false
+        description: Devuelve mensajes con secuencia mayor a este valor.
+        schema: {$ref: "#/components/schemas/SecuenciaMensaje"}
+      - name: limite
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+      responses:
+        "200":
+          description: Mensajes en orden ascendente de secuencia.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaMensajes"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    post:
+      operationId: enviarMensaje
+      tags: [mensajes]
+      summary: Enviar un mensaje interno (idempotente por client_message_id).
+      description: >-
+        Reenvía a `mensajeria.enviarMensaje` con audiencia Interno. El interno
+        requiere RECLAMO ACTIVO y `version_reclamo_esperada` (Addendum §7).
+        Reintentar el mismo `client_message_id` devuelve el mensaje original con
+        200 y nunca crea un segundo mensaje.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EnviarMensajeInternaEntrada"}
+      responses:
+        "201":
+          description: Mensaje creado.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Mensaje"}
+        "200":
+          description: Reintento idempotente; mensaje original.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Mensaje"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            `codigo` de máquina `conflicto_version_reclamo` (otro reclamo ganó
+            o la versión cambió) o `conversacion_solo_lectura` (venció
+            `escritura_hasta`, DEC-030/DEC-041).
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/conversaciones/{id}/reclamos:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: reclamarConversacion
+      tags: [reclamos]
+      summary: Reclamar la conversación con versión esperada.
+      description: >-
+        Reenvía a `mensajeria.reclamarConversacion`. Dos reclamos concurrentes
+        producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo`
+        (Addendum §4 punto 5).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/VersionEsperadaEntrada"}
+      responses:
+        "201":
+          description: Reclamo abierto.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Reclamo"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/conversaciones/{id}/reclamos/{rid}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    - name: rid
+      in: path
+      required: true
+      description: Identificador del reclamo.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    delete:
+      operationId: liberarReclamo
+      tags: [reclamos]
+      summary: Liberar el reclamo y devolver el trabajo al pool.
+      description: >-
+        Reenvía a `mensajeria.liberarReclamo`. Lo hace el responsable o un
+        supervisor dentro de su alcance.
+      parameters:
+      - name: version_esperada
+        in: query
+        required: true
+        schema: {$ref: "#/components/schemas/VersionReclamo"}
+      responses:
+        "204": {description: Reclamo liberado.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/conversaciones/{id}/transferencias:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: transferirConversacion
+      tags: [reclamos]
+      summary: Transferir la responsabilidad a otro miembro del pool.
+      description: >-
+        Reenvía a `mensajeria.transferirConversacion`. Cierra el reclamo anterior
+        y abre el siguiente en UNA transacción: no hay ventana sin responsable ni
+        con dos (Addendum §6).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TransferenciaEntrada"}
+      responses:
+        "201":
+          description: Reclamo nuevo del responsable destino.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Reclamo"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/conversaciones/{id}/atendida:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: marcarAtendida
+      tags: [reclamos]
+      summary: Marcar la conversación como atendida por el responsable.
+      description: Reenvía a `mensajeria.marcarAtendida`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/VersionEsperadaEntrada"}
+      responses:
+        "204": {description: Conversación atendida.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ConflictoVersion"}
+
+  /api/v1/conversaciones/{id}/recibos/entregado:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: registrarReciboEntregado
+      tags: [mensajes]
+      summary: Avanzar el cursor de entrega del llamante.
+      description: Reenvía a `mensajeria.registrarReciboEntregado`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ReciboEntrada"}
+      responses:
+        "204": {description: Cursor avanzado (o sin cambio si ya estaba más adelante).}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/conversaciones/{id}/recibos/leido:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: registrarReciboLeido
+      tags: [mensajes]
+      summary: Avanzar el cursor de lectura del llamante.
+      description: >-
+        Reenvía a `mensajeria.registrarReciboLeido`. Una vista incidental de un
+        miembro no responsable no genera un "leído" visible al cliente
+        (Addendum §8).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ReciboEntrada"}
+      responses:
+        "204": {description: Cursor avanzado (o sin cambio si ya estaba más adelante).}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   # ---------------------------------------------------------------------------
   # Selector de cliente para la creación de viaje por Operación (E8-T11 /
@@ -1076,6 +1409,26 @@ paths:
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
 components:
+  responses:
+    ConflictoVersion:
+      description: >-
+        La versión esperada del reclamo no coincide con la vigente. `codigo` de
+        máquina `conflicto_version_reclamo`.
+      content:
+        application/json:
+          schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+    ResyncRequerido:
+      description: >-
+        La `desde_revision` pedida quedó fuera de la ventana de cambios retenida
+        de la colección: el catch-up incremental ya no es posible y el cliente
+        debe repetir el bootstrap (ADR 28 §5). `codigo` de máquina
+        `stream_resync_required`, el mismo que usa `realtime` ante una línea no
+        reanudable; la respuesta no distingue la causa.
+      content:
+        application/json:
+          schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
   schemas:
     CredencialesEntrada:
       type: object
@@ -2005,3 +2358,213 @@ components:
           type: string
           nullable: true
           description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    # -------------------------------------------------------------------------
+    # Schemas de la SUPERFICIE INTERNA de bandeja y conversación (E8-T15,
+    # tracer.30). Copiados EXACTOS de `mensajeria.yaml`: ambos specs comparten
+    # `_comunes.yaml`, así que los `$ref` a Id/MarcaTiempo/Rol se mantienen. La
+    # audiencia interna ve los schemas COMPLETOS (bandeja_id, reclamo_activo,
+    # actor_real, rol_al_enviar), a diferencia de las vistas `*Cliente`
+    # (DEC-006 invertido). `EnviarMensajeInternaEntrada` es la única divergencia.
+    # -------------------------------------------------------------------------
+    SecuenciaMensaje:
+      type: integer
+      format: int64
+      minimum: 0
+      description: >-
+        Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una
+        versión de reclamo ni el `seq` de transporte de `realtime`.
+
+    RevisionBandeja:
+      type: integer
+      format: int64
+      minimum: 0
+      description: >-
+        Revisión monotónica de la COLECCIÓN de trabajo de una bandeja (ADR 28
+        §3): avanza con cada cambio de la colección (alta, baja, reenrutamiento,
+        reclamo, atención). Es el cursor de dominio del bootstrap y el catch-up
+        de bandeja. No es el cursor de paginación, ni una secuencia de mensaje,
+        ni el `seq` de transporte de `realtime`.
+
+    VersionReclamo:
+      type: integer
+      format: int64
+      minimum: 0
+      description: >-
+        Versión del reclamo de la conversación (concurrencia optimista). 0 si
+        nunca se ha reclamado. No es una secuencia de mensaje.
+
+    Audiencia:
+      type: string
+      description: Audiencia de dominio del autor (DEC-054), no el claim `aud`.
+      enum: [Cliente, Interno]
+
+    EstadoConversacion:
+      type: string
+      description: >-
+        Ciclo de vida, separado del estado operativo de cola (Addendum §6).
+        `solo_lectura` tras vencer `escritura_hasta` (DEC-030, DEC-041).
+      enum: [abierta, solo_lectura, cerrada]
+
+    Conversacion:
+      type: object
+      additionalProperties: false
+      required: [id, viaje_id, cliente_id, estado, ultima_secuencia, version_reclamo, abierta_en]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        bandeja_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Bandeja de la ruta activa. Solo para audiencia Interno.
+        estado: {$ref: "#/components/schemas/EstadoConversacion"}
+        escritura_hasta:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fin de la ventana de escritura. No es fecha de purga.
+        ultima_secuencia: {$ref: "#/components/schemas/SecuenciaMensaje"}
+        version_reclamo: {$ref: "#/components/schemas/VersionReclamo"}
+        reclamo_activo:
+          allOf: [$ref: "#/components/schemas/Reclamo"]
+          nullable: true
+          description: Reclamo vigente. Solo para audiencia Interno; null si está en el pool.
+        atendida_en:
+          type: string
+          format: date-time
+          nullable: true
+        abierta_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    TrabajoBandeja:
+      type: object
+      additionalProperties: false
+      required: [items, revision, cursor_siguiente]
+      description: >-
+        Trabajo de una bandeja con su cursor de dominio. Declara la `revision` de
+        la COLECCIÓN al momento de la respuesta (ADR 28 §3): es el cursor del
+        bootstrap de bandeja y el punto desde el que `desde_revision` pide el
+        catch-up. El cursor de paginación (`cursor_siguiente`) y el cursor de
+        cambios (`revision`) son distintos y no se confunden.
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Conversacion"}
+        revision:
+          allOf: [{$ref: "#/components/schemas/RevisionBandeja"}]
+          description: >-
+            Revisión de la colección que representa esta respuesta. El cliente la
+            usa como `desde_revision` en el siguiente catch-up.
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no hay más.
+
+    Mensaje:
+      type: object
+      additionalProperties: false
+      required: [id, conversacion_id, secuencia, client_message_id, audiencia_autor, alias_mostrado, cuerpo, creado_en]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        conversacion_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        secuencia: {$ref: "#/components/schemas/SecuenciaMensaje"}
+        client_message_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        audiencia_autor: {$ref: "#/components/schemas/Audiencia"}
+        alias_mostrado:
+          type: string
+          description: Identidad presentada (comercial de AI27 para el cliente).
+        actor_real:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Sujeto que escribió. Siempre se registra (Addendum §4 punto 9),
+            pero solo se entrega a audiencia Interno.
+        rol_al_enviar:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Rol"]
+          nullable: true
+          description: Rol del autor al enviar. Solo para audiencia Interno.
+        cuerpo:
+          type: string
+          description: Cuerpo del mensaje. Sin edición ni borrado en V1.
+        adjuntos_ids:
+          type: array
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        creado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    PaginaMensajes:
+      type: object
+      additionalProperties: false
+      required: [items, hay_mas]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Mensaje"}
+        hay_mas:
+          type: boolean
+          description: true si hay más mensajes en la dirección pedida.
+
+    EnviarMensajeInternaEntrada:
+      type: object
+      additionalProperties: false
+      required: [client_message_id, cuerpo]
+      description: >-
+        Envío por audiencia Interno. Es `EnviarMensajeEntrada` de `mensajeria`
+        SIN el campo `motivo_override`: DEC-107 cerró el override de supervisor
+        en V1, así que el `bff` no lo expone. `mensajeria` rechaza con 400 todo
+        envío que traiga `motivo_override`.
+      properties:
+        client_message_id:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
+          description: Generado por el cliente; clave de idempotencia del envío.
+        cuerpo:
+          type: string
+          minLength: 1
+        adjuntos_ids:
+          type: array
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version_reclamo_esperada:
+          allOf: [$ref: "#/components/schemas/VersionReclamo"]
+          description: Obligatoria para audiencia Interno (exige reclamo activo).
+
+    Reclamo:
+      type: object
+      additionalProperties: false
+      required: [id, conversacion_id, responsable_id, version, abierto_en]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        conversacion_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        responsable_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version: {$ref: "#/components/schemas/VersionReclamo"}
+        abierto_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        cerrado_en:
+          type: string
+          format: date-time
+          nullable: true
+
+    VersionEsperadaEntrada:
+      type: object
+      additionalProperties: false
+      required: [version_esperada]
+      properties:
+        version_esperada: {$ref: "#/components/schemas/VersionReclamo"}
+
+    TransferenciaEntrada:
+      type: object
+      additionalProperties: false
+      required: [version_esperada, responsable_destino_id]
+      properties:
+        version_esperada: {$ref: "#/components/schemas/VersionReclamo"}
+        responsable_destino_id:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
+          description: Miembro del pool con membresía efectiva en la bandeja.
+        motivo:
+          type: string
+
+    ReciboEntrada:
+      type: object
+      additionalProperties: false
+      required: [hasta_secuencia]
+      properties:
+        hasta_secuencia: {$ref: "#/components/schemas/SecuenciaMensaje"}
