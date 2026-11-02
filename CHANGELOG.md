@@ -3,6 +3,28 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026:11:02 16:52 [tracer.32] — republicación de tracer.31 (el paquete TS de .30 y .31 no se publicó)
+
+**Para quién:** los consumidores TS de `@ai27-tech/contracts` (portal interno), que no podían instalar los tipos de `tracer.30`/`tracer.31`. Deben fijar `0.1.0-tracer.32`. Los consumidores Go **no** necesitan subir pin: `tracer.30` y `tracer.31` siguen válidos para Go (ambos tags, raíz y `packages/api-client-go/`, existen sobre el mismo commit).
+
+**Resumen:** el job `publicar` de `v0.1.0-tracer.30` y `v0.1.0-tracer.31` falló en "Verificar que el tag coincide con VERSION": `packages/api-client-ts/package.json` se quedó en `0.1.0-tracer.29` (el bump es manual y en esas dos olas se omitió el archivo). El paquete npm de .30 y .31 nunca se publicó. Los tags publicados son inmutables (precedente DEC-114: tracer.26 retirado, tracer.27 republicado), así que no se mueven ni se recrean: `tracer.32` reempaqueta la misma superficie de `tracer.31` con `package.json` alineado. Para TS, .30 y .31 quedan retirados de facto.
+
+**Cambios:**
+- `VERSION`, `packages/api-client-ts/package.json`, el `version:` de los 8 specs OpenAPI y el encabezado de `contracts/events/INVENTARIO.md` (que se había quedado en `tracer.30`) a `0.1.0-tracer.32`. Sin cambios de superficie: el diff contra `tracer.31` es sólo la cadena de versión; `make generate` no produce diferencias en los clientes.
+- Nuevo `scripts/check-version-ts.sh` (objetivo `make check-version-ts`): la comprobación VERSION ↔ `package.json` que sólo vivía en `publicar` se extrajo a un script y ahora la llama también `verificar`, en cada PR, antes de que exista el tag. `publicar` llama al mismo script.
+
+**Compatibilidad:** sin rupturas contra `tracer.31` (`breaking-openapi` compatible). Go: sin acción. TS: fijar `tracer.32`.
+
+**Archivos modificados:**
+- `VERSION`
+- `packages/api-client-ts/package.json`
+- `contracts/openapi/_comunes.yaml`, `bff.yaml`, `catalogos.yaml`, `identidad.yaml`, `mensajeria.yaml`, `operacion.yaml`, `realtime.yaml`, `reportes.yaml`
+- `contracts/events/INVENTARIO.md`
+- `scripts/check-version-ts.sh` (nuevo)
+- `Makefile`
+- `.github/workflows/contracts.yml`
+- `CHANGELOG.md`
+
 ## 2026-10-30 [tracer.31] — bandeja del pool sin `{id}` en `mensajeria` (E8-T15, DEC-103)
 
 **Para quién:** el `bff` (y a través de él, el portal interno), que ya expone `GET /api/v1/bandeja/trabajo` sin `{id}` pero no tenía una operación de `mensajeria` a la que reenviar: `listarTrabajoBandeja` exige el `{id}` de la bandeja y el `bff` no tiene de dónde sacarlo (cola única, DEC-103; los claims no traen `bandeja_id`, DEC-053). Cierra el hueco de E8-T15 (opción A).
