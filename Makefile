@@ -140,6 +140,10 @@ verify: lint check-estados check-registro check-tags ## Verificación estática 
 contract-tests: ## Contract tests del repo (consumidor limpio + consistencia del registro)
 	./scripts/contract-tests.sh
 
+.PHONY: check-version-ts
+check-version-ts: ## Falla si VERSION no coincide con la versión de packages/api-client-ts/package.json
+	./scripts/check-version-ts.sh
+
 .PHONY: check-ts-exports
 check-ts-exports: ## Empaqueta el paquete npm y resuelve cada subpath de 'exports' desde el tarball
 	./scripts/check-ts-exports.sh
