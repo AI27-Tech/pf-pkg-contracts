@@ -422,6 +422,15 @@ type ListarAuditoriaConversacionParams struct {
 	Cursor *CursorPagina `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListarTrabajoMiBandejaParams defines parameters for ListarTrabajoMiBandeja.
+type ListarTrabajoMiBandejaParams struct {
+	// Cursor Cursor de paginación. No es el cursor de cambios de ADR 28.
+	Cursor *CursorPagina `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// DesdeRevision Catch-up: devuelve los cambios de la colección con revisión mayor a este valor. Es la `revision` de una respuesta previa, no el cursor de paginación.
+	DesdeRevision *RevisionBandeja `form:"desde_revision,omitempty" json:"desde_revision,omitempty"`
+}
+
 // ListarTrabajoBandejaParams defines parameters for ListarTrabajoBandeja.
 type ListarTrabajoBandejaParams struct {
 	// Cursor Cursor de paginación. No es el cursor de cambios de ADR 28.
@@ -569,6 +578,9 @@ type ClientInterface interface {
 	// ListarAuditoriaConversacion request
 	ListarAuditoriaConversacion(ctx context.Context, id IdRuta, params *ListarAuditoriaConversacionParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListarTrabajoMiBandeja request
+	ListarTrabajoMiBandeja(ctx context.Context, params *ListarTrabajoMiBandejaParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarTrabajoBandeja request
 	ListarTrabajoBandeja(ctx context.Context, id IdRuta, params *ListarTrabajoBandejaParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -656,6 +668,18 @@ type ClientInterface interface {
 
 func (c *Client) ListarAuditoriaConversacion(ctx context.Context, id IdRuta, params *ListarAuditoriaConversacionParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarAuditoriaConversacionRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarTrabajoMiBandeja(ctx context.Context, params *ListarTrabajoMiBandejaParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarTrabajoMiBandejaRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1082,6 +1106,71 @@ func NewListarAuditoriaConversacionRequest(server string, id IdRuta, params *Lis
 		if params.Cursor != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListarTrabajoMiBandejaRequest generates requests for ListarTrabajoMiBandeja
+func NewListarTrabajoMiBandejaRequest(server string, params *ListarTrabajoMiBandejaParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/bandeja/trabajo")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.DesdeRevision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "desde_revision", runtime.ParamLocationQuery, *params.DesdeRevision); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -2187,6 +2276,9 @@ type ClientWithResponsesInterface interface {
 	// ListarAuditoriaConversacionWithResponse request
 	ListarAuditoriaConversacionWithResponse(ctx context.Context, id IdRuta, params *ListarAuditoriaConversacionParams, reqEditors ...RequestEditorFn) (*ListarAuditoriaConversacionResponse, error)
 
+	// ListarTrabajoMiBandejaWithResponse request
+	ListarTrabajoMiBandejaWithResponse(ctx context.Context, params *ListarTrabajoMiBandejaParams, reqEditors ...RequestEditorFn) (*ListarTrabajoMiBandejaResponse, error)
+
 	// ListarTrabajoBandejaWithResponse request
 	ListarTrabajoBandejaWithResponse(ctx context.Context, id IdRuta, params *ListarTrabajoBandejaParams, reqEditors ...RequestEditorFn) (*ListarTrabajoBandejaResponse, error)
 
@@ -2291,6 +2383,32 @@ func (r ListarAuditoriaConversacionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ListarAuditoriaConversacionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarTrabajoMiBandejaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TrabajoBandeja
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *ResyncRequerido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarTrabajoMiBandejaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarTrabajoMiBandejaResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2817,6 +2935,15 @@ func (c *ClientWithResponses) ListarAuditoriaConversacionWithResponse(ctx contex
 	return ParseListarAuditoriaConversacionResponse(rsp)
 }
 
+// ListarTrabajoMiBandejaWithResponse request returning *ListarTrabajoMiBandejaResponse
+func (c *ClientWithResponses) ListarTrabajoMiBandejaWithResponse(ctx context.Context, params *ListarTrabajoMiBandejaParams, reqEditors ...RequestEditorFn) (*ListarTrabajoMiBandejaResponse, error) {
+	rsp, err := c.ListarTrabajoMiBandeja(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarTrabajoMiBandejaResponse(rsp)
+}
+
 // ListarTrabajoBandejaWithResponse request returning *ListarTrabajoBandejaResponse
 func (c *ClientWithResponses) ListarTrabajoBandejaWithResponse(ctx context.Context, id IdRuta, params *ListarTrabajoBandejaParams, reqEditors ...RequestEditorFn) (*ListarTrabajoBandejaResponse, error) {
 	rsp, err := c.ListarTrabajoBandeja(ctx, id, params, reqEditors...)
@@ -3134,6 +3261,60 @@ func ParseListarAuditoriaConversacionResponse(rsp *http.Response) (*ListarAudito
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarTrabajoMiBandejaResponse parses an HTTP response from a ListarTrabajoMiBandejaWithResponse call
+func ParseListarTrabajoMiBandejaResponse(rsp *http.Response) (*ListarTrabajoMiBandejaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarTrabajoMiBandejaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TrabajoBandeja
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ResyncRequerido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

@@ -28,7 +28,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — mensajeria
-  version: 0.1.0-tracer.30
+  version: 0.1.0-tracer.31
   description: >-
     Conversación de negocio entre el cliente y la bandeja compartida de AI27:
     enrutamiento, reclamo versionado, orden canónico de mensajes, recibos,
@@ -54,6 +54,46 @@ tags:
 - name: auditoria
 
 paths:
+  # Bandeja del pool del sujeto, SIN {id} (E8-T15, DEC-103: cola única e
+  # implícita). Resuelve la bandeja de chat del sujeto por su membresía efectiva
+  # del token; el llamante no nombra bandeja. Es la ruta que consume el `bff`
+  # (que expone `/api/v1/bandeja/trabajo` sin `{id}`): el frontend interno no
+  # codifica un identificador de bandeja. La ruta con `{id}` de abajo coexiste
+  # para usos administrativos (listar una bandeja nombrada).
+  /api/v1/bandeja/trabajo:
+    get:
+      operationId: listarTrabajoMiBandeja
+      tags: [bandejas]
+      summary: Listar el trabajo de la bandeja del sujeto (bootstrap y catch-up).
+      description: >-
+        Igual que `listarTrabajoBandeja` pero SIN `{id}`: `mensajeria` resuelve
+        la bandeja de chat del sujeto desde su MEMBRESÍA EFECTIVA del pool
+        (cola única e implícita, DEC-103). Si el sujeto no pertenece a ningún
+        pool de chat, responde `404` (no tiene bandeja), igual que una bandeja
+        inexistente. El rol `ejecutivo` por sí solo no basta: la autoridad es la
+        membresía (Addendum §7). `desde_revision` y `cursor` funcionan igual que
+        en la ruta con `{id}`; el `409 stream_resync_required` también.
+      parameters:
+      - {$ref: "#/components/parameters/CursorPagina"}
+      - name: desde_revision
+        in: query
+        required: false
+        description: >-
+          Catch-up: devuelve los cambios de la colección con revisión mayor a
+          este valor. Es la `revision` de una respuesta previa, no el cursor de
+          paginación.
+        schema: {$ref: "#/components/schemas/RevisionBandeja"}
+      responses:
+        "200":
+          description: Trabajo de la bandeja del sujeto con la revisión de la colección.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TrabajoBandeja"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ResyncRequerido"}
+
   /api/v1/bandejas/{id}/trabajo:
     parameters:
     - {$ref: "#/components/parameters/IdRuta"}

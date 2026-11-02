@@ -3,6 +3,23 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-30 [tracer.31] — bandeja del pool sin `{id}` en `mensajeria` (E8-T15, DEC-103)
+
+**Para quién:** el `bff` (y a través de él, el portal interno), que ya expone `GET /api/v1/bandeja/trabajo` sin `{id}` pero no tenía una operación de `mensajeria` a la que reenviar: `listarTrabajoBandeja` exige el `{id}` de la bandeja y el `bff` no tiene de dónde sacarlo (cola única, DEC-103; los claims no traen `bandeja_id`, DEC-053). Cierra el hueco de E8-T15 (opción A).
+
+**Resumen:** ola aditiva en `mensajeria.yaml`. Añade `GET /api/v1/bandeja/trabajo` (`listarTrabajoMiBandeja`), hermana sin `{id}` de `listarTrabajoBandeja`: `mensajeria` resuelve la bandeja de chat del sujeto desde su membresía efectiva del pool. Mismo `TrabajoBandeja`, mismos `cursor`/`desde_revision`, mismo `409 stream_resync_required`. La ruta con `{id}` se conserva para usos administrativos. Sin schemas nuevos.
+
+**Forma:** el sujeto sin pool de chat recibe `404` (como bandeja inexistente). La autoridad sigue siendo la membresía efectiva, no el rol (Addendum §7).
+
+**Cambios:**
+- `contracts/openapi/mensajeria.yaml`: ruta y operación `listarTrabajoMiBandeja`.
+- Clientes Go y TS regenerados. `VERSION` y bump lockstep de los 8 specs a `0.1.0-tracer.31`.
+
+**Compatibilidad:** aditivo. `breaking-openapi` compatible con `tracer.30`; `lint-openapi` en verde; cliente Go compila y pasa `go vet`.
+
+**Siguiente (fuera de esta ola):** `pf-svc-mensajeria` implementa la resolución de la bandeja de chat del sujeto (query sobre `pool_membresia` ⋈ `bandeja` tipo `chat`); `pf-svc-bff` sube pin a `tracer.31` y reemplaza el stub `Roto` de `ListarTrabajoBandeja` por el reenvío a `listarTrabajoMiBandeja`.
+
+
 ## 2026-10-30 [tracer.30] — superficie interna de bandeja y conversación en el `bff` (E8-T15, DEC-103/DEC-107)
 
 **Para quién:** el portal interno (`pf-web-frontend-internal`), que ya puede atender la bandeja compartida y la conversación del pool (cola de trabajo, reclamo versionado, transferencia, atención y recibos) por la puerta única del `bff`, sin llamar a `mensajeria` directo.
