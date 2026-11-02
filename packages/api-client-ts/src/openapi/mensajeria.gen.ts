@@ -89,6 +89,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/viajes/{id}/conversacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdRuta"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Conversación de un viaje, resuelta por el id del viaje.
+         * @description `{id}` es el `viaje_id`, no el id de la conversación. Devuelve la conversación del viaje con la misma forma que `obtenerConversacion`; el `id` de la respuesta es el que usan `listarMensajes`, `enviarMensaje` y demás operaciones por conversación. Si el viaje tiene una conversación no cerrada (a lo más una por tenant y viaje, Addendum §6) se devuelve ésa; si sólo tiene conversaciones cerradas, la más reciente.
+         *     Audiencia: el Cliente del tenant dueño del viaje y los miembros internos del pool, con la misma autorización que `obtenerConversacion`. Poseer el `viaje_id` no autoriza (Addendum §7): sin acceso efectivo responde 404, igual que si el viaje todavía no tuviera conversación.
+         */
+        get: operations["obtenerConversacionDeViaje"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversaciones/{id}/mensajes": {
         parameters: {
             query?: never;
@@ -873,6 +896,30 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Conversación. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conversacion"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    obtenerConversacionDeViaje: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdRuta"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversación del viaje. */
             200: {
                 headers: {
                     [name: string]: unknown;
