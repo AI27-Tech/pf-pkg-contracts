@@ -35,6 +35,12 @@ const (
 	Vehiculo AptitudRecursoRecurso = "vehiculo"
 )
 
+// Defines values for Audiencia.
+const (
+	AudienciaCliente Audiencia = "Cliente"
+	AudienciaInterno Audiencia = "Interno"
+)
+
 // Defines values for ClienteEstado.
 const (
 	Activo   ClienteEstado = "activo"
@@ -68,6 +74,13 @@ const (
 	EmergenciaClienteEstadoResuelta   EmergenciaClienteEstado = "resuelta"
 )
 
+// Defines values for EstadoConversacion.
+const (
+	Abierta     EstadoConversacion = "abierta"
+	Cerrada     EstadoConversacion = "cerrada"
+	SoloLectura EstadoConversacion = "solo_lectura"
+)
+
 // Defines values for IncidenciaEstado.
 const (
 	IncidenciaEstadoEnAtencion IncidenciaEstado = "en_atencion"
@@ -96,6 +109,18 @@ const (
 	Reten               MotivoEstadia = "reten"
 	RevisionAutoridades MotivoEstadia = "revision_autoridades"
 	Sanitario           MotivoEstadia = "sanitario"
+)
+
+// Defines values for Rol.
+const (
+	RolAdministrador Rol = "administrador"
+	RolCliente       Rol = "cliente"
+	RolCoordinador   Rol = "coordinador"
+	RolEjecutivo     Rol = "ejecutivo"
+	RolJefeOperativo Rol = "jefe_operativo"
+	RolMonitorista   Rol = "monitorista"
+	RolReaccion      Rol = "reaccion"
+	RolSupervisor    Rol = "supervisor"
 )
 
 // Defines values for UnidadTipo.
@@ -149,6 +174,9 @@ type AsignacionEntrada struct {
 	UnidadesIds []Id `json:"unidades_ids"`
 }
 
+// Audiencia Audiencia de dominio del autor (DEC-054), no el claim `aud`.
+type Audiencia string
+
 // CierreEstadiaEntrada Cuerpo de cierre (vacío válido). Espejo de `CierreEstadiaEntrada` de `operacion`.
 type CierreEstadiaEntrada = map[string]interface{}
 
@@ -186,6 +214,40 @@ type Contenedor struct {
 	Economico *string `json:"economico,omitempty"`
 	Placas    *string `json:"placas,omitempty"`
 	Sello     *string `json:"sello,omitempty"`
+}
+
+// Conversacion defines model for Conversacion.
+type Conversacion struct {
+	// AbiertaEn Instante en UTC, RFC 3339.
+	AbiertaEn  MarcaTiempo `json:"abierta_en"`
+	AtendidaEn *time.Time  `json:"atendida_en"`
+
+	// BandejaId Bandeja de la ruta activa. Solo para audiencia Interno.
+	BandejaId *openapi_types.UUID `json:"bandeja_id"`
+
+	// ClienteId Identificador único (UUID). Nunca un correlativo expuesto.
+	ClienteId Id `json:"cliente_id"`
+
+	// EscrituraHasta Fin de la ventana de escritura. No es fecha de purga.
+	EscrituraHasta *time.Time `json:"escritura_hasta"`
+
+	// Estado Ciclo de vida, separado del estado operativo de cola (Addendum §6). `solo_lectura` tras vencer `escritura_hasta` (DEC-030, DEC-041).
+	Estado EstadoConversacion `json:"estado"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// ReclamoActivo Reclamo vigente. Solo para audiencia Interno; null si está en el pool.
+	ReclamoActivo *Reclamo `json:"reclamo_activo"`
+
+	// UltimaSecuencia Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una versión de reclamo ni el `seq` de transporte de `realtime`.
+	UltimaSecuencia SecuenciaMensaje `json:"ultima_secuencia"`
+
+	// VersionReclamo Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.
+	VersionReclamo VersionReclamo `json:"version_reclamo"`
+
+	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.
+	ViajeId Id `json:"viaje_id"`
 }
 
 // ConversacionCliente Conversación del viaje tal como la ve el cliente: el viaje al que pertenece, su estado de ciclo de vida y si AI27 ya la atendió. Sin `conversacion_id`, bandeja, reclamo ni actor interno.
@@ -323,6 +385,18 @@ type EnviarMensajeClienteEntrada struct {
 	Cuerpo          string `json:"cuerpo"`
 }
 
+// EnviarMensajeInternaEntrada Envío por audiencia Interno. Es `EnviarMensajeEntrada` de `mensajeria` SIN el campo `motivo_override`: DEC-107 cerró el override de supervisor en V1, así que el `bff` no lo expone. `mensajeria` rechaza con 400 todo envío que traiga `motivo_override`.
+type EnviarMensajeInternaEntrada struct {
+	AdjuntosIds *[]Id `json:"adjuntos_ids,omitempty"`
+
+	// ClientMessageId Generado por el cliente; clave de idempotencia del envío.
+	ClientMessageId Id     `json:"client_message_id"`
+	Cuerpo          string `json:"cuerpo"`
+
+	// VersionReclamoEsperada Obligatoria para audiencia Interno (exige reclamo activo).
+	VersionReclamoEsperada *VersionReclamo `json:"version_reclamo_esperada,omitempty"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	// Codigo Código de máquina, estable y en snake_case. Los consumidores ramifican sobre este valor, no sobre `mensaje`.
@@ -367,6 +441,9 @@ type EstadiaEntrada struct {
 	// Motivo Motivo de la estadía. Espejo de `MotivoEstadia` de `operacion`.
 	Motivo MotivoEstadia `json:"motivo"`
 }
+
+// EstadoConversacion Ciclo de vida, separado del estado operativo de cola (Addendum §6). `solo_lectura` tras vencer `escritura_hasta` (DEC-030, DEC-041).
+type EstadoConversacion string
 
 // EtaEntrada Entrada para fijar el ETA. Espejo de `EtaEntrada` de `operacion`.
 type EtaEntrada struct {
@@ -470,6 +547,40 @@ type IncidenciaEntrada struct {
 // MarcaTiempo Instante en UTC, RFC 3339.
 type MarcaTiempo = time.Time
 
+// Mensaje defines model for Mensaje.
+type Mensaje struct {
+	// ActorReal Sujeto que escribió. Siempre se registra (Addendum §4 punto 9), pero solo se entrega a audiencia Interno.
+	ActorReal   *openapi_types.UUID `json:"actor_real"`
+	AdjuntosIds *[]Id               `json:"adjuntos_ids,omitempty"`
+
+	// AliasMostrado Identidad presentada (comercial de AI27 para el cliente).
+	AliasMostrado string `json:"alias_mostrado"`
+
+	// AudienciaAutor Audiencia de dominio del autor (DEC-054), no el claim `aud`.
+	AudienciaAutor Audiencia `json:"audiencia_autor"`
+
+	// ClientMessageId Identificador único (UUID). Nunca un correlativo expuesto.
+	ClientMessageId Id `json:"client_message_id"`
+
+	// ConversacionId Identificador único (UUID). Nunca un correlativo expuesto.
+	ConversacionId Id `json:"conversacion_id"`
+
+	// CreadoEn Instante en UTC, RFC 3339.
+	CreadoEn MarcaTiempo `json:"creado_en"`
+
+	// Cuerpo Cuerpo del mensaje. Sin edición ni borrado en V1.
+	Cuerpo string `json:"cuerpo"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// RolAlEnviar Rol del autor al enviar. Solo para audiencia Interno.
+	RolAlEnviar *Rol `json:"rol_al_enviar"`
+
+	// Secuencia Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una versión de reclamo ni el `seq` de transporte de `realtime`.
+	Secuencia SecuenciaMensaje `json:"secuencia"`
+}
+
 // MensajeCliente Mensaje tal como lo ve el cliente. `de_cliente` distingue quién escribió; AI27 se presenta siempre con el alias "AI27 Operations" (DEC-021), nunca con el actor real ni el rol interno.
 type MensajeCliente struct {
 	Cuerpo string `json:"cuerpo"`
@@ -533,6 +644,13 @@ type PaginaIncidencias struct {
 	Items           []Incidencia `json:"items"`
 }
 
+// PaginaMensajes defines model for PaginaMensajes.
+type PaginaMensajes struct {
+	// HayMas true si hay más mensajes en la dirección pedida.
+	HayMas bool      `json:"hay_mas"`
+	Items  []Mensaje `json:"items"`
+}
+
 // PaginaMensajesCliente Página de la historia de mensajes, paginada por secuencia de dominio (espejo de `mensajeria.listarMensajes`). No usa cursor opaco: un chat se recorre por `secuencia` para permitir el catch-up tras reconexión con `despues_de` (Addendum §9 de mensajería).
 type PaginaMensajesCliente struct {
 	// HayMas true si hay más mensajes en la dirección pedida.
@@ -561,6 +679,31 @@ type PaginaViajesResumen struct {
 	Items           []ViajeResumen `json:"items"`
 }
 
+// ReciboEntrada defines model for ReciboEntrada.
+type ReciboEntrada struct {
+	// HastaSecuencia Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una versión de reclamo ni el `seq` de transporte de `realtime`.
+	HastaSecuencia SecuenciaMensaje `json:"hasta_secuencia"`
+}
+
+// Reclamo defines model for Reclamo.
+type Reclamo struct {
+	// AbiertoEn Instante en UTC, RFC 3339.
+	AbiertoEn MarcaTiempo `json:"abierto_en"`
+	CerradoEn *time.Time  `json:"cerrado_en"`
+
+	// ConversacionId Identificador único (UUID). Nunca un correlativo expuesto.
+	ConversacionId Id `json:"conversacion_id"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// ResponsableId Identificador único (UUID). Nunca un correlativo expuesto.
+	ResponsableId Id `json:"responsable_id"`
+
+	// Version Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.
+	Version VersionReclamo `json:"version"`
+}
+
 // RefrescoEntrada defines model for RefrescoEntrada.
 type RefrescoEntrada struct {
 	RefreshToken string `json:"refresh_token"`
@@ -579,6 +722,15 @@ type RegistroAuditoriaDescarga struct {
 type ResolucionIncidenciaEntrada struct {
 	Resolucion string `json:"resolucion"`
 }
+
+// RevisionBandeja Revisión monotónica de la COLECCIÓN de trabajo de una bandeja (ADR 28 §3): avanza con cada cambio de la colección (alta, baja, reenrutamiento, reclamo, atención). Es el cursor de dominio del bootstrap y el catch-up de bandeja. No es el cursor de paginación, ni una secuencia de mensaje, ni el `seq` de transporte de `realtime`.
+type RevisionBandeja = int64
+
+// Rol Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+type Rol string
+
+// SecuenciaMensaje Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una versión de reclamo ni el `seq` de transporte de `realtime`.
+type SecuenciaMensaje = int64
 
 // Sesion defines model for Sesion.
 type Sesion struct {
@@ -601,6 +753,16 @@ type TipoServicioCliente struct {
 	Etiqueta string `json:"etiqueta"`
 }
 
+// TrabajoBandeja Trabajo de una bandeja con su cursor de dominio. Declara la `revision` de la COLECCIÓN al momento de la respuesta (ADR 28 §3): es el cursor del bootstrap de bandeja y el punto desde el que `desde_revision` pide el catch-up. El cursor de paginación (`cursor_siguiente`) y el cursor de cambios (`revision`) son distintos y no se confunden.
+type TrabajoBandeja struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más.
+	CursorSiguiente *string        `json:"cursor_siguiente"`
+	Items           []Conversacion `json:"items"`
+
+	// Revision Revisión de la colección que representa esta respuesta. El cliente la usa como `desde_revision` en el siguiente catch-up.
+	Revision RevisionBandeja `json:"revision"`
+}
+
 // Tracto Tracto del cliente, texto libre. Espejo de `Tracto` de `operacion` (DEC-104
 type Tracto struct {
 	Color     *string `json:"color,omitempty"`
@@ -608,6 +770,17 @@ type Tracto struct {
 	Marca     *string `json:"marca,omitempty"`
 	Modelo    *string `json:"modelo,omitempty"`
 	Placas    *string `json:"placas,omitempty"`
+}
+
+// TransferenciaEntrada defines model for TransferenciaEntrada.
+type TransferenciaEntrada struct {
+	Motivo *string `json:"motivo,omitempty"`
+
+	// ResponsableDestinoId Miembro del pool con membresía efectiva en la bandeja.
+	ResponsableDestinoId Id `json:"responsable_destino_id"`
+
+	// VersionEsperada Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.
+	VersionEsperada VersionReclamo `json:"version_esperada"`
 }
 
 // TransicionEntrada Entrada de una transición de estado. Espejo de `TransicionEntrada` de `operacion`.
@@ -651,6 +824,15 @@ type UnidadAsignada struct {
 	// UnidadId Identificador único (UUID). Nunca un correlativo expuesto.
 	UnidadId Id `json:"unidad_id"`
 }
+
+// VersionEsperadaEntrada defines model for VersionEsperadaEntrada.
+type VersionEsperadaEntrada struct {
+	// VersionEsperada Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.
+	VersionEsperada VersionReclamo `json:"version_esperada"`
+}
+
+// VersionReclamo Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.
+type VersionReclamo = int64
 
 // ViajeDetalle Detalle interno del viaje: estado canónico MÁS condiciones activas como dato separado. Un viaje puede estar `EN_TRANSITO` y con `INCIDENCIA` abierta a la vez. Espejo de `ViajeDetalle` de `operacion`.
 type ViajeDetalle struct {
@@ -723,6 +905,9 @@ type ViajeSeguimiento struct {
 // Conflicto defines model for Conflicto.
 type Conflicto = Error
 
+// ConflictoVersion defines model for ConflictoVersion.
+type ConflictoVersion = Error
+
 // NoAutorizado defines model for NoAutorizado.
 type NoAutorizado = Error
 
@@ -732,8 +917,20 @@ type NoEncontrado = Error
 // Prohibido defines model for Prohibido.
 type Prohibido = Error
 
+// ResyncRequerido defines model for ResyncRequerido.
+type ResyncRequerido = Error
+
 // SolicitudInvalida defines model for SolicitudInvalida.
 type SolicitudInvalida = Error
+
+// ListarTrabajoBandejaParams defines parameters for ListarTrabajoBandeja.
+type ListarTrabajoBandejaParams struct {
+	// Cursor Cursor de paginación. No es el cursor de cambios de ADR 28.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// DesdeRevision Catch-up: devuelve los cambios de la colección con revisión mayor a este valor. Es la `revision` de una respuesta previa, no el cursor de paginación.
+	DesdeRevision *RevisionBandeja `form:"desde_revision,omitempty" json:"desde_revision,omitempty"`
+}
 
 // ListarTiposServicioParams defines parameters for ListarTiposServicio.
 type ListarTiposServicioParams struct {
@@ -743,6 +940,21 @@ type ListarTiposServicioParams struct {
 // ListarClientesParams defines parameters for ListarClientes.
 type ListarClientesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListarMensajesParams defines parameters for ListarMensajes.
+type ListarMensajesParams struct {
+	// AntesDe Devuelve mensajes con secuencia menor a este valor.
+	AntesDe *SecuenciaMensaje `form:"antes_de,omitempty" json:"antes_de,omitempty"`
+
+	// DespuesDe Devuelve mensajes con secuencia mayor a este valor.
+	DespuesDe *SecuenciaMensaje `form:"despues_de,omitempty" json:"despues_de,omitempty"`
+	Limite    *int              `form:"limite,omitempty" json:"limite,omitempty"`
+}
+
+// LiberarReclamoParams defines parameters for LiberarReclamo.
+type LiberarReclamoParams struct {
+	VersionEsperada VersionReclamo `form:"version_esperada" json:"version_esperada"`
 }
 
 // ListarGpsParams defines parameters for ListarGps.
@@ -785,6 +997,24 @@ type ListarEstadiasParams struct {
 type ListarIncidenciasParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
+
+// MarcarAtendidaJSONRequestBody defines body for MarcarAtendida for application/json ContentType.
+type MarcarAtendidaJSONRequestBody = VersionEsperadaEntrada
+
+// EnviarMensajeJSONRequestBody defines body for EnviarMensaje for application/json ContentType.
+type EnviarMensajeJSONRequestBody = EnviarMensajeInternaEntrada
+
+// RegistrarReciboEntregadoJSONRequestBody defines body for RegistrarReciboEntregado for application/json ContentType.
+type RegistrarReciboEntregadoJSONRequestBody = ReciboEntrada
+
+// RegistrarReciboLeidoJSONRequestBody defines body for RegistrarReciboLeido for application/json ContentType.
+type RegistrarReciboLeidoJSONRequestBody = ReciboEntrada
+
+// ReclamarConversacionJSONRequestBody defines body for ReclamarConversacion for application/json ContentType.
+type ReclamarConversacionJSONRequestBody = VersionEsperadaEntrada
+
+// TransferirConversacionJSONRequestBody defines body for TransferirConversacion for application/json ContentType.
+type TransferirConversacionJSONRequestBody = TransferenciaEntrada
 
 // IniciarSesionJSONRequestBody defines body for IniciarSesion for application/json ContentType.
 type IniciarSesionJSONRequestBody = CredencialesEntrada
@@ -910,11 +1140,53 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// ListarTrabajoBandeja request
+	ListarTrabajoBandeja(ctx context.Context, params *ListarTrabajoBandejaParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarTiposServicio request
 	ListarTiposServicio(ctx context.Context, params *ListarTiposServicioParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListarClientes request
 	ListarClientes(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerConversacion request
+	ObtenerConversacion(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// MarcarAtendidaWithBody request with any body
+	MarcarAtendidaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	MarcarAtendida(ctx context.Context, id Id, body MarcarAtendidaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListarMensajes request
+	ListarMensajes(ctx context.Context, id Id, params *ListarMensajesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnviarMensajeWithBody request with any body
+	EnviarMensajeWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	EnviarMensaje(ctx context.Context, id Id, body EnviarMensajeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RegistrarReciboEntregadoWithBody request with any body
+	RegistrarReciboEntregadoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	RegistrarReciboEntregado(ctx context.Context, id Id, body RegistrarReciboEntregadoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RegistrarReciboLeidoWithBody request with any body
+	RegistrarReciboLeidoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	RegistrarReciboLeido(ctx context.Context, id Id, body RegistrarReciboLeidoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReclamarConversacionWithBody request with any body
+	ReclamarConversacionWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ReclamarConversacion(ctx context.Context, id Id, body ReclamarConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// LiberarReclamo request
+	LiberarReclamo(ctx context.Context, id Id, rid Id, params *LiberarReclamoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TransferirConversacionWithBody request with any body
+	TransferirConversacionWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	TransferirConversacion(ctx context.Context, id Id, body TransferirConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListarGps request
 	ListarGps(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1044,6 +1316,18 @@ type ClientInterface interface {
 	TransicionarViajeCliente(ctx context.Context, id Id, body TransicionarViajeClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
+func (c *Client) ListarTrabajoBandeja(ctx context.Context, params *ListarTrabajoBandejaParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarTrabajoBandejaRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ListarTiposServicio(ctx context.Context, params *ListarTiposServicioParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarTiposServicioRequest(c.Server, params)
 	if err != nil {
@@ -1058,6 +1342,186 @@ func (c *Client) ListarTiposServicio(ctx context.Context, params *ListarTiposSer
 
 func (c *Client) ListarClientes(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarClientesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerConversacion(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerConversacionRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) MarcarAtendidaWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMarcarAtendidaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) MarcarAtendida(ctx context.Context, id Id, body MarcarAtendidaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMarcarAtendidaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarMensajes(ctx context.Context, id Id, params *ListarMensajesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarMensajesRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) EnviarMensajeWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnviarMensajeRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) EnviarMensaje(ctx context.Context, id Id, body EnviarMensajeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnviarMensajeRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RegistrarReciboEntregadoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRegistrarReciboEntregadoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RegistrarReciboEntregado(ctx context.Context, id Id, body RegistrarReciboEntregadoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRegistrarReciboEntregadoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RegistrarReciboLeidoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRegistrarReciboLeidoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RegistrarReciboLeido(ctx context.Context, id Id, body RegistrarReciboLeidoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRegistrarReciboLeidoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReclamarConversacionWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReclamarConversacionRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReclamarConversacion(ctx context.Context, id Id, body ReclamarConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReclamarConversacionRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) LiberarReclamo(ctx context.Context, id Id, rid Id, params *LiberarReclamoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewLiberarReclamoRequest(c.Server, id, rid, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TransferirConversacionWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTransferirConversacionRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TransferirConversacion(ctx context.Context, id Id, body TransferirConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTransferirConversacionRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1644,6 +2108,71 @@ func (c *Client) TransicionarViajeCliente(ctx context.Context, id Id, body Trans
 	return c.Client.Do(req)
 }
 
+// NewListarTrabajoBandejaRequest generates requests for ListarTrabajoBandeja
+func NewListarTrabajoBandejaRequest(server string, params *ListarTrabajoBandejaParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/bandeja/trabajo")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.DesdeRevision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "desde_revision", runtime.ParamLocationQuery, *params.DesdeRevision); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListarTiposServicioRequest generates requests for ListarTiposServicio
 func NewListarTiposServicioRequest(server string, params *ListarTiposServicioParams) (*http.Request, error) {
 	var err error
@@ -1738,6 +2267,469 @@ func NewListarClientesRequest(server string, params *ListarClientesParams) (*htt
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewObtenerConversacionRequest generates requests for ObtenerConversacion
+func NewObtenerConversacionRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/conversaciones/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewMarcarAtendidaRequest calls the generic MarcarAtendida builder with application/json body
+func NewMarcarAtendidaRequest(server string, id Id, body MarcarAtendidaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewMarcarAtendidaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewMarcarAtendidaRequestWithBody generates requests for MarcarAtendida with any type of body
+func NewMarcarAtendidaRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/conversaciones/%s/atendida", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListarMensajesRequest generates requests for ListarMensajes
+func NewListarMensajesRequest(server string, id Id, params *ListarMensajesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/conversaciones/%s/mensajes", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.AntesDe != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "antes_de", runtime.ParamLocationQuery, *params.AntesDe); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.DespuesDe != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "despues_de", runtime.ParamLocationQuery, *params.DespuesDe); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limite != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limite", runtime.ParamLocationQuery, *params.Limite); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEnviarMensajeRequest calls the generic EnviarMensaje builder with application/json body
+func NewEnviarMensajeRequest(server string, id Id, body EnviarMensajeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEnviarMensajeRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewEnviarMensajeRequestWithBody generates requests for EnviarMensaje with any type of body
+func NewEnviarMensajeRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/conversaciones/%s/mensajes", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRegistrarReciboEntregadoRequest calls the generic RegistrarReciboEntregado builder with application/json body
+func NewRegistrarReciboEntregadoRequest(server string, id Id, body RegistrarReciboEntregadoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRegistrarReciboEntregadoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewRegistrarReciboEntregadoRequestWithBody generates requests for RegistrarReciboEntregado with any type of body
+func NewRegistrarReciboEntregadoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/conversaciones/%s/recibos/entregado", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRegistrarReciboLeidoRequest calls the generic RegistrarReciboLeido builder with application/json body
+func NewRegistrarReciboLeidoRequest(server string, id Id, body RegistrarReciboLeidoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRegistrarReciboLeidoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewRegistrarReciboLeidoRequestWithBody generates requests for RegistrarReciboLeido with any type of body
+func NewRegistrarReciboLeidoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/conversaciones/%s/recibos/leido", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewReclamarConversacionRequest calls the generic ReclamarConversacion builder with application/json body
+func NewReclamarConversacionRequest(server string, id Id, body ReclamarConversacionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReclamarConversacionRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewReclamarConversacionRequestWithBody generates requests for ReclamarConversacion with any type of body
+func NewReclamarConversacionRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/conversaciones/%s/reclamos", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewLiberarReclamoRequest generates requests for LiberarReclamo
+func NewLiberarReclamoRequest(server string, id Id, rid Id, params *LiberarReclamoParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "rid", runtime.ParamLocationPath, rid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/conversaciones/%s/reclamos/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "version_esperada", runtime.ParamLocationQuery, params.VersionEsperada); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewTransferirConversacionRequest calls the generic TransferirConversacion builder with application/json body
+func NewTransferirConversacionRequest(server string, id Id, body TransferirConversacionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTransferirConversacionRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewTransferirConversacionRequestWithBody generates requests for TransferirConversacion with any type of body
+func NewTransferirConversacionRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/conversaciones/%s/transferencias", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -3234,11 +4226,53 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// ListarTrabajoBandejaWithResponse request
+	ListarTrabajoBandejaWithResponse(ctx context.Context, params *ListarTrabajoBandejaParams, reqEditors ...RequestEditorFn) (*ListarTrabajoBandejaResponse, error)
+
 	// ListarTiposServicioWithResponse request
 	ListarTiposServicioWithResponse(ctx context.Context, params *ListarTiposServicioParams, reqEditors ...RequestEditorFn) (*ListarTiposServicioResponse, error)
 
 	// ListarClientesWithResponse request
 	ListarClientesWithResponse(ctx context.Context, params *ListarClientesParams, reqEditors ...RequestEditorFn) (*ListarClientesResponse, error)
+
+	// ObtenerConversacionWithResponse request
+	ObtenerConversacionWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerConversacionResponse, error)
+
+	// MarcarAtendidaWithBodyWithResponse request with any body
+	MarcarAtendidaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MarcarAtendidaResponse, error)
+
+	MarcarAtendidaWithResponse(ctx context.Context, id Id, body MarcarAtendidaJSONRequestBody, reqEditors ...RequestEditorFn) (*MarcarAtendidaResponse, error)
+
+	// ListarMensajesWithResponse request
+	ListarMensajesWithResponse(ctx context.Context, id Id, params *ListarMensajesParams, reqEditors ...RequestEditorFn) (*ListarMensajesResponse, error)
+
+	// EnviarMensajeWithBodyWithResponse request with any body
+	EnviarMensajeWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnviarMensajeResponse, error)
+
+	EnviarMensajeWithResponse(ctx context.Context, id Id, body EnviarMensajeJSONRequestBody, reqEditors ...RequestEditorFn) (*EnviarMensajeResponse, error)
+
+	// RegistrarReciboEntregadoWithBodyWithResponse request with any body
+	RegistrarReciboEntregadoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RegistrarReciboEntregadoResponse, error)
+
+	RegistrarReciboEntregadoWithResponse(ctx context.Context, id Id, body RegistrarReciboEntregadoJSONRequestBody, reqEditors ...RequestEditorFn) (*RegistrarReciboEntregadoResponse, error)
+
+	// RegistrarReciboLeidoWithBodyWithResponse request with any body
+	RegistrarReciboLeidoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RegistrarReciboLeidoResponse, error)
+
+	RegistrarReciboLeidoWithResponse(ctx context.Context, id Id, body RegistrarReciboLeidoJSONRequestBody, reqEditors ...RequestEditorFn) (*RegistrarReciboLeidoResponse, error)
+
+	// ReclamarConversacionWithBodyWithResponse request with any body
+	ReclamarConversacionWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReclamarConversacionResponse, error)
+
+	ReclamarConversacionWithResponse(ctx context.Context, id Id, body ReclamarConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*ReclamarConversacionResponse, error)
+
+	// LiberarReclamoWithResponse request
+	LiberarReclamoWithResponse(ctx context.Context, id Id, rid Id, params *LiberarReclamoParams, reqEditors ...RequestEditorFn) (*LiberarReclamoResponse, error)
+
+	// TransferirConversacionWithBodyWithResponse request with any body
+	TransferirConversacionWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransferirConversacionResponse, error)
+
+	TransferirConversacionWithResponse(ctx context.Context, id Id, body TransferirConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferirConversacionResponse, error)
 
 	// ListarGpsWithResponse request
 	ListarGpsWithResponse(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*ListarGpsResponse, error)
@@ -3368,6 +4402,31 @@ type ClientWithResponsesInterface interface {
 	TransicionarViajeClienteWithResponse(ctx context.Context, id Id, body TransicionarViajeClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeClienteResponse, error)
 }
 
+type ListarTrabajoBandejaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TrabajoBandeja
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *ResyncRequerido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarTrabajoBandejaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarTrabajoBandejaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ListarTiposServicioResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3410,6 +4469,232 @@ func (r ListarClientesResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ListarClientesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerConversacionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Conversacion
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerConversacionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerConversacionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type MarcarAtendidaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *ConflictoVersion
+}
+
+// Status returns HTTPResponse.Status
+func (r MarcarAtendidaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r MarcarAtendidaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarMensajesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaMensajes
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarMensajesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarMensajesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type EnviarMensajeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Mensaje
+	JSON201      *Mensaje
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r EnviarMensajeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnviarMensajeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RegistrarReciboEntregadoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r RegistrarReciboEntregadoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RegistrarReciboEntregadoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RegistrarReciboLeidoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r RegistrarReciboLeidoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RegistrarReciboLeidoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ReclamarConversacionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Reclamo
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *ConflictoVersion
+}
+
+// Status returns HTTPResponse.Status
+func (r ReclamarConversacionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReclamarConversacionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type LiberarReclamoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *ConflictoVersion
+}
+
+// Status returns HTTPResponse.Status
+func (r LiberarReclamoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r LiberarReclamoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type TransferirConversacionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Reclamo
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *ConflictoVersion
+}
+
+// Status returns HTTPResponse.Status
+func (r TransferirConversacionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TransferirConversacionResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4197,6 +5482,15 @@ func (r TransicionarViajeClienteResponse) StatusCode() int {
 	return 0
 }
 
+// ListarTrabajoBandejaWithResponse request returning *ListarTrabajoBandejaResponse
+func (c *ClientWithResponses) ListarTrabajoBandejaWithResponse(ctx context.Context, params *ListarTrabajoBandejaParams, reqEditors ...RequestEditorFn) (*ListarTrabajoBandejaResponse, error) {
+	rsp, err := c.ListarTrabajoBandeja(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarTrabajoBandejaResponse(rsp)
+}
+
 // ListarTiposServicioWithResponse request returning *ListarTiposServicioResponse
 func (c *ClientWithResponses) ListarTiposServicioWithResponse(ctx context.Context, params *ListarTiposServicioParams, reqEditors ...RequestEditorFn) (*ListarTiposServicioResponse, error) {
 	rsp, err := c.ListarTiposServicio(ctx, params, reqEditors...)
@@ -4213,6 +5507,135 @@ func (c *ClientWithResponses) ListarClientesWithResponse(ctx context.Context, pa
 		return nil, err
 	}
 	return ParseListarClientesResponse(rsp)
+}
+
+// ObtenerConversacionWithResponse request returning *ObtenerConversacionResponse
+func (c *ClientWithResponses) ObtenerConversacionWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerConversacionResponse, error) {
+	rsp, err := c.ObtenerConversacion(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerConversacionResponse(rsp)
+}
+
+// MarcarAtendidaWithBodyWithResponse request with arbitrary body returning *MarcarAtendidaResponse
+func (c *ClientWithResponses) MarcarAtendidaWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MarcarAtendidaResponse, error) {
+	rsp, err := c.MarcarAtendidaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMarcarAtendidaResponse(rsp)
+}
+
+func (c *ClientWithResponses) MarcarAtendidaWithResponse(ctx context.Context, id Id, body MarcarAtendidaJSONRequestBody, reqEditors ...RequestEditorFn) (*MarcarAtendidaResponse, error) {
+	rsp, err := c.MarcarAtendida(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMarcarAtendidaResponse(rsp)
+}
+
+// ListarMensajesWithResponse request returning *ListarMensajesResponse
+func (c *ClientWithResponses) ListarMensajesWithResponse(ctx context.Context, id Id, params *ListarMensajesParams, reqEditors ...RequestEditorFn) (*ListarMensajesResponse, error) {
+	rsp, err := c.ListarMensajes(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarMensajesResponse(rsp)
+}
+
+// EnviarMensajeWithBodyWithResponse request with arbitrary body returning *EnviarMensajeResponse
+func (c *ClientWithResponses) EnviarMensajeWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnviarMensajeResponse, error) {
+	rsp, err := c.EnviarMensajeWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnviarMensajeResponse(rsp)
+}
+
+func (c *ClientWithResponses) EnviarMensajeWithResponse(ctx context.Context, id Id, body EnviarMensajeJSONRequestBody, reqEditors ...RequestEditorFn) (*EnviarMensajeResponse, error) {
+	rsp, err := c.EnviarMensaje(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnviarMensajeResponse(rsp)
+}
+
+// RegistrarReciboEntregadoWithBodyWithResponse request with arbitrary body returning *RegistrarReciboEntregadoResponse
+func (c *ClientWithResponses) RegistrarReciboEntregadoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RegistrarReciboEntregadoResponse, error) {
+	rsp, err := c.RegistrarReciboEntregadoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRegistrarReciboEntregadoResponse(rsp)
+}
+
+func (c *ClientWithResponses) RegistrarReciboEntregadoWithResponse(ctx context.Context, id Id, body RegistrarReciboEntregadoJSONRequestBody, reqEditors ...RequestEditorFn) (*RegistrarReciboEntregadoResponse, error) {
+	rsp, err := c.RegistrarReciboEntregado(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRegistrarReciboEntregadoResponse(rsp)
+}
+
+// RegistrarReciboLeidoWithBodyWithResponse request with arbitrary body returning *RegistrarReciboLeidoResponse
+func (c *ClientWithResponses) RegistrarReciboLeidoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RegistrarReciboLeidoResponse, error) {
+	rsp, err := c.RegistrarReciboLeidoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRegistrarReciboLeidoResponse(rsp)
+}
+
+func (c *ClientWithResponses) RegistrarReciboLeidoWithResponse(ctx context.Context, id Id, body RegistrarReciboLeidoJSONRequestBody, reqEditors ...RequestEditorFn) (*RegistrarReciboLeidoResponse, error) {
+	rsp, err := c.RegistrarReciboLeido(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRegistrarReciboLeidoResponse(rsp)
+}
+
+// ReclamarConversacionWithBodyWithResponse request with arbitrary body returning *ReclamarConversacionResponse
+func (c *ClientWithResponses) ReclamarConversacionWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReclamarConversacionResponse, error) {
+	rsp, err := c.ReclamarConversacionWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReclamarConversacionResponse(rsp)
+}
+
+func (c *ClientWithResponses) ReclamarConversacionWithResponse(ctx context.Context, id Id, body ReclamarConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*ReclamarConversacionResponse, error) {
+	rsp, err := c.ReclamarConversacion(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReclamarConversacionResponse(rsp)
+}
+
+// LiberarReclamoWithResponse request returning *LiberarReclamoResponse
+func (c *ClientWithResponses) LiberarReclamoWithResponse(ctx context.Context, id Id, rid Id, params *LiberarReclamoParams, reqEditors ...RequestEditorFn) (*LiberarReclamoResponse, error) {
+	rsp, err := c.LiberarReclamo(ctx, id, rid, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLiberarReclamoResponse(rsp)
+}
+
+// TransferirConversacionWithBodyWithResponse request with arbitrary body returning *TransferirConversacionResponse
+func (c *ClientWithResponses) TransferirConversacionWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransferirConversacionResponse, error) {
+	rsp, err := c.TransferirConversacionWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTransferirConversacionResponse(rsp)
+}
+
+func (c *ClientWithResponses) TransferirConversacionWithResponse(ctx context.Context, id Id, body TransferirConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferirConversacionResponse, error) {
+	rsp, err := c.TransferirConversacion(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTransferirConversacionResponse(rsp)
 }
 
 // ListarGpsWithResponse request returning *ListarGpsResponse
@@ -4630,6 +6053,53 @@ func (c *ClientWithResponses) TransicionarViajeClienteWithResponse(ctx context.C
 	return ParseTransicionarViajeClienteResponse(rsp)
 }
 
+// ParseListarTrabajoBandejaResponse parses an HTTP response from a ListarTrabajoBandejaWithResponse call
+func ParseListarTrabajoBandejaResponse(rsp *http.Response) (*ListarTrabajoBandejaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarTrabajoBandejaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TrabajoBandeja
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ResyncRequerido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListarTiposServicioResponse parses an HTTP response from a ListarTiposServicioWithResponse call
 func ParseListarTiposServicioResponse(rsp *http.Response) (*ListarTiposServicioResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4704,6 +6174,436 @@ func ParseListarClientesResponse(rsp *http.Response) (*ListarClientesResponse, e
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerConversacionResponse parses an HTTP response from a ObtenerConversacionWithResponse call
+func ParseObtenerConversacionResponse(rsp *http.Response) (*ObtenerConversacionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerConversacionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Conversacion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseMarcarAtendidaResponse parses an HTTP response from a MarcarAtendidaWithResponse call
+func ParseMarcarAtendidaResponse(rsp *http.Response) (*MarcarAtendidaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &MarcarAtendidaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ConflictoVersion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarMensajesResponse parses an HTTP response from a ListarMensajesWithResponse call
+func ParseListarMensajesResponse(rsp *http.Response) (*ListarMensajesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarMensajesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaMensajes
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEnviarMensajeResponse parses an HTTP response from a EnviarMensajeWithResponse call
+func ParseEnviarMensajeResponse(rsp *http.Response) (*EnviarMensajeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnviarMensajeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Mensaje
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Mensaje
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRegistrarReciboEntregadoResponse parses an HTTP response from a RegistrarReciboEntregadoWithResponse call
+func ParseRegistrarReciboEntregadoResponse(rsp *http.Response) (*RegistrarReciboEntregadoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RegistrarReciboEntregadoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRegistrarReciboLeidoResponse parses an HTTP response from a RegistrarReciboLeidoWithResponse call
+func ParseRegistrarReciboLeidoResponse(rsp *http.Response) (*RegistrarReciboLeidoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RegistrarReciboLeidoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReclamarConversacionResponse parses an HTTP response from a ReclamarConversacionWithResponse call
+func ParseReclamarConversacionResponse(rsp *http.Response) (*ReclamarConversacionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReclamarConversacionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Reclamo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ConflictoVersion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseLiberarReclamoResponse parses an HTTP response from a LiberarReclamoWithResponse call
+func ParseLiberarReclamoResponse(rsp *http.Response) (*LiberarReclamoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &LiberarReclamoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ConflictoVersion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTransferirConversacionResponse parses an HTTP response from a TransferirConversacionWithResponse call
+func ParseTransferirConversacionResponse(rsp *http.Response) (*TransferirConversacionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TransferirConversacionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Reclamo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ConflictoVersion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

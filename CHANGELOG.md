@@ -3,6 +3,25 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-10-30 [tracer.30] — superficie interna de bandeja y conversación en el `bff` (E8-T15, DEC-103/DEC-107)
+
+**Para quién:** el portal interno (`pf-web-frontend-internal`), que ya puede atender la bandeja compartida y la conversación del pool (cola de trabajo, reclamo versionado, transferencia, atención y recibos) por la puerta única del `bff`, sin llamar a `mensajeria` directo.
+
+**Resumen:** ola aditiva en `bff.yaml`. Proyecta al `bff` las 10 operaciones internas de bandeja y conversación que hasta ahora solo vivían en `mensajeria.yaml`: `listarTrabajoBandeja`, `obtenerConversacion`, `listarMensajes`, `enviarMensaje`, `reclamarConversacion`, `liberarReclamo`, `transferirConversacion`, `marcarAtendida`, `registrarReciboEntregado` y `registrarReciboLeido`. Mismos operationId, schemas y códigos de error que `mensajeria`; el `bff` reenvía con sus guardas de alcance/rol y no añade lógica de dominio. No incluye `listarConversaciones`, adjuntos ni auditoría (fuera de alcance de la ola).
+
+**Decisiones de forma:**
+- **Cola única e implícita (DEC-103):** la ruta de bandeja es `GET /api/v1/bandeja/trabajo`, SIN `{id}`. El `bff` resuelve la bandeja del sujeto desde los claims de la sesión y reenvía a `mensajeria.listarTrabajoBandeja`; el frontend no pasa identificador de bandeja. Conserva `cursor` (paginación) y `desde_revision` (catch-up por `RevisionBandeja`), con `409 stream_resync_required` fuera de ventana.
+- **Sin `motivo_override` (DEC-107):** el body de envío es el nuevo `EnviarMensajeInternaEntrada`, igual a `EnviarMensajeEntrada` de `mensajeria` pero SIN `motivo_override`. DEC-107 cerró el override de supervisor en V1 y `mensajeria` rechaza con 400 cualquier envío que lo traiga, así que el `bff` no lo expone. Conserva `client_message_id`, `cuerpo` (minLength 1), `adjuntos_ids` y `version_reclamo_esperada` (obligatorio para interno).
+- **Schemas completos (DEC-006 invertido):** la superficie interna usa los schemas completos, no vistas recortadas como la de cliente: `Conversacion` con `bandeja_id` y `reclamo_activo`, `Mensaje` con `actor_real` y `rol_al_enviar`. La audiencia interna sí ve el estado canónico, el reclamo y el actor real. No se crean tipos `...Interno`.
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: 10 rutas/operaciones nuevas; schemas `SecuenciaMensaje`, `RevisionBandeja`, `VersionReclamo`, `Audiencia`, `EstadoConversacion`, `Conversacion`, `TrabajoBandeja`, `Mensaje`, `PaginaMensajes`, `EnviarMensajeInternaEntrada`, `Reclamo`, `VersionEsperadaEntrada`, `TransferenciaEntrada`, `ReciboEntrada`; respuestas comunes `ConflictoVersion` y `ResyncRequerido` (bloque `components/responses` nuevo en `bff.yaml`).
+- Clientes Go y TS regenerados. `VERSION`, 8 specs + `_comunes`, paquete TS e `INVENTARIO.md` a `0.1.0-tracer.30`.
+
+**Compatibilidad:** aditivo. `breaking-openapi` compatible con `tracer.29`; `lint-openapi` en verde; clientes Go compilan y pasan `go vet`.
+
+**Siguiente (fuera de esta ola):** `pf-svc-bff` sube pin a `tracer.30` y monta los 10 reenvíos a `mensajeria` con las guardas de alcance/rol y la resolución de la bandeja del sujeto desde los claims.
+
 ## 2026-10-30 [tracer.29] — cursor de dominio en el bootstrap de la conversación del cliente (E9-T8, ADR 28 §2)
 
 **Para quién:** el portal cliente (`pf-web-frontend-client`), que al abrir una conversación recibe ahora el cursor con el que pedir el catch-up, sin derivarlo del último mensaje listado.
