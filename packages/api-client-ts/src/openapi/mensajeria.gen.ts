@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/bandeja/trabajo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar el trabajo de la bandeja del sujeto (bootstrap y catch-up).
+         * @description Igual que `listarTrabajoBandeja` pero SIN `{id}`: `mensajeria` resuelve la bandeja de chat del sujeto desde su MEMBRESÍA EFECTIVA del pool (cola única e implícita, DEC-103). Si el sujeto no pertenece a ningún pool de chat, responde `404` (no tiene bandeja), igual que una bandeja inexistente. El rol `ejecutivo` por sí solo no basta: la autoridad es la membresía (Addendum §7). `desde_revision` y `cursor` funcionan igual que en la ruta con `{id}`; el `409 stream_resync_required` también.
+         */
+        get: operations["listarTrabajoMiBandeja"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bandejas/{id}/trabajo": {
         parameters: {
             query?: never;
@@ -656,13 +676,13 @@ export interface components {
             /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
             cursor_siguiente: string | null;
         };
+        /** @description Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato. */
+        Cursor: string;
         /**
          * Format: uuid
          * @description Identificador único (UUID). Nunca un correlativo expuesto.
          */
         Id: string;
-        /** @description Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato. */
-        Cursor: string;
         /**
          * Format: date-time
          * @description Instante en UTC, RFC 3339.
@@ -757,6 +777,35 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listarTrabajoMiBandeja: {
+        parameters: {
+            query?: {
+                /** @description Cursor de paginación. No es el cursor de cambios de ADR 28. */
+                cursor?: components["parameters"]["CursorPagina"];
+                /** @description Catch-up: devuelve los cambios de la colección con revisión mayor a este valor. Es la `revision` de una respuesta previa, no el cursor de paginación. */
+                desde_revision?: components["schemas"]["RevisionBandeja"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trabajo de la bandeja del sujeto con la revisión de la colección. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrabajoBandeja"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ResyncRequerido"];
+        };
+    };
     listarTrabajoBandeja: {
         parameters: {
             query?: {
