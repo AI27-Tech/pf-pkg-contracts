@@ -461,6 +461,190 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bandeja/emergencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar los casos de la bandeja de Reacción del sujeto.
+         * @description Sin `{id}` de viaje ni de bandeja: `mensajeria` resuelve la bandeja de tipo `emergencias` desde la MEMBRESÍA EFECTIVA del sujeto en el pool de Reacción (DEC-028 #1), igual que `listarTrabajoMiBandeja` resuelve la de chat (DEC-103). `supervisor`/`coordinador` ven además los casos de la bandeja de los integrantes de Reacción a su mando (DEC-099). Sin membresía ni mando responde `404` (no tiene bandeja). El rol por sí solo no concede acceso.
+         *     Cada fila es `EmergenciaReaccion`: el caso sin datos del viaje ni del cliente y sin notas. Los campos exactos a mostrar, los estados que la bandeja incluye y el orden de presentación están PENDIENTES de confirmación de Producto; el contrato solo garantiza un orden estable para la paginación. Sin `desde_revision`: el caso de emergencia no lleva revisión de colección (ADR 28 §3) hoy; si se necesita catch-up se añade de forma aditiva.
+         */
+        get: operations["listarBandejaEmergencias"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/emergencias/{eid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Detalle del caso por su id, en la vista de Reacción.
+         * @description Miembro efectivo del pool Reacción de la bandeja del caso (DEC-028 #1), o `supervisor`/`coordinador` con mando sobre integrantes de esa bandeja (DEC-099). Poseer el UUID no autoriza: sin acceso responde `404`, igual que si no existiera. Devuelve `EmergenciaReaccion`, sin datos del viaje ni del cliente ni notas (DEC-028); los campos exactos están pendientes de Producto. Monitoreo con alcance sobre el viaje sigue usando `listarEmergencias`.
+         */
+        get: operations["obtenerEmergencia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/emergencias/{eid}/notas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Agregar una nota al caso nombrado por su id (append-only).
+         * @description Gemela de `agregarNotaEmergencia` sin `{id}` de viaje: misma entrada, validaciones, salida y errores. `mensajeria` resuelve el viaje del caso para evaluar el alcance. Cliente u Operator dentro del alcance agregan notas en `abierta`, `en_atencion` o `resuelta`; `cerrada` responde 409 `emergencia_cerrada` (ADR 21 §4). Reacción NO agrega notas: son unidireccionales hacia Reacción (ADR 21 §4, DEC-034). Texto de hasta 1000 caracteres, recortado; vacío tras el recorte es 400. La nota se copia al histórico del viaje por `emergencia.nota_agregada` (DEC-100).
+         */
+        post: operations["agregarNotaEmergenciaPorId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/emergencias/{eid}/reclamos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reclamar el caso por su id (abierta -> en_atencion) con versión esperada.
+         * @description Gemela de `reclamarEmergencia` sin `{id}` de viaje. Solo un miembro efectivo del pool Reacción de la bandeja del caso (DEC-028 #2). El mando de DEC-099 no concede reclamar: reclamar convierte al sujeto en responsable de Reacción (ADR 21 §5). Ejecuta `abierta -> en_atencion`. Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo`.
+         */
+        post: operations["reclamarEmergenciaPorId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/emergencias/{eid}/reclamos/{rid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+                /** @description Identificador del reclamo. */
+                rid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Liberar el reclamo del caso por su id y devolverlo al pool de Reacción.
+         * @description Gemela de `liberarReclamoEmergencia` sin `{id}` de viaje. Lo hace el responsable vigente, o `supervisor`/`coordinador` con mando sobre ese responsable de Reacción (DEC-099). El caso vuelve a `abierta`.
+         */
+        delete: operations["liberarReclamoEmergenciaPorId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/emergencias/{eid}/transferencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transferir el caso por su id a otro miembro de Reacción.
+         * @description Gemela de `transferirEmergencia` sin `{id}` de viaje. La hace el responsable vigente (DEC-028 #2), o `supervisor`/`coordinador` con mando sobre ese responsable (DEC-099). El destino debe tener membresía efectiva en el pool Reacción de la bandeja del caso. Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso (ADR 21 §5).
+         */
+        post: operations["transferirEmergenciaPorId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/emergencias/{eid}/resolucion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver el caso por su id (en_atencion -> resuelta) con nota obligatoria.
+         * @description Gemela de `resolverEmergencia` sin `{id}` de viaje. Solo el responsable vigente de Reacción (ADR 21 §5, DEC-028 #3); el mando de DEC-099 no resuelve. Exige una nota de resolución OBLIGATORIA de 1 a 1000 caracteres, con las mismas validaciones de las demás notas; sin nota válida responde 400 y el caso no cambia de estado. `resuelta` es irreversible. A diferencia de la gemela por viaje, devuelve `EmergenciaReaccion` (sin viaje ni cliente, DEC-028), porque quien resuelve es Reacción.
+         */
+        post: operations["resolverEmergenciaPorId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/emergencias/{eid}/cierre": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar administrativamente el caso por su id (resuelta -> cerrada).
+         * @description Gemela de `cerrarEmergencia` sin `{id}` de viaje; `mensajeria` resuelve el viaje del caso para evaluar el alcance. Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje (eje de monitoreo por unidad), o Administrator global (ADR 21 §5). NUNCA Reacción ni Ejecutivo (E8-T18, DEC-045 #9), tampoco por el mando de DEC-099. No exige texto. `cerrada` es irreversible.
+         */
+        post: operations["cerrarEmergenciaPorId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auditoria/conversaciones/{id}": {
         parameters: {
             query?: never;
@@ -654,6 +838,27 @@ export interface components {
         };
         PaginaEmergencias: {
             items: components["schemas"]["CasoEmergencia"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
+            cursor_siguiente: string | null;
+        };
+        /** @description El caso tal como lo ve Reacción en su bandeja y en el detalle (DEC-028): SIN `viaje_id`, `cliente_id`, `actor_real` ni notas, porque Reacción no tiene acceso al viaje ni al cliente. Solo lleva lo que el caso ya registra. Es una vista mínima de arranque: los campos exactos a mostrar están PENDIENTES de confirmación de Producto, y añadir uno después es aditivo. No reemplaza a `CasoEmergencia`, que sigue siendo la vista de monitoreo por viaje. */
+        EmergenciaReaccion: {
+            id: components["schemas"]["Id"];
+            estado: components["schemas"]["EstadoEmergencia"];
+            origen: components["schemas"]["OrigenActivacion"];
+            /** @description Versión vigente del reclamo del caso; es la `version_esperada` para reclamar un caso que está en el pool (`reclamo_activo` null). */
+            version_reclamo: components["schemas"]["VersionReclamo"];
+            /** @description Reclamo vigente (responsable y versión); null si el caso está en el pool. */
+            reclamo_activo?: components["schemas"]["Reclamo"] | null;
+            activada_en: components["schemas"]["MarcaTiempo"];
+            /** Format: date-time */
+            resuelta_en?: string | null;
+            /** Format: date-time */
+            cerrada_en?: string | null;
+        };
+        /** @description Página de la bandeja de Reacción. Misma paginación por cursor que las demás páginas de `mensajeria`; sin `revision` de colección (ver `listarBandejaEmergencias`). */
+        PaginaBandejaEmergencias: {
+            items: components["schemas"]["EmergenciaReaccion"][];
             /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
             cursor_siguiente: string | null;
         };
@@ -1457,6 +1662,248 @@ export interface operations {
             header?: never;
             path: {
                 id: components["parameters"]["IdRuta"];
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Caso cerrado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CasoEmergencia"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    listarBandejaEmergencias: {
+        parameters: {
+            query?: {
+                /** @description Cursor de paginación. No es el cursor de cambios de ADR 28. */
+                cursor?: components["parameters"]["CursorPagina"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Casos de la bandeja de Reacción del sujeto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaBandejaEmergencias"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    obtenerEmergencia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Caso en la vista de Reacción. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmergenciaReaccion"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    agregarNotaEmergenciaPorId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotaEmergenciaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Nota agregada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotaEmergencia"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina `emergencia_cerrada`: el caso no admite notas. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    reclamarEmergenciaPorId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionEsperadaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Reclamo abierto; caso en atención. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reclamo"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    liberarReclamoEmergenciaPorId: {
+        parameters: {
+            query: {
+                version_esperada: components["schemas"]["VersionReclamo"];
+            };
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+                /** @description Identificador del reclamo. */
+                rid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reclamo liberado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    transferirEmergenciaPorId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferenciaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Reclamo nuevo del responsable destino. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reclamo"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    resolverEmergenciaPorId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["parameters"]["EmergenciaRuta"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolucionEmergenciaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Caso resuelto, en la vista de Reacción. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmergenciaReaccion"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    cerrarEmergenciaPorId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
                 /** @description Identificador del caso de emergencia. */
                 eid: components["parameters"]["EmergenciaRuta"];
             };
