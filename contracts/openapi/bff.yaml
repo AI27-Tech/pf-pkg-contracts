@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.34
+  version: 0.1.0-tracer.35
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -63,6 +63,17 @@ tags:
     Descarga del expediente de UN viaje para usuarios internos (E6-T3 / DEC-022
     #7). `bff` compone leyendo de `operacion` (fuente exacta y actual), no de
     `reportes` (analítico, eventualmente consistente).
+- name: reportes
+  description: >-
+    Dashboard de monitoreo para audiencia interna (E6-HU-025 / E8-T17).
+    Proyección espejo de `reportes`: mismos operationId, schemas y errores,
+    reenviando a `reportes` con las guardas de rol/alcance del `bff`.
+- name: adjuntos
+  description: >-
+    Evidencia del viaje para audiencia interna (E6-HU-027 / E8-T17). Proyección
+    espejo de `operacion`: los bytes NO pasan por el `bff` (subida y descarga
+    van a la URL de vida corta del almacenamiento de objetos); la auditoría de
+    cada acceso la sigue escribiendo `operacion`.
 
 paths:
   /api/v1/sesion:
@@ -1720,6 +1731,164 @@ paths:
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
+  # ===========================================================================
+  # Dashboard de monitoreo (E6-HU-025 / E6-T2 / E8-T17). Dos reenvíos a
+  # `reportes` con las guardas de rol/alcance del `bff`; sin lógica de dominio.
+  # `operationId`, schemas y errores idénticos a `reportes`. Autorización (DEC-022
+  # #9, DEC-060): 200 para `monitorista`, `supervisor`, `coordinador` y
+  # `administrador`; 403 para `jefe_operativo`, `ejecutivo`, `reaccion` y
+  # `cliente`. Alcance por unidad (DEC-045): monitorista, sus unidades;
+  # supervisor/coordinador, la unión de su alcance; administrador, global. El
+  # filtro por unidad aún no se aplica de extremo a extremo (deuda DT-07). Se
+  # conservan `proyeccion_al` y `stale`: un tablero atrasado se muestra como
+  # atrasado (DEC-033). `reportes` no acota por tenant a la audiencia Interno
+  # (DEC-129; su implementación en `pf-svc-reportes` va en ola aparte).
+  # ===========================================================================
+  /api/v1/reportes/viajes:
+    get:
+      operationId: reporteViajes
+      tags: [reportes]
+      summary: Reporte operativo de viajes por periodo y alcance (audiencia interna).
+      description: Reenvía a `reportes.reporteViajes`.
+      parameters:
+      - name: desde
+        in: query
+        required: true
+        schema: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+      - name: hasta
+        in: query
+        required: true
+        schema: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+      responses:
+        "200":
+          description: Filas del reporte de viajes.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ReporteViajes"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
+  /api/v1/reportes/estados:
+    get:
+      operationId: reporteEstados
+      tags: [reportes]
+      summary: Distribución y tiempos de permanencia por estado (audiencia interna).
+      description: Reenvía a `reportes.reporteEstados`.
+      parameters:
+      - name: desde
+        in: query
+        required: true
+        schema: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+      - name: hasta
+        in: query
+        required: true
+        schema: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+      responses:
+        "200":
+          description: Distribución por estado.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ReporteEstados"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
+  # ===========================================================================
+  # Evidencia del viaje (E6-HU-027 / E6-T4 / E8-T17). Tres reenvíos a
+  # `operacion` con las guardas de rol/alcance del `bff`. `operationId`, schemas
+  # y errores idénticos a `operacion`. Los BYTES no pasan por el `bff`: la subida
+  # y la descarga usan la URL de vida corta del almacenamiento de objetos. La
+  # auditoría de cada acceso la sigue escribiendo `operacion` (el `bff` no tiene
+  # base de datos). Autorización (DEC-022 #9, DEC-060): 200 para `monitorista`,
+  # `supervisor`, `coordinador` (en su alcance por unidad) y `administrador`
+  # (global); 403 para `jefe_operativo`, `ejecutivo`, `reaccion` y `cliente`. Un
+  # usuario fuera de alcance recibe 403 antes de emitir ninguna URL.
+  # ===========================================================================
+  /api/v1/viajes/{id}/adjuntos:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarAdjuntos
+      tags: [adjuntos]
+      summary: Listar los adjuntos de un viaje con sus metadatos (audiencia interna).
+      description: >-
+        Reenvía a `operacion.listarAdjuntos`. No devuelve bytes. El
+        `estado_escaneo` de cada adjunto se refresca releyendo esta lista
+        (sondeo HTTP, ADR 27): no hay evento de empuje para el fin del escaneo.
+        Un usuario fuera del alcance del viaje recibe 403 antes de listar nada.
+      responses:
+        "200":
+          description: Adjuntos del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaAdjuntos"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/viajes/{id}/adjuntos/intenciones-subida:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: crearIntencionSubidaAdjunto
+      tags: [adjuntos]
+      summary: Intención de subida de un adjunto con autorización de vida corta.
+      description: >-
+        Reenvía a `operacion.crearIntencionSubidaAdjunto`. Los bytes NO pasan
+        por el `bff`: el cliente los sube al almacenamiento de objetos con la URL
+        devuelta. Un usuario fuera del alcance del viaje recibe 403 antes de
+        emitir la intención.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/IntencionSubidaAdjuntoEntrada"}
+      responses:
+        "201":
+          description: Intención creada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/IntencionSubidaAdjunto"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/viajes/{id}/adjuntos/{aid}/descarga:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    - name: aid
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: descargarAdjunto
+      tags: [adjuntos]
+      summary: Autorización de vida corta para descargar un adjunto (audiencia interna).
+      description: >-
+        Reenvía a `operacion.descargarAdjunto`. Devuelve una URL de vida corta
+        del almacenamiento de objetos; los bytes NO pasan por el `bff`. Cada
+        descarga la audita `operacion`. Un usuario fuera del alcance recibe 403
+        antes de autorizar nada.
+      responses:
+        "200":
+          description: Autorización de descarga.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DescargaAdjunto"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
 components:
   responses:
     ConflictoVersion:
@@ -3144,3 +3313,187 @@ components:
           minLength: 1
           maxLength: 1000
           description: Nota de resolución obligatoria; mismas validaciones que las demás notas.
+
+    # -------------------------------------------------------------------------
+    # Schemas del DASHBOARD de monitoreo (E6-HU-025 / E8-T17). Copiados EXACTOS
+    # de `reportes.yaml`: ambos specs comparten `_comunes.yaml`, así que los
+    # `$ref` a Id/MarcaTiempo se mantienen. Se conservan `proyeccion_al` y
+    # `stale` sin recortar (DEC-033): un tablero atrasado se muestra atrasado.
+    # -------------------------------------------------------------------------
+    FilaViaje:
+      type: object
+      additionalProperties: false
+      required: [viaje_id, estado]
+      properties:
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        estado:
+          type: string
+          description: Token de estado (ADR 19), tal como lo proyecta el evento.
+        creado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        cerrado_en:
+          type: string
+          format: date-time
+          nullable: true
+          description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+
+    ReporteViajes:
+      type: object
+      additionalProperties: false
+      required: [filas, total]
+      properties:
+        filas:
+          type: array
+          items: {$ref: "#/components/schemas/FilaViaje"}
+        total: {type: integer}
+        proyeccion_al:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          nullable: true
+          description: >-
+            Instante hasta el que la proyección aplicó eventos del origen
+            (`reportes` es una proyección por eventos, ADR 18). El reporte
+            refleja el estado del dominio hasta este momento, no el de ahora.
+            Opcional (expand/contract): el servicio lo llena siempre. null solo
+            si la proyección aún no aplicó ningún evento.
+        stale:
+          type: boolean
+          description: >-
+            true si el retraso de la proyección (now menos `proyeccion_al`)
+            excede el techo de frescura configurado del servicio. Distingue un
+            reporte al día de uno congelado por un consumo detenido. El valor
+            del techo es configuración del servicio, no del contrato. Opcional:
+            si falta, el consumidor lo trata como frescura no informada, nunca
+            como fresca (P4 de E8-T17).
+
+    ConteoEstado:
+      type: object
+      additionalProperties: false
+      required: [estado, conteo]
+      properties:
+        estado: {type: string}
+        conteo: {type: integer}
+        permanencia_promedio_seg:
+          type: integer
+          nullable: true
+
+    ReporteEstados:
+      type: object
+      additionalProperties: false
+      required: [conteos]
+      properties:
+        conteos:
+          type: array
+          items: {$ref: "#/components/schemas/ConteoEstado"}
+        proyeccion_al:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          nullable: true
+          description: >-
+            Instante hasta el que la proyección aplicó eventos del origen
+            (`reportes` es una proyección por eventos, ADR 18). El reporte
+            refleja el estado del dominio hasta este momento, no el de ahora.
+            Opcional (expand/contract): el servicio lo llena siempre. null solo
+            si la proyección aún no aplicó ningún evento.
+        stale:
+          type: boolean
+          description: >-
+            true si el retraso de la proyección (now menos `proyeccion_al`)
+            excede el techo de frescura configurado del servicio. Distingue un
+            reporte al día de uno congelado por un consumo detenido. El valor
+            del techo es configuración del servicio, no del contrato. Opcional:
+            si falta, el consumidor lo trata como frescura no informada, nunca
+            como fresca (P4 de E8-T17).
+
+    # -------------------------------------------------------------------------
+    # Schemas de EVIDENCIA del viaje (E6-HU-027 / E8-T17). Copiados EXACTOS de
+    # `operacion.yaml` (comparten `_comunes.yaml`). `nombre` es obligatorio para
+    # identificar el archivo en la lista; el autor queda fuera de V1 (DT-11).
+    # `PaginaAdjuntos` no pagina en V1 (DT-08).
+    # -------------------------------------------------------------------------
+    Adjunto:
+      type: object
+      additionalProperties: false
+      required: [id, viaje_id, nombre, tipo_medio, tamano_bytes, estado_escaneo, creado_en]
+      description: Metadatos de un adjunto del viaje. No incluye los bytes.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        nombre:
+          type: string
+          minLength: 1
+          description: >-
+            Nombre de archivo declarado en la subida, para identificar el
+            adjunto en la lista de evidencia (E6-HU-027). No es el actor que lo
+            subió: el autor queda fuera de V1 (DT-11).
+        tipo_medio:
+          type: string
+          description: Tipo MIME declarado del adjunto.
+        tamano_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        checksum_sha256:
+          type: string
+          nullable: true
+          pattern: "^[a-f0-9]{64}$"
+          description: Checksum declarado en la subida; null si no se declaró.
+        estado_escaneo:
+          type: string
+          enum: [pendiente, limpio, infectado]
+          description: >-
+            Estado del escaneo antivirus del objeto. `pendiente` tras crear la
+            intención; `limpio`/`infectado` cuando el escaneo concluye. Un
+            adjunto no `limpio` no autoriza descarga. Se refresca releyendo
+            `listarAdjuntos` (sondeo; no hay evento de empuje en V1).
+        creado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    PaginaAdjuntos:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Adjunto"}
+
+    IntencionSubidaAdjuntoEntrada:
+      type: object
+      additionalProperties: false
+      required: [nombre, tipo_medio, tamano_bytes, checksum_sha256]
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          description: Nombre de archivo declarado, mostrado luego en la lista (E6-HU-027).
+        tipo_medio:
+          type: string
+          description: Tipo MIME declarado.
+        tamano_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        checksum_sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+
+    IntencionSubidaAdjunto:
+      type: object
+      additionalProperties: false
+      required: [adjunto_id, url_subida, expira_en]
+      properties:
+        adjunto_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        url_subida:
+          type: string
+          format: uri
+          description: URL de vida corta del almacenamiento de objetos.
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    DescargaAdjunto:
+      type: object
+      additionalProperties: false
+      required: [url_descarga, expira_en]
+      properties:
+        url_descarga:
+          type: string
+          format: uri
+          description: URL de vida corta del almacenamiento de objetos.
+        expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}

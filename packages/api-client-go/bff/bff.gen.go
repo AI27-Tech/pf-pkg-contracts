@@ -22,6 +22,13 @@ const (
 	BearerCognitoScopes = "bearerCognito.Scopes"
 )
 
+// Defines values for AdjuntoEstadoEscaneo.
+const (
+	Infectado AdjuntoEstadoEscaneo = "infectado"
+	Limpio    AdjuntoEstadoEscaneo = "limpio"
+	Pendiente AdjuntoEstadoEscaneo = "pendiente"
+)
+
 // Defines values for AptitudRecursoEstado.
 const (
 	Apto        AptitudRecursoEstado = "apto"
@@ -149,6 +156,34 @@ type ActivarEmergenciaClienteEntrada struct {
 	ActivacionId Id `json:"activacion_id"`
 }
 
+// Adjunto Metadatos de un adjunto del viaje. No incluye los bytes.
+type Adjunto struct {
+	// ChecksumSha256 Checksum declarado en la subida; null si no se declaró.
+	ChecksumSha256 *string `json:"checksum_sha256"`
+
+	// CreadoEn Instante en UTC, RFC 3339.
+	CreadoEn MarcaTiempo `json:"creado_en"`
+
+	// EstadoEscaneo Estado del escaneo antivirus del objeto. `pendiente` tras crear la intención; `limpio`/`infectado` cuando el escaneo concluye. Un adjunto no `limpio` no autoriza descarga. Se refresca releyendo `listarAdjuntos` (sondeo; no hay evento de empuje en V1).
+	EstadoEscaneo AdjuntoEstadoEscaneo `json:"estado_escaneo"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// Nombre Nombre de archivo declarado en la subida, para identificar el adjunto en la lista de evidencia (E6-HU-027). No es el actor que lo subió: el autor queda fuera de V1 (DT-11).
+	Nombre      string `json:"nombre"`
+	TamanoBytes int64  `json:"tamano_bytes"`
+
+	// TipoMedio Tipo MIME declarado del adjunto.
+	TipoMedio string `json:"tipo_medio"`
+
+	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.
+	ViajeId Id `json:"viaje_id"`
+}
+
+// AdjuntoEstadoEscaneo Estado del escaneo antivirus del objeto. `pendiente` tras crear la intención; `limpio`/`infectado` cuando el escaneo concluye. Un adjunto no `limpio` no autoriza descarga. Se refresca releyendo `listarAdjuntos` (sondeo; no hay evento de empuje en V1).
+type AdjuntoEstadoEscaneo string
+
 // AptitudRecurso Aptitud informativa por átomo en la respuesta de la asignación (DEC-055). Nunca bloquea la asignación en V1. Espejo de `AptitudRecurso` de `operacion`.
 type AptitudRecurso struct {
 	// Estado Afirmación informativa (DEC-055). `desconocido` lo calcula `operacion`. Nunca bloquea la asignación en V1.
@@ -262,6 +297,13 @@ type Contenedor struct {
 	Sello     *string `json:"sello,omitempty"`
 }
 
+// ConteoEstado defines model for ConteoEstado.
+type ConteoEstado struct {
+	Conteo                 int    `json:"conteo"`
+	Estado                 string `json:"estado"`
+	PermanenciaPromedioSeg *int   `json:"permanencia_promedio_seg"`
+}
+
 // Conversacion defines model for Conversacion.
 type Conversacion struct {
 	// AbiertaEn Instante en UTC, RFC 3339.
@@ -345,6 +387,15 @@ type Cursor = string
 type CustodioEscoltaEmergencia struct {
 	Nombre   string  `json:"nombre"`
 	Telefono *string `json:"telefono,omitempty"`
+}
+
+// DescargaAdjunto defines model for DescargaAdjunto.
+type DescargaAdjunto struct {
+	// ExpiraEn Instante en UTC, RFC 3339.
+	ExpiraEn MarcaTiempo `json:"expira_en"`
+
+	// UrlDescarga URL de vida corta del almacenamiento de objetos.
+	UrlDescarga string `json:"url_descarga"`
 }
 
 // DescargaViaje Expediente de exportación de un viaje. Lo compone `bff` leyendo de `operacion`. No contiene cuenta espejo ni `clave_amago` (no existen en el modelo V1, DEC-009/DEC-039).
@@ -589,6 +640,24 @@ type FichaTecnicaEntrada struct {
 	Tracto       *Tracto       `json:"tracto"`
 }
 
+// FilaViaje defines model for FilaViaje.
+type FilaViaje struct {
+	// CerradoEn Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+	CerradoEn *time.Time `json:"cerrado_en"`
+
+	// ClienteId Identificador único (UUID). Nunca un correlativo expuesto.
+	ClienteId *Id `json:"cliente_id,omitempty"`
+
+	// CreadoEn Instante en UTC, RFC 3339.
+	CreadoEn *MarcaTiempo `json:"creado_en,omitempty"`
+
+	// Estado Token de estado (ADR 19), tal como lo proyecta el evento.
+	Estado string `json:"estado"`
+
+	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.
+	ViajeId Id `json:"viaje_id"`
+}
+
 // HitoCliente Hito de progreso presentado al cliente. `bff` colapsa el bucle multi-parada en un hito legible (mapeo estado→hito, E2-T2); no expone el enum completo de estados.
 type HitoCliente struct {
 	// Estado Token de estado subyacente (referencia técnica).
@@ -639,6 +708,30 @@ type IncidenciaCuradaEstado string
 type IncidenciaEntrada struct {
 	Descripcion *string `json:"descripcion,omitempty"`
 	TipoInterno string  `json:"tipo_interno"`
+}
+
+// IntencionSubidaAdjunto defines model for IntencionSubidaAdjunto.
+type IntencionSubidaAdjunto struct {
+	// AdjuntoId Identificador único (UUID). Nunca un correlativo expuesto.
+	AdjuntoId Id `json:"adjunto_id"`
+
+	// ExpiraEn Instante en UTC, RFC 3339.
+	ExpiraEn MarcaTiempo `json:"expira_en"`
+
+	// UrlSubida URL de vida corta del almacenamiento de objetos.
+	UrlSubida string `json:"url_subida"`
+}
+
+// IntencionSubidaAdjuntoEntrada defines model for IntencionSubidaAdjuntoEntrada.
+type IntencionSubidaAdjuntoEntrada struct {
+	ChecksumSha256 string `json:"checksum_sha256"`
+
+	// Nombre Nombre de archivo declarado, mostrado luego en la lista (E6-HU-027).
+	Nombre      string `json:"nombre"`
+	TamanoBytes int64  `json:"tamano_bytes"`
+
+	// TipoMedio Tipo MIME declarado.
+	TipoMedio string `json:"tipo_medio"`
 }
 
 // MarcaTiempo Instante en UTC, RFC 3339.
@@ -732,6 +825,11 @@ type NotaEmergenciaClienteEntrada struct {
 
 // OrigenActivacion Quién originó la activación (ADR 21 §3).
 type OrigenActivacion string
+
+// PaginaAdjuntos defines model for PaginaAdjuntos.
+type PaginaAdjuntos struct {
+	Items []Adjunto `json:"items"`
+}
 
 // PaginaBandejaEmergencias Página de la bandeja de Reacción. Misma paginación por cursor que las demás páginas de `mensajeria`; sin `revision` de colección (ver `listarBandejaEmergencias`).
 type PaginaBandejaEmergencias struct {
@@ -854,6 +952,29 @@ type RegistroAuditoriaDescarga struct {
 
 	// Ts Instante en UTC, RFC 3339.
 	Ts MarcaTiempo `json:"ts"`
+}
+
+// ReporteEstados defines model for ReporteEstados.
+type ReporteEstados struct {
+	Conteos []ConteoEstado `json:"conteos"`
+
+	// ProyeccionAl Instante hasta el que la proyección aplicó eventos del origen (`reportes` es una proyección por eventos, ADR 18). El reporte refleja el estado del dominio hasta este momento, no el de ahora. Opcional (expand/contract): el servicio lo llena siempre. null solo si la proyección aún no aplicó ningún evento.
+	ProyeccionAl *MarcaTiempo `json:"proyeccion_al"`
+
+	// Stale true si el retraso de la proyección (now menos `proyeccion_al`) excede el techo de frescura configurado del servicio. Distingue un reporte al día de uno congelado por un consumo detenido. El valor del techo es configuración del servicio, no del contrato. Opcional: si falta, el consumidor lo trata como frescura no informada, nunca como fresca (P4 de E8-T17).
+	Stale *bool `json:"stale,omitempty"`
+}
+
+// ReporteViajes defines model for ReporteViajes.
+type ReporteViajes struct {
+	Filas []FilaViaje `json:"filas"`
+
+	// ProyeccionAl Instante hasta el que la proyección aplicó eventos del origen (`reportes` es una proyección por eventos, ADR 18). El reporte refleja el estado del dominio hasta este momento, no el de ahora. Opcional (expand/contract): el servicio lo llena siempre. null solo si la proyección aún no aplicó ningún evento.
+	ProyeccionAl *MarcaTiempo `json:"proyeccion_al"`
+
+	// Stale true si el retraso de la proyección (now menos `proyeccion_al`) excede el techo de frescura configurado del servicio. Distingue un reporte al día de uno congelado por un consumo detenido. El valor del techo es configuración del servicio, no del contrato. Opcional: si falta, el consumidor lo trata como frescura no informada, nunca como fresca (P4 de E8-T17).
+	Stale *bool `json:"stale,omitempty"`
+	Total int   `json:"total"`
 }
 
 // ResolucionEmergenciaEntrada defines model for ResolucionEmergenciaEntrada.
@@ -1161,6 +1282,18 @@ type LiberarReclamoEmergenciaPorIdParams struct {
 	VersionEsperada VersionReclamo `form:"version_esperada" json:"version_esperada"`
 }
 
+// ReporteEstadosParams defines parameters for ReporteEstados.
+type ReporteEstadosParams struct {
+	Desde MarcaTiempo `form:"desde" json:"desde"`
+	Hasta MarcaTiempo `form:"hasta" json:"hasta"`
+}
+
+// ReporteViajesParams defines parameters for ReporteViajes.
+type ReporteViajesParams struct {
+	Desde MarcaTiempo `form:"desde" json:"desde"`
+	Hasta MarcaTiempo `form:"hasta" json:"hasta"`
+}
+
 // ListarUnidadesParams defines parameters for ListarUnidades.
 type ListarUnidadesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -1232,6 +1365,9 @@ type RefrescarSesionJSONRequestBody = RefrescoEntrada
 
 // CrearViajeJSONRequestBody defines body for CrearViaje for application/json ContentType.
 type CrearViajeJSONRequestBody = CrearViajeEntrada
+
+// CrearIntencionSubidaAdjuntoJSONRequestBody defines body for CrearIntencionSubidaAdjunto for application/json ContentType.
+type CrearIntencionSubidaAdjuntoJSONRequestBody = IntencionSubidaAdjuntoEntrada
 
 // AsignarRecursosJSONRequestBody defines body for AsignarRecursos for application/json ContentType.
 type AsignarRecursosJSONRequestBody = AsignacionEntrada
@@ -1429,6 +1565,12 @@ type ClientInterface interface {
 
 	TransferirEmergenciaPorId(ctx context.Context, eid Id, body TransferirEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ReporteEstados request
+	ReporteEstados(ctx context.Context, params *ReporteEstadosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReporteViajes request
+	ReporteViajes(ctx context.Context, params *ReporteViajesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CerrarSesion request
 	CerrarSesion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1455,6 +1597,17 @@ type ClientInterface interface {
 
 	// SeguirViaje request
 	SeguirViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListarAdjuntos request
+	ListarAdjuntos(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CrearIntencionSubidaAdjuntoWithBody request with any body
+	CrearIntencionSubidaAdjuntoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearIntencionSubidaAdjunto(ctx context.Context, id Id, body CrearIntencionSubidaAdjuntoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DescargarAdjunto request
+	DescargarAdjunto(ctx context.Context, id Id, aid Id, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AsignarRecursosWithBody request with any body
 	AsignarRecursosWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1914,6 +2067,30 @@ func (c *Client) TransferirEmergenciaPorId(ctx context.Context, eid Id, body Tra
 	return c.Client.Do(req)
 }
 
+func (c *Client) ReporteEstados(ctx context.Context, params *ReporteEstadosParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReporteEstadosRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReporteViajes(ctx context.Context, params *ReporteViajesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReporteViajesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) CerrarSesion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCerrarSesionRequest(c.Server)
 	if err != nil {
@@ -2024,6 +2201,54 @@ func (c *Client) CrearViaje(ctx context.Context, body CrearViajeJSONRequestBody,
 
 func (c *Client) SeguirViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSeguirViajeRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarAdjuntos(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarAdjuntosRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearIntencionSubidaAdjuntoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearIntencionSubidaAdjuntoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearIntencionSubidaAdjunto(ctx context.Context, id Id, body CrearIntencionSubidaAdjuntoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearIntencionSubidaAdjuntoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DescargarAdjunto(ctx context.Context, id Id, aid Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDescargarAdjuntoRequest(c.Server, id, aid)
 	if err != nil {
 		return nil, err
 	}
@@ -3526,6 +3751,120 @@ func NewTransferirEmergenciaPorIdRequestWithBody(server string, eid Id, contentT
 	return req, nil
 }
 
+// NewReporteEstadosRequest generates requests for ReporteEstados
+func NewReporteEstadosRequest(server string, params *ReporteEstadosParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/reportes/estados")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "desde", runtime.ParamLocationQuery, params.Desde); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "hasta", runtime.ParamLocationQuery, params.Hasta); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReporteViajesRequest generates requests for ReporteViajes
+func NewReporteViajesRequest(server string, params *ReporteViajesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/reportes/viajes")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "desde", runtime.ParamLocationQuery, params.Desde); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "hasta", runtime.ParamLocationQuery, params.Hasta); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewCerrarSesionRequest generates requests for CerrarSesion
 func NewCerrarSesionRequest(server string) (*http.Request, error) {
 	var err error
@@ -3804,6 +4143,128 @@ func NewSeguirViajeRequest(server string, id Id) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/viajes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListarAdjuntosRequest generates requests for ListarAdjuntos
+func NewListarAdjuntosRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/adjuntos", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCrearIntencionSubidaAdjuntoRequest calls the generic CrearIntencionSubidaAdjunto builder with application/json body
+func NewCrearIntencionSubidaAdjuntoRequest(server string, id Id, body CrearIntencionSubidaAdjuntoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearIntencionSubidaAdjuntoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewCrearIntencionSubidaAdjuntoRequestWithBody generates requests for CrearIntencionSubidaAdjunto with any type of body
+func NewCrearIntencionSubidaAdjuntoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/adjuntos/intenciones-subida", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDescargarAdjuntoRequest generates requests for DescargarAdjunto
+func NewDescargarAdjuntoRequest(server string, id Id, aid Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "aid", runtime.ParamLocationPath, aid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/adjuntos/%s/descarga", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5050,6 +5511,12 @@ type ClientWithResponsesInterface interface {
 
 	TransferirEmergenciaPorIdWithResponse(ctx context.Context, eid Id, body TransferirEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferirEmergenciaPorIdResponse, error)
 
+	// ReporteEstadosWithResponse request
+	ReporteEstadosWithResponse(ctx context.Context, params *ReporteEstadosParams, reqEditors ...RequestEditorFn) (*ReporteEstadosResponse, error)
+
+	// ReporteViajesWithResponse request
+	ReporteViajesWithResponse(ctx context.Context, params *ReporteViajesParams, reqEditors ...RequestEditorFn) (*ReporteViajesResponse, error)
+
 	// CerrarSesionWithResponse request
 	CerrarSesionWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*CerrarSesionResponse, error)
 
@@ -5076,6 +5543,17 @@ type ClientWithResponsesInterface interface {
 
 	// SeguirViajeWithResponse request
 	SeguirViajeWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*SeguirViajeResponse, error)
+
+	// ListarAdjuntosWithResponse request
+	ListarAdjuntosWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ListarAdjuntosResponse, error)
+
+	// CrearIntencionSubidaAdjuntoWithBodyWithResponse request with any body
+	CrearIntencionSubidaAdjuntoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearIntencionSubidaAdjuntoResponse, error)
+
+	CrearIntencionSubidaAdjuntoWithResponse(ctx context.Context, id Id, body CrearIntencionSubidaAdjuntoJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearIntencionSubidaAdjuntoResponse, error)
+
+	// DescargarAdjuntoWithResponse request
+	DescargarAdjuntoWithResponse(ctx context.Context, id Id, aid Id, reqEditors ...RequestEditorFn) (*DescargarAdjuntoResponse, error)
 
 	// AsignarRecursosWithBodyWithResponse request with any body
 	AsignarRecursosWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AsignarRecursosResponse, error)
@@ -5709,6 +6187,55 @@ func (r TransferirEmergenciaPorIdResponse) StatusCode() int {
 	return 0
 }
 
+type ReporteEstadosResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ReporteEstados
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ReporteEstadosResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReporteEstadosResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ReporteViajesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ReporteViajes
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ReporteViajesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReporteViajesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type CerrarSesionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5870,6 +6397,82 @@ func (r SeguirViajeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r SeguirViajeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarAdjuntosResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaAdjuntos
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarAdjuntosResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarAdjuntosResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearIntencionSubidaAdjuntoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *IntencionSubidaAdjunto
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearIntencionSubidaAdjuntoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearIntencionSubidaAdjuntoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DescargarAdjuntoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DescargaAdjunto
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r DescargarAdjuntoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DescargarAdjuntoResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -6727,6 +7330,24 @@ func (c *ClientWithResponses) TransferirEmergenciaPorIdWithResponse(ctx context.
 	return ParseTransferirEmergenciaPorIdResponse(rsp)
 }
 
+// ReporteEstadosWithResponse request returning *ReporteEstadosResponse
+func (c *ClientWithResponses) ReporteEstadosWithResponse(ctx context.Context, params *ReporteEstadosParams, reqEditors ...RequestEditorFn) (*ReporteEstadosResponse, error) {
+	rsp, err := c.ReporteEstados(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReporteEstadosResponse(rsp)
+}
+
+// ReporteViajesWithResponse request returning *ReporteViajesResponse
+func (c *ClientWithResponses) ReporteViajesWithResponse(ctx context.Context, params *ReporteViajesParams, reqEditors ...RequestEditorFn) (*ReporteViajesResponse, error) {
+	rsp, err := c.ReporteViajes(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReporteViajesResponse(rsp)
+}
+
 // CerrarSesionWithResponse request returning *CerrarSesionResponse
 func (c *ClientWithResponses) CerrarSesionWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*CerrarSesionResponse, error) {
 	rsp, err := c.CerrarSesion(ctx, reqEditors...)
@@ -6812,6 +7433,41 @@ func (c *ClientWithResponses) SeguirViajeWithResponse(ctx context.Context, id Id
 		return nil, err
 	}
 	return ParseSeguirViajeResponse(rsp)
+}
+
+// ListarAdjuntosWithResponse request returning *ListarAdjuntosResponse
+func (c *ClientWithResponses) ListarAdjuntosWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ListarAdjuntosResponse, error) {
+	rsp, err := c.ListarAdjuntos(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarAdjuntosResponse(rsp)
+}
+
+// CrearIntencionSubidaAdjuntoWithBodyWithResponse request with arbitrary body returning *CrearIntencionSubidaAdjuntoResponse
+func (c *ClientWithResponses) CrearIntencionSubidaAdjuntoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearIntencionSubidaAdjuntoResponse, error) {
+	rsp, err := c.CrearIntencionSubidaAdjuntoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearIntencionSubidaAdjuntoResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearIntencionSubidaAdjuntoWithResponse(ctx context.Context, id Id, body CrearIntencionSubidaAdjuntoJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearIntencionSubidaAdjuntoResponse, error) {
+	rsp, err := c.CrearIntencionSubidaAdjunto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearIntencionSubidaAdjuntoResponse(rsp)
+}
+
+// DescargarAdjuntoWithResponse request returning *DescargarAdjuntoResponse
+func (c *ClientWithResponses) DescargarAdjuntoWithResponse(ctx context.Context, id Id, aid Id, reqEditors ...RequestEditorFn) (*DescargarAdjuntoResponse, error) {
+	rsp, err := c.DescargarAdjunto(ctx, id, aid, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDescargarAdjuntoResponse(rsp)
 }
 
 // AsignarRecursosWithBodyWithResponse request with arbitrary body returning *AsignarRecursosResponse
@@ -8183,6 +8839,93 @@ func ParseTransferirEmergenciaPorIdResponse(rsp *http.Response) (*TransferirEmer
 	return response, nil
 }
 
+// ParseReporteEstadosResponse parses an HTTP response from a ReporteEstadosWithResponse call
+func ParseReporteEstadosResponse(rsp *http.Response) (*ReporteEstadosResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReporteEstadosResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReporteEstados
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReporteViajesResponse parses an HTTP response from a ReporteViajesWithResponse call
+func ParseReporteViajesResponse(rsp *http.Response) (*ReporteViajesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReporteViajesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReporteViajes
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseCerrarSesionResponse parses an HTTP response from a CerrarSesionWithResponse call
 func ParseCerrarSesionResponse(rsp *http.Response) (*CerrarSesionResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -8443,6 +9186,154 @@ func ParseSeguirViajeResponse(rsp *http.Response) (*SeguirViajeResponse, error) 
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarAdjuntosResponse parses an HTTP response from a ListarAdjuntosWithResponse call
+func ParseListarAdjuntosResponse(rsp *http.Response) (*ListarAdjuntosResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarAdjuntosResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaAdjuntos
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearIntencionSubidaAdjuntoResponse parses an HTTP response from a CrearIntencionSubidaAdjuntoWithResponse call
+func ParseCrearIntencionSubidaAdjuntoResponse(rsp *http.Response) (*CrearIntencionSubidaAdjuntoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearIntencionSubidaAdjuntoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest IntencionSubidaAdjunto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDescargarAdjuntoResponse parses an HTTP response from a DescargarAdjuntoWithResponse call
+func ParseDescargarAdjuntoResponse(rsp *http.Response) (*DescargarAdjuntoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DescargarAdjuntoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DescargaAdjunto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado

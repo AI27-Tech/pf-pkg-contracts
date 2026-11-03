@@ -3,6 +3,29 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-03 [tracer.35] — dashboard de monitoreo y evidencia del viaje proyectados al `bff` (E8-T17, E6-HU-025/027)
+
+**Para quién:** el panel interno (`pf-web-frontend-internal`, E8-T17), que solo habla con el `bff`. Dos de las tres capacidades de E8-T17 no tenían operación en `bff.yaml`: el dashboard (vivía en `reportes.yaml`) y la evidencia (vivía en `operacion.yaml`). La descarga del expediente ya estaba publicada y no se toca.
+
+**Resumen:** ola aditiva en `bff.yaml` (salvo una ruptura declarada en `operacion.yaml`, ver abajo). Proyecta cinco operaciones al `bff` con los mismos `operationId`, schemas y errores, reenviando a `reportes` y `operacion` (precedente: la bandeja de `mensajeria`, DEC-116). Agrega `nombre` al adjunto para identificar el archivo en la lista de evidencia.
+
+- **Dashboard (reenvío a `reportes`):** `reporteViajes` (`GET /api/v1/reportes/viajes`) y `reporteEstados` (`GET /api/v1/reportes/estados`). Se conservan `proyeccion_al` y `stale` sin recortar: un tablero atrasado se muestra atrasado (DEC-033). `stale` opaco opcional; si falta, el consumidor lo trata como frescura no informada, nunca como fresca (P4).
+- **Evidencia (reenvío a `operacion`):** `listarAdjuntos` (`GET /api/v1/viajes/{id}/adjuntos`), `crearIntencionSubidaAdjunto` (`POST .../adjuntos/intenciones-subida`) y `descargarAdjunto` (`GET .../adjuntos/{aid}/descarga`). Los bytes NO pasan por el `bff`: subida y descarga van a la URL de vida corta del object storage; la auditoría la sigue escribiendo `operacion`. El `estado_escaneo` se refresca releyendo `listarAdjuntos` (sondeo, ADR 27).
+
+**Forma:** autorización por rol en el `bff` (DEC-022 #9, DEC-060): `200` para `monitorista`, `supervisor`, `coordinador` y `administrador`; `403` para `jefe_operativo`, `ejecutivo`, `reaccion` y `cliente`. Alcance por unidad (DEC-045) declarado en las descripciones; su aplicación de extremo a extremo es deuda DT-07. DEC-129 (reportes no acota por tenant a la audiencia Interno) se implementa en `pf-svc-reportes` en ola aparte.
+
+**Ruptura declarada:** `nombre` pasa a obligatorio en `IntencionSubidaAdjuntoEntrada` (`operacion.yaml`). Es incompatible contra tracer.34 y está declarada en `rompimientos/v0.1.0-tracer.35.yaml`. Ruptura SEGURA: `crearIntencionSubidaAdjunto` está contratado pero `operacion` aún no lo implementa y ningún consumidor la cablea (grep en `repos/`: solo un binario compilado, sin fuente). Decisión de Producto P5 (E8-T17).
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: dos tags (`reportes`, `adjuntos`), cinco rutas/operaciones y nueve schemas espejo (`FilaViaje`, `ReporteViajes`, `ConteoEstado`, `ReporteEstados`, `Adjunto`, `PaginaAdjuntos`, `IntencionSubidaAdjuntoEntrada`, `IntencionSubidaAdjunto`, `DescargaAdjunto`).
+- `contracts/openapi/operacion.yaml`: `nombre` obligatorio en `Adjunto` e `IntencionSubidaAdjuntoEntrada`.
+- `rompimientos/v0.1.0-tracer.35.yaml`: nuevo, declara la ruptura de `nombre`.
+- Clientes Go y TS de `bff` y `operacion` regenerados. `VERSION`, `packages/api-client-ts/package.json`, el `version:` de los 8 specs y el encabezado de `contracts/events/INVENTARIO.md` a `0.1.0-tracer.35`.
+
+**Compatibilidad:** `bff.yaml` aditivo; `operacion.yaml` con una ruptura intencional declarada. `breaking-openapi` en verde (ruptura en allowlist); `lint-openapi` en verde; cliente Go compila y pasa `go vet`. Las interfaces `ClientWithResponsesInterface` de `bff` ganan métodos: un doble de prueba que las implemente a mano debe añadirlos.
+
+**Siguiente (fuera de esta ola):** `pf-svc-reportes` implementa DEC-129 (no acotar por tenant a Interno) y el filtro "viajes en curso" (DT-10, urgente); `pf-svc-operacion` implementa adjuntos con `nombre`; `pf-svc-bff` sube pin a `tracer.35` y cablea las cinco operaciones; el frontend sube pin cuando lo pida el usuario.
+
 ## 2026-11-03 12:53 [tracer.34] — bandeja de Reacción y caso de emergencia por su propio id (DEC-028, DEC-121, E8-T18)
 
 **Para quién:** `pf-svc-mensajeria`, `pf-svc-bff` y el frontend interno (panel de Reacción). Hoy un caso de emergencia solo se alcanza por viaje (`/api/v1/viajes/{id}/emergencias...`), pero Reacción no accede a las acciones ni a la bitácora del viaje: su interfaz es la bandeja y el caso (DEC-028, E8-T18). DEC-121: el caso se direcciona por su propio id (`mensajeria.emergencia.id`).
