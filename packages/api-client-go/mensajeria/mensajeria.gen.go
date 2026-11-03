@@ -139,6 +139,29 @@ type Conversacion struct {
 // Cursor Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato.
 type Cursor = string
 
+// EmergenciaReaccion El caso tal como lo ve Reacción en su bandeja (DEC-121 #2): SIN `viaje_id`, `cliente_id`, `actor_real` ni notas. Solo lleva lo que el caso ya registra. No reemplaza a `CasoEmergencia`, que sigue siendo la vista de monitoreo por viaje y la que `obtenerEmergencia` entrega al `bff` para componer el detalle.
+type EmergenciaReaccion struct {
+	// ActivadaEn Instante en UTC, RFC 3339.
+	ActivadaEn MarcaTiempo `json:"activada_en"`
+	CerradaEn  *time.Time  `json:"cerrada_en"`
+
+	// Estado Ciclo del caso de emergencia (ADR 21 §5), agregado propio distinto del estado del viaje y de `EstadoConversacion`. `resuelta` y `cerrada` son irreversibles.
+	Estado EstadoEmergencia `json:"estado"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// Origen Quién originó la activación (ADR 21 §3).
+	Origen OrigenActivacion `json:"origen"`
+
+	// ReclamoActivo Reclamo vigente (responsable y versión); null si el caso está en el pool.
+	ReclamoActivo *Reclamo   `json:"reclamo_activo"`
+	ResueltaEn    *time.Time `json:"resuelta_en"`
+
+	// VersionReclamo Versión vigente del reclamo del caso; es la `version_esperada` para reclamar un caso que está en el pool (`reclamo_activo` null).
+	VersionReclamo VersionReclamo `json:"version_reclamo"`
+}
+
 // EnviarMensajeEntrada defines model for EnviarMensajeEntrada.
 type EnviarMensajeEntrada struct {
 	AdjuntosIds *[]Id `json:"adjuntos_ids,omitempty"`
@@ -276,6 +299,13 @@ type PaginaAuditoria struct {
 	Items           []RegistroAuditoria `json:"items"`
 }
 
+// PaginaBandejaEmergencias Página de la bandeja de Reacción. Misma paginación por cursor que las demás páginas de `mensajeria`; sin `revision` de colección (ver `listarBandejaEmergencias`).
+type PaginaBandejaEmergencias struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más.
+	CursorSiguiente *string              `json:"cursor_siguiente"`
+	Items           []EmergenciaReaccion `json:"items"`
+}
+
 // PaginaConversaciones defines model for PaginaConversaciones.
 type PaginaConversaciones struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más.
@@ -295,6 +325,13 @@ type PaginaMensajes struct {
 	// HayMas true si hay más mensajes en la dirección pedida.
 	HayMas bool      `json:"hay_mas"`
 	Items  []Mensaje `json:"items"`
+}
+
+// PaginaNotasEmergencia Página de notas de un caso (`listarNotasEmergenciaPorId`).
+type PaginaNotasEmergencia struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más.
+	CursorSiguiente *string          `json:"cursor_siguiente"`
+	Items           []NotaEmergencia `json:"items"`
 }
 
 // ReciboEntrada defines model for ReciboEntrada.
@@ -422,6 +459,12 @@ type ListarAuditoriaConversacionParams struct {
 	Cursor *CursorPagina `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListarBandejaEmergenciasParams defines parameters for ListarBandejaEmergencias.
+type ListarBandejaEmergenciasParams struct {
+	// Cursor Cursor de paginación. No es el cursor de cambios de ADR 28.
+	Cursor *CursorPagina `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListarTrabajoMiBandejaParams defines parameters for ListarTrabajoMiBandeja.
 type ListarTrabajoMiBandejaParams struct {
 	// Cursor Cursor de paginación. No es el cursor de cambios de ADR 28.
@@ -461,6 +504,17 @@ type LiberarReclamoParams struct {
 	VersionEsperada VersionReclamo `form:"version_esperada" json:"version_esperada"`
 }
 
+// ListarNotasEmergenciaPorIdParams defines parameters for ListarNotasEmergenciaPorId.
+type ListarNotasEmergenciaPorIdParams struct {
+	// Cursor Cursor de paginación. No es el cursor de cambios de ADR 28.
+	Cursor *CursorPagina `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// LiberarReclamoEmergenciaPorIdParams defines parameters for LiberarReclamoEmergenciaPorId.
+type LiberarReclamoEmergenciaPorIdParams struct {
+	VersionEsperada VersionReclamo `form:"version_esperada" json:"version_esperada"`
+}
+
 // LiberarReclamoEmergenciaParams defines parameters for LiberarReclamoEmergencia.
 type LiberarReclamoEmergenciaParams struct {
 	VersionEsperada VersionReclamo `form:"version_esperada" json:"version_esperada"`
@@ -486,6 +540,15 @@ type ReclamarConversacionJSONRequestBody = VersionEsperadaEntrada
 
 // TransferirConversacionJSONRequestBody defines body for TransferirConversacion for application/json ContentType.
 type TransferirConversacionJSONRequestBody = TransferenciaEntrada
+
+// ReclamarEmergenciaPorIdJSONRequestBody defines body for ReclamarEmergenciaPorId for application/json ContentType.
+type ReclamarEmergenciaPorIdJSONRequestBody = VersionEsperadaEntrada
+
+// ResolverEmergenciaPorIdJSONRequestBody defines body for ResolverEmergenciaPorId for application/json ContentType.
+type ResolverEmergenciaPorIdJSONRequestBody = ResolucionEmergenciaEntrada
+
+// TransferirEmergenciaPorIdJSONRequestBody defines body for TransferirEmergenciaPorId for application/json ContentType.
+type TransferirEmergenciaPorIdJSONRequestBody = TransferenciaEntrada
 
 // ActivarEmergenciaJSONRequestBody defines body for ActivarEmergencia for application/json ContentType.
 type ActivarEmergenciaJSONRequestBody = ActivarEmergenciaEntrada
@@ -578,6 +641,9 @@ type ClientInterface interface {
 	// ListarAuditoriaConversacion request
 	ListarAuditoriaConversacion(ctx context.Context, id IdRuta, params *ListarAuditoriaConversacionParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListarBandejaEmergencias request
+	ListarBandejaEmergencias(ctx context.Context, params *ListarBandejaEmergenciasParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarTrabajoMiBandeja request
 	ListarTrabajoMiBandeja(ctx context.Context, params *ListarTrabajoMiBandejaParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -631,6 +697,33 @@ type ClientInterface interface {
 
 	TransferirConversacion(ctx context.Context, id IdRuta, body TransferirConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ObtenerEmergencia request
+	ObtenerEmergencia(ctx context.Context, eid EmergenciaRuta, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CerrarEmergenciaPorId request
+	CerrarEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListarNotasEmergenciaPorId request
+	ListarNotasEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReclamarEmergenciaPorIdWithBody request with any body
+	ReclamarEmergenciaPorIdWithBody(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ReclamarEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, body ReclamarEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// LiberarReclamoEmergenciaPorId request
+	LiberarReclamoEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, rid Id, params *LiberarReclamoEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ResolverEmergenciaPorIdWithBody request with any body
+	ResolverEmergenciaPorIdWithBody(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ResolverEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, body ResolverEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TransferirEmergenciaPorIdWithBody request with any body
+	TransferirEmergenciaPorIdWithBody(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	TransferirEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, body TransferirEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ObtenerConversacionDeViaje request
 	ObtenerConversacionDeViaje(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -671,6 +764,18 @@ type ClientInterface interface {
 
 func (c *Client) ListarAuditoriaConversacion(ctx context.Context, id IdRuta, params *ListarAuditoriaConversacionParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarAuditoriaConversacionRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarBandejaEmergencias(ctx context.Context, params *ListarBandejaEmergenciasParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarBandejaEmergenciasRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -921,6 +1026,126 @@ func (c *Client) TransferirConversacion(ctx context.Context, id IdRuta, body Tra
 	return c.Client.Do(req)
 }
 
+func (c *Client) ObtenerEmergencia(ctx context.Context, eid EmergenciaRuta, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerEmergenciaRequest(c.Server, eid)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CerrarEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCerrarEmergenciaPorIdRequest(c.Server, eid)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarNotasEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarNotasEmergenciaPorIdRequest(c.Server, eid, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReclamarEmergenciaPorIdWithBody(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReclamarEmergenciaPorIdRequestWithBody(c.Server, eid, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReclamarEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, body ReclamarEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReclamarEmergenciaPorIdRequest(c.Server, eid, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) LiberarReclamoEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, rid Id, params *LiberarReclamoEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewLiberarReclamoEmergenciaPorIdRequest(c.Server, eid, rid, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ResolverEmergenciaPorIdWithBody(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResolverEmergenciaPorIdRequestWithBody(c.Server, eid, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ResolverEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, body ResolverEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewResolverEmergenciaPorIdRequest(c.Server, eid, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TransferirEmergenciaPorIdWithBody(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTransferirEmergenciaPorIdRequestWithBody(c.Server, eid, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TransferirEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, body TransferirEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTransferirEmergenciaPorIdRequest(c.Server, eid, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ObtenerConversacionDeViaje(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewObtenerConversacionDeViajeRequest(c.Server, id)
 	if err != nil {
@@ -1106,6 +1331,55 @@ func NewListarAuditoriaConversacionRequest(server string, id IdRuta, params *Lis
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/auditoria/conversaciones/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListarBandejaEmergenciasRequest generates requests for ListarBandejaEmergencias
+func NewListarBandejaEmergenciasRequest(server string, params *ListarBandejaEmergenciasParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/bandeja/emergencias")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1841,6 +2115,330 @@ func NewTransferirConversacionRequestWithBody(server string, id IdRuta, contentT
 	return req, nil
 }
 
+// NewObtenerEmergenciaRequest generates requests for ObtenerEmergencia
+func NewObtenerEmergenciaRequest(server string, eid EmergenciaRuta) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "eid", runtime.ParamLocationPath, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/emergencias/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCerrarEmergenciaPorIdRequest generates requests for CerrarEmergenciaPorId
+func NewCerrarEmergenciaPorIdRequest(server string, eid EmergenciaRuta) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "eid", runtime.ParamLocationPath, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/emergencias/%s/cierre", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListarNotasEmergenciaPorIdRequest generates requests for ListarNotasEmergenciaPorId
+func NewListarNotasEmergenciaPorIdRequest(server string, eid EmergenciaRuta, params *ListarNotasEmergenciaPorIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "eid", runtime.ParamLocationPath, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/emergencias/%s/notas", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReclamarEmergenciaPorIdRequest calls the generic ReclamarEmergenciaPorId builder with application/json body
+func NewReclamarEmergenciaPorIdRequest(server string, eid EmergenciaRuta, body ReclamarEmergenciaPorIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReclamarEmergenciaPorIdRequestWithBody(server, eid, "application/json", bodyReader)
+}
+
+// NewReclamarEmergenciaPorIdRequestWithBody generates requests for ReclamarEmergenciaPorId with any type of body
+func NewReclamarEmergenciaPorIdRequestWithBody(server string, eid EmergenciaRuta, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "eid", runtime.ParamLocationPath, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/emergencias/%s/reclamos", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewLiberarReclamoEmergenciaPorIdRequest generates requests for LiberarReclamoEmergenciaPorId
+func NewLiberarReclamoEmergenciaPorIdRequest(server string, eid EmergenciaRuta, rid Id, params *LiberarReclamoEmergenciaPorIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "eid", runtime.ParamLocationPath, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "rid", runtime.ParamLocationPath, rid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/emergencias/%s/reclamos/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "version_esperada", runtime.ParamLocationQuery, params.VersionEsperada); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewResolverEmergenciaPorIdRequest calls the generic ResolverEmergenciaPorId builder with application/json body
+func NewResolverEmergenciaPorIdRequest(server string, eid EmergenciaRuta, body ResolverEmergenciaPorIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewResolverEmergenciaPorIdRequestWithBody(server, eid, "application/json", bodyReader)
+}
+
+// NewResolverEmergenciaPorIdRequestWithBody generates requests for ResolverEmergenciaPorId with any type of body
+func NewResolverEmergenciaPorIdRequestWithBody(server string, eid EmergenciaRuta, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "eid", runtime.ParamLocationPath, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/emergencias/%s/resolucion", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTransferirEmergenciaPorIdRequest calls the generic TransferirEmergenciaPorId builder with application/json body
+func NewTransferirEmergenciaPorIdRequest(server string, eid EmergenciaRuta, body TransferirEmergenciaPorIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTransferirEmergenciaPorIdRequestWithBody(server, eid, "application/json", bodyReader)
+}
+
+// NewTransferirEmergenciaPorIdRequestWithBody generates requests for TransferirEmergenciaPorId with any type of body
+func NewTransferirEmergenciaPorIdRequestWithBody(server string, eid EmergenciaRuta, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "eid", runtime.ParamLocationPath, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/emergencias/%s/transferencias", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewObtenerConversacionDeViajeRequest generates requests for ObtenerConversacionDeViaje
 func NewObtenerConversacionDeViajeRequest(server string, id IdRuta) (*http.Request, error) {
 	var err error
@@ -2325,6 +2923,9 @@ type ClientWithResponsesInterface interface {
 	// ListarAuditoriaConversacionWithResponse request
 	ListarAuditoriaConversacionWithResponse(ctx context.Context, id IdRuta, params *ListarAuditoriaConversacionParams, reqEditors ...RequestEditorFn) (*ListarAuditoriaConversacionResponse, error)
 
+	// ListarBandejaEmergenciasWithResponse request
+	ListarBandejaEmergenciasWithResponse(ctx context.Context, params *ListarBandejaEmergenciasParams, reqEditors ...RequestEditorFn) (*ListarBandejaEmergenciasResponse, error)
+
 	// ListarTrabajoMiBandejaWithResponse request
 	ListarTrabajoMiBandejaWithResponse(ctx context.Context, params *ListarTrabajoMiBandejaParams, reqEditors ...RequestEditorFn) (*ListarTrabajoMiBandejaResponse, error)
 
@@ -2377,6 +2978,33 @@ type ClientWithResponsesInterface interface {
 	TransferirConversacionWithBodyWithResponse(ctx context.Context, id IdRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransferirConversacionResponse, error)
 
 	TransferirConversacionWithResponse(ctx context.Context, id IdRuta, body TransferirConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferirConversacionResponse, error)
+
+	// ObtenerEmergenciaWithResponse request
+	ObtenerEmergenciaWithResponse(ctx context.Context, eid EmergenciaRuta, reqEditors ...RequestEditorFn) (*ObtenerEmergenciaResponse, error)
+
+	// CerrarEmergenciaPorIdWithResponse request
+	CerrarEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, reqEditors ...RequestEditorFn) (*CerrarEmergenciaPorIdResponse, error)
+
+	// ListarNotasEmergenciaPorIdWithResponse request
+	ListarNotasEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*ListarNotasEmergenciaPorIdResponse, error)
+
+	// ReclamarEmergenciaPorIdWithBodyWithResponse request with any body
+	ReclamarEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReclamarEmergenciaPorIdResponse, error)
+
+	ReclamarEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, body ReclamarEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*ReclamarEmergenciaPorIdResponse, error)
+
+	// LiberarReclamoEmergenciaPorIdWithResponse request
+	LiberarReclamoEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, rid Id, params *LiberarReclamoEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*LiberarReclamoEmergenciaPorIdResponse, error)
+
+	// ResolverEmergenciaPorIdWithBodyWithResponse request with any body
+	ResolverEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResolverEmergenciaPorIdResponse, error)
+
+	ResolverEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, body ResolverEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*ResolverEmergenciaPorIdResponse, error)
+
+	// TransferirEmergenciaPorIdWithBodyWithResponse request with any body
+	TransferirEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransferirEmergenciaPorIdResponse, error)
+
+	TransferirEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, body TransferirEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferirEmergenciaPorIdResponse, error)
 
 	// ObtenerConversacionDeViajeWithResponse request
 	ObtenerConversacionDeViajeWithResponse(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*ObtenerConversacionDeViajeResponse, error)
@@ -2435,6 +3063,31 @@ func (r ListarAuditoriaConversacionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ListarAuditoriaConversacionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarBandejaEmergenciasResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaBandejaEmergencias
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarBandejaEmergenciasResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarBandejaEmergenciasResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2521,6 +3174,7 @@ type ObtenerConversacionResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *Conversacion
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -2597,6 +3251,7 @@ type ListarMensajesResponse struct {
 	JSON200      *PaginaMensajes
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -2648,6 +3303,7 @@ type RegistrarReciboEntregadoResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -2671,6 +3327,7 @@ type RegistrarReciboLeidoResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -2768,11 +3425,193 @@ func (r TransferirConversacionResponse) StatusCode() int {
 	return 0
 }
 
+type ObtenerEmergenciaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CasoEmergencia
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerEmergenciaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerEmergenciaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CerrarEmergenciaPorIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CasoEmergencia
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *ConflictoVersion
+}
+
+// Status returns HTTPResponse.Status
+func (r CerrarEmergenciaPorIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CerrarEmergenciaPorIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarNotasEmergenciaPorIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaNotasEmergencia
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarNotasEmergenciaPorIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarNotasEmergenciaPorIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ReclamarEmergenciaPorIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Reclamo
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *ConflictoVersion
+}
+
+// Status returns HTTPResponse.Status
+func (r ReclamarEmergenciaPorIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReclamarEmergenciaPorIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type LiberarReclamoEmergenciaPorIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *ConflictoVersion
+}
+
+// Status returns HTTPResponse.Status
+func (r LiberarReclamoEmergenciaPorIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r LiberarReclamoEmergenciaPorIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ResolverEmergenciaPorIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *EmergenciaReaccion
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *ConflictoVersion
+}
+
+// Status returns HTTPResponse.Status
+func (r ResolverEmergenciaPorIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ResolverEmergenciaPorIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type TransferirEmergenciaPorIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Reclamo
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *ConflictoVersion
+}
+
+// Status returns HTTPResponse.Status
+func (r TransferirEmergenciaPorIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TransferirEmergenciaPorIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ObtenerConversacionDeViajeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *Conversacion
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3011,6 +3850,15 @@ func (c *ClientWithResponses) ListarAuditoriaConversacionWithResponse(ctx contex
 	return ParseListarAuditoriaConversacionResponse(rsp)
 }
 
+// ListarBandejaEmergenciasWithResponse request returning *ListarBandejaEmergenciasResponse
+func (c *ClientWithResponses) ListarBandejaEmergenciasWithResponse(ctx context.Context, params *ListarBandejaEmergenciasParams, reqEditors ...RequestEditorFn) (*ListarBandejaEmergenciasResponse, error) {
+	rsp, err := c.ListarBandejaEmergencias(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarBandejaEmergenciasResponse(rsp)
+}
+
 // ListarTrabajoMiBandejaWithResponse request returning *ListarTrabajoMiBandejaResponse
 func (c *ClientWithResponses) ListarTrabajoMiBandejaWithResponse(ctx context.Context, params *ListarTrabajoMiBandejaParams, reqEditors ...RequestEditorFn) (*ListarTrabajoMiBandejaResponse, error) {
 	rsp, err := c.ListarTrabajoMiBandeja(ctx, params, reqEditors...)
@@ -3184,6 +4032,93 @@ func (c *ClientWithResponses) TransferirConversacionWithResponse(ctx context.Con
 	return ParseTransferirConversacionResponse(rsp)
 }
 
+// ObtenerEmergenciaWithResponse request returning *ObtenerEmergenciaResponse
+func (c *ClientWithResponses) ObtenerEmergenciaWithResponse(ctx context.Context, eid EmergenciaRuta, reqEditors ...RequestEditorFn) (*ObtenerEmergenciaResponse, error) {
+	rsp, err := c.ObtenerEmergencia(ctx, eid, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerEmergenciaResponse(rsp)
+}
+
+// CerrarEmergenciaPorIdWithResponse request returning *CerrarEmergenciaPorIdResponse
+func (c *ClientWithResponses) CerrarEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, reqEditors ...RequestEditorFn) (*CerrarEmergenciaPorIdResponse, error) {
+	rsp, err := c.CerrarEmergenciaPorId(ctx, eid, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCerrarEmergenciaPorIdResponse(rsp)
+}
+
+// ListarNotasEmergenciaPorIdWithResponse request returning *ListarNotasEmergenciaPorIdResponse
+func (c *ClientWithResponses) ListarNotasEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*ListarNotasEmergenciaPorIdResponse, error) {
+	rsp, err := c.ListarNotasEmergenciaPorId(ctx, eid, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarNotasEmergenciaPorIdResponse(rsp)
+}
+
+// ReclamarEmergenciaPorIdWithBodyWithResponse request with arbitrary body returning *ReclamarEmergenciaPorIdResponse
+func (c *ClientWithResponses) ReclamarEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReclamarEmergenciaPorIdResponse, error) {
+	rsp, err := c.ReclamarEmergenciaPorIdWithBody(ctx, eid, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReclamarEmergenciaPorIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) ReclamarEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, body ReclamarEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*ReclamarEmergenciaPorIdResponse, error) {
+	rsp, err := c.ReclamarEmergenciaPorId(ctx, eid, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReclamarEmergenciaPorIdResponse(rsp)
+}
+
+// LiberarReclamoEmergenciaPorIdWithResponse request returning *LiberarReclamoEmergenciaPorIdResponse
+func (c *ClientWithResponses) LiberarReclamoEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, rid Id, params *LiberarReclamoEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*LiberarReclamoEmergenciaPorIdResponse, error) {
+	rsp, err := c.LiberarReclamoEmergenciaPorId(ctx, eid, rid, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLiberarReclamoEmergenciaPorIdResponse(rsp)
+}
+
+// ResolverEmergenciaPorIdWithBodyWithResponse request with arbitrary body returning *ResolverEmergenciaPorIdResponse
+func (c *ClientWithResponses) ResolverEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ResolverEmergenciaPorIdResponse, error) {
+	rsp, err := c.ResolverEmergenciaPorIdWithBody(ctx, eid, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResolverEmergenciaPorIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) ResolverEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, body ResolverEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*ResolverEmergenciaPorIdResponse, error) {
+	rsp, err := c.ResolverEmergenciaPorId(ctx, eid, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResolverEmergenciaPorIdResponse(rsp)
+}
+
+// TransferirEmergenciaPorIdWithBodyWithResponse request with arbitrary body returning *TransferirEmergenciaPorIdResponse
+func (c *ClientWithResponses) TransferirEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransferirEmergenciaPorIdResponse, error) {
+	rsp, err := c.TransferirEmergenciaPorIdWithBody(ctx, eid, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTransferirEmergenciaPorIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) TransferirEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, body TransferirEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferirEmergenciaPorIdResponse, error) {
+	rsp, err := c.TransferirEmergenciaPorId(ctx, eid, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTransferirEmergenciaPorIdResponse(rsp)
+}
+
 // ObtenerConversacionDeViajeWithResponse request returning *ObtenerConversacionDeViajeResponse
 func (c *ClientWithResponses) ObtenerConversacionDeViajeWithResponse(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*ObtenerConversacionDeViajeResponse, error) {
 	rsp, err := c.ObtenerConversacionDeViaje(ctx, id, reqEditors...)
@@ -3321,6 +4256,53 @@ func ParseListarAuditoriaConversacionResponse(rsp *http.Response) (*ListarAudito
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest PaginaAuditoria
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarBandejaEmergenciasResponse parses an HTTP response from a ListarBandejaEmergenciasWithResponse call
+func ParseListarBandejaEmergenciasResponse(rsp *http.Response) (*ListarBandejaEmergenciasResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarBandejaEmergenciasResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaBandejaEmergencias
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -3521,6 +4503,13 @@ func ParseObtenerConversacionResponse(rsp *http.Response) (*ObtenerConversacionR
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -3669,6 +4658,13 @@ func ParseListarMensajesResponse(rsp *http.Response) (*ListarMensajesResponse, e
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -3770,6 +4766,13 @@ func ParseRegistrarReciboEntregadoResponse(rsp *http.Response) (*RegistrarRecibo
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -3802,6 +4805,13 @@ func ParseRegistrarReciboLeidoResponse(rsp *http.Response) (*RegistrarReciboLeid
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
@@ -3977,6 +4987,377 @@ func ParseTransferirConversacionResponse(rsp *http.Response) (*TransferirConvers
 	return response, nil
 }
 
+// ParseObtenerEmergenciaResponse parses an HTTP response from a ObtenerEmergenciaWithResponse call
+func ParseObtenerEmergenciaResponse(rsp *http.Response) (*ObtenerEmergenciaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerEmergenciaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CasoEmergencia
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCerrarEmergenciaPorIdResponse parses an HTTP response from a CerrarEmergenciaPorIdWithResponse call
+func ParseCerrarEmergenciaPorIdResponse(rsp *http.Response) (*CerrarEmergenciaPorIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CerrarEmergenciaPorIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CasoEmergencia
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ConflictoVersion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarNotasEmergenciaPorIdResponse parses an HTTP response from a ListarNotasEmergenciaPorIdWithResponse call
+func ParseListarNotasEmergenciaPorIdResponse(rsp *http.Response) (*ListarNotasEmergenciaPorIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarNotasEmergenciaPorIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaNotasEmergencia
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReclamarEmergenciaPorIdResponse parses an HTTP response from a ReclamarEmergenciaPorIdWithResponse call
+func ParseReclamarEmergenciaPorIdResponse(rsp *http.Response) (*ReclamarEmergenciaPorIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReclamarEmergenciaPorIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Reclamo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ConflictoVersion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseLiberarReclamoEmergenciaPorIdResponse parses an HTTP response from a LiberarReclamoEmergenciaPorIdWithResponse call
+func ParseLiberarReclamoEmergenciaPorIdResponse(rsp *http.Response) (*LiberarReclamoEmergenciaPorIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &LiberarReclamoEmergenciaPorIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ConflictoVersion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseResolverEmergenciaPorIdResponse parses an HTTP response from a ResolverEmergenciaPorIdWithResponse call
+func ParseResolverEmergenciaPorIdResponse(rsp *http.Response) (*ResolverEmergenciaPorIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ResolverEmergenciaPorIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EmergenciaReaccion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ConflictoVersion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTransferirEmergenciaPorIdResponse parses an HTTP response from a TransferirEmergenciaPorIdWithResponse call
+func ParseTransferirEmergenciaPorIdResponse(rsp *http.Response) (*TransferirEmergenciaPorIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TransferirEmergenciaPorIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Reclamo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ConflictoVersion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseObtenerConversacionDeViajeResponse parses an HTTP response from a ObtenerConversacionDeViajeWithResponse call
 func ParseObtenerConversacionDeViajeResponse(rsp *http.Response) (*ObtenerConversacionDeViajeResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4004,6 +5385,13 @@ func ParseObtenerConversacionDeViajeResponse(rsp *http.Response) (*ObtenerConver
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado

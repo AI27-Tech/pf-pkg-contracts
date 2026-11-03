@@ -359,7 +359,7 @@ export interface paths {
         };
         /**
          * Listar el trabajo de la bandeja del llamante (bootstrap y catch-up).
-         * @description El `bff` resuelve la bandeja del sujeto desde los claims de la sesión (cola única e implícita, DEC-103) y reenvía a `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja. Requiere MEMBRESÍA EFECTIVA en el pool; el rol `ejecutivo` por sí solo no concede acceso (Addendum §7).
+         * @description El `bff` resuelve la bandeja del sujeto desde los claims de la sesión (cola única e implícita, DEC-103) y reenvía a `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja. La bandeja única de chat la ven el rol `ejecutivo` (DEC-127) y, solo en lectura, `supervisor`/`coordinador` (DEC-131); otro rol recibe `404` (no tiene bandeja). Sin acotar por el tenant de quien pregunta (DEC-129).
          *     Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el CATCH-UP: devuelve los cambios de la colección posteriores a esa revisión. Si la revisión pedida quedó fuera de la ventana retenida, responde `409 stream_resync_required` y el cliente repite el bootstrap (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
          */
         get: operations["listarTrabajoBandeja"];
@@ -382,7 +382,7 @@ export interface paths {
         };
         /**
          * Detalle de una conversación (estado inicial para bootstrap).
-         * @description Reenvía a `mensajeria.obtenerConversacion` con audiencia Interno. Poseer el UUID no autoriza (Addendum §7): sin acceso efectivo responde 404, igual que si no existiera. `ultima_secuencia` es el cursor de dominio del bootstrap (ADR 28 §2).
+         * @description Reenvía a `mensajeria.obtenerConversacion` con audiencia Interno. Leen el `ejecutivo` y, solo en lectura, `supervisor`/`coordinador` (DEC-131), sin acotar por el tenant de quien pregunta (DEC-129); otro rol interno recibe `403`. Poseer el UUID no autoriza (Addendum §7): una conversación inexistente responde 404. `ultima_secuencia` es el cursor de dominio del bootstrap (ADR 28 §2).
          */
         get: operations["obtenerConversacion"];
         put?: never;
@@ -404,13 +404,13 @@ export interface paths {
         };
         /**
          * Historia de mensajes por secuencia canónica.
-         * @description Reenvía a `mensajeria.listarMensajes` con audiencia Interno. `antes_de` pagina la historia hacia atrás; `despues_de` es la recuperación tras reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin ninguno, devuelve los más recientes. El orden es siempre por `secuencia`, nunca por `creado_en`.
+         * @description Reenvía a `mensajeria.listarMensajes` con audiencia Interno. `antes_de` pagina la historia hacia atrás; `despues_de` es la recuperación tras reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin ninguno, devuelve los más recientes. El orden es siempre por `secuencia`, nunca por `creado_en`. Mismo acceso que `obtenerConversacion`: `supervisor`/`coordinador` leen (DEC-131).
          */
         get: operations["listarMensajes"];
         put?: never;
         /**
          * Enviar un mensaje interno (idempotente por client_message_id).
-         * @description Reenvía a `mensajeria.enviarMensaje` con audiencia Interno. El interno requiere RECLAMO ACTIVO y `version_reclamo_esperada` (Addendum §7). Reintentar el mismo `client_message_id` devuelve el mensaje original con 200 y nunca crea un segundo mensaje.
+         * @description Reenvía a `mensajeria.enviarMensaje` con audiencia Interno. El interno requiere rol `ejecutivo`, RECLAMO ACTIVO y `version_reclamo_esperada` (Addendum §7); `supervisor`/`coordinador` solo leen y reciben `403` (DEC-131). Reintentar el mismo `client_message_id` devuelve el mensaje original con 200 y nunca crea un segundo mensaje.
          */
         post: operations["enviarMensaje"];
         delete?: never;
@@ -432,7 +432,7 @@ export interface paths {
         put?: never;
         /**
          * Reclamar la conversación con versión esperada.
-         * @description Reenvía a `mensajeria.reclamarConversacion`. Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo` (Addendum §4 punto 5).
+         * @description Reenvía a `mensajeria.reclamarConversacion`. Solo el rol `ejecutivo` (DEC-127); `supervisor`/`coordinador` reciben `403` (DEC-131). Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo` (Addendum §4 punto 5).
          */
         post: operations["reclamarConversacion"];
         delete?: never;
@@ -457,7 +457,7 @@ export interface paths {
         post?: never;
         /**
          * Liberar el reclamo y devolver el trabajo al pool.
-         * @description Reenvía a `mensajeria.liberarReclamo`. Lo hace el responsable o un supervisor dentro de su alcance.
+         * @description Reenvía a `mensajeria.liberarReclamo`. Lo hace el responsable; en V1 un `supervisor`/`coordinador` NO libera una conversación ajena (DEC-118) y recibe `403` (DEC-131).
          */
         delete: operations["liberarReclamo"];
         options?: never;
@@ -478,7 +478,7 @@ export interface paths {
         put?: never;
         /**
          * Transferir la responsabilidad a otro miembro del pool.
-         * @description Reenvía a `mensajeria.transferirConversacion`. Cierra el reclamo anterior y abre el siguiente en UNA transacción: no hay ventana sin responsable ni con dos (Addendum §6).
+         * @description Reenvía a `mensajeria.transferirConversacion`. Lo hace el responsable; `supervisor`/`coordinador` reciben `403` (DEC-118, DEC-131). Cierra el reclamo anterior y abre el siguiente en UNA transacción: no hay ventana sin responsable ni con dos (Addendum §6).
          */
         post: operations["transferirConversacion"];
         delete?: never;
@@ -500,7 +500,7 @@ export interface paths {
         put?: never;
         /**
          * Marcar la conversación como atendida por el responsable.
-         * @description Reenvía a `mensajeria.marcarAtendida`.
+         * @description Reenvía a `mensajeria.marcarAtendida`. Solo el responsable (DEC-117); `supervisor`/`coordinador` reciben `403` (DEC-131).
          */
         post: operations["marcarAtendida"];
         delete?: never;
@@ -522,7 +522,7 @@ export interface paths {
         put?: never;
         /**
          * Avanzar el cursor de entrega del llamante.
-         * @description Reenvía a `mensajeria.registrarReciboEntregado`.
+         * @description Reenvía a `mensajeria.registrarReciboEntregado`. `supervisor`/`coordinador` solo leen y no registran recibos: `403` (DEC-131).
          */
         post: operations["registrarReciboEntregado"];
         delete?: never;
@@ -544,9 +544,193 @@ export interface paths {
         put?: never;
         /**
          * Avanzar el cursor de lectura del llamante.
-         * @description Reenvía a `mensajeria.registrarReciboLeido`. Una vista incidental de un miembro no responsable no genera un "leído" visible al cliente (Addendum §8).
+         * @description Reenvía a `mensajeria.registrarReciboLeido`. Una vista incidental de un miembro no responsable no genera un "leído" visible al cliente (Addendum §8). `supervisor`/`coordinador` solo leen y no registran recibos: `403` (DEC-131).
          */
         post: operations["registrarReciboLeido"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/panel/emergencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar los casos de la bandeja de Reacción del llamante.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarBandejaEmergencias`: la bandeja única de emergencias (DEC-130), sin `{id}`. La ven el rol `reaccion`, miembro por su rol, y `supervisor`/`coordinador`, que ven todos los casos de la bandeja sin verificar mando (DEC-131; DT-06). Sin acotar por el tenant de quien pregunta (DEC-129). Otro rol responde `404`. Cada fila es `EmergenciaReaccion`, sin datos del viaje ni del cliente ni notas (DEC-121 #2). EXCLUYE los casos en `cerrada` y ordena del más antiguo al más reciente por `activada_en` (DEC-121 #3).
+         */
+        get: operations["listarBandejaEmergencias"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/panel/emergencias/{eid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Detalle del caso por su id, con la información del viaje que Reacción necesita.
+         * @description Solo audiencia Interno. Mismo acceso que `mensajeria.obtenerEmergencia`: rol `reaccion` (DEC-130), o `supervisor`/`coordinador` sobre cualquier caso sin verificar mando (DEC-131; DT-06). Poseer el UUID no autoriza: un caso inexistente responde `404`; otro rol recibe `403`.
+         *     El `bff` COMPONE la respuesta: lee el caso de `mensajeria.obtenerEmergencia` (que trae `viaje_id`), el viaje de `operacion` y el nombre del cliente y la escolta de `catalogos`, y devuelve `DetalleEmergenciaReaccion`. Es la visibilidad tipo monitorista acotada al caso de DEC-028 #5: SIN `viaje_id`, bitácora, incidencias ni conversación. No concede acciones sobre el viaje.
+         */
+        get: operations["obtenerEmergencia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/panel/emergencias/{eid}/notas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Listar las notas del caso nombrado por su id (solo lectura).
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarNotasEmergenciaPorId`. Mismo acceso que `obtenerEmergencia`: rol `reaccion` y `supervisor`/`coordinador` (DEC-130, DEC-131). Reacción CONSULTA las notas (DEC-028 #4) y no las escribe (DEC-034, DEC-121 #4): no hay ruta de escritura por id. Incluye la nota de resolución (`es_resolucion`). Orden de creación, de la más antigua a la más reciente.
+         */
+        get: operations["listarNotasEmergenciaPorId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/panel/emergencias/{eid}/reclamos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reclamar el caso por su id (abierta -> en_atencion) con versión esperada.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.reclamarEmergenciaPorId`. Solo un usuario con rol `reaccion` (DEC-130, DEC-028 #2); cualquier otro rol, `403`. `supervisor` y `coordinador` no reclaman (DEC-131). Solo procede si NADIE tiene el caso: con responsable vigente responde `409` aunque la versión sea la vigente (DEC-125). Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo`.
+         */
+        post: operations["reclamarEmergenciaPorId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/panel/emergencias/{eid}/reclamos/{rid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+                /** @description Identificador del reclamo. */
+                rid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Liberar el reclamo del caso por su id y devolverlo al pool de Reacción.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.liberarReclamoEmergenciaPorId`. En V1 lo hace el responsable vigente o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El caso vuelve a `abierta`.
+         */
+        delete: operations["liberarReclamoEmergenciaPorId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/panel/emergencias/{eid}/transferencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transferir el caso por su id a otro miembro de Reacción.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.transferirEmergenciaPorId`. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso.
+         */
+        post: operations["transferirEmergenciaPorId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/panel/emergencias/{eid}/resolucion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolver el caso por su id (en_atencion -> resuelta) con nota obligatoria.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.resolverEmergenciaPorId`. Solo el responsable vigente de Reacción (ADR 21 §5, DEC-028 #3); cualquier otro sujeto, incluido `supervisor`/`coordinador`, recibe `403`. Nota de resolución OBLIGATORIA de 1 a 1000 caracteres; sin nota válida responde 400 y el caso no cambia de estado. `resuelta` es irreversible. Devuelve `EmergenciaReaccion`.
+         */
+        post: operations["resolverEmergenciaPorId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/panel/emergencias/{eid}/cierre": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar administrativamente el caso por su id (resuelta -> cerrada).
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.cerrarEmergenciaPorId`. Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje del caso (eje de monitoreo por unidad), o Administrator global (ADR 21 §5). NUNCA Reacción ni Ejecutivo (E8-T18, DEC-045 #9, DEC-121 #5), tampoco por el mando de DEC-099: responden `403`. No exige texto. `cerrada` es irreversible.
+         */
+        post: operations["cerrarEmergenciaPorId"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1348,6 +1532,138 @@ export interface components {
             hasta_secuencia: components["schemas"]["SecuenciaMensaje"];
         };
         /**
+         * @description Ciclo del caso de emergencia (ADR 21 §5), agregado propio distinto del estado del viaje y de `EstadoConversacion`. `resuelta` y `cerrada` son irreversibles.
+         * @enum {string}
+         */
+        EstadoEmergencia: "abierta" | "en_atencion" | "resuelta" | "cerrada";
+        /**
+         * @description Quién originó la activación (ADR 21 §3).
+         * @enum {string}
+         */
+        OrigenActivacion: "cliente" | "operacion";
+        /** @description Caso de emergencia tal como lo conoce `mensajeria`. El payload rico a Reacción (escolta, teléfonos, origen/destinos del viaje) lo compone `bff` con `operacion`; aquí viajan los identificadores y el ciclo del caso, no los datos del viaje. La proyección por audiencia la aplica la lectura: el Cliente recibe la vista mínima (ADR 21 §6). */
+        CasoEmergencia: {
+            id: components["schemas"]["Id"];
+            viaje_id: components["schemas"]["Id"];
+            cliente_id: components["schemas"]["Id"];
+            estado: components["schemas"]["EstadoEmergencia"];
+            /** @description Solo para audiencia Interno. */
+            origen: components["schemas"]["OrigenActivacion"];
+            /**
+             * Format: uuid
+             * @description Sujeto que activó. Siempre se registra; solo se entrega a audiencia Interno.
+             */
+            actor_real?: string | null;
+            version_reclamo: components["schemas"]["VersionReclamo"];
+            /** @description Reclamo vigente. Solo para audiencia Interno; null en el pool. */
+            reclamo_activo?: components["schemas"]["Reclamo"] | null;
+            activada_en: components["schemas"]["MarcaTiempo"];
+            /** Format: date-time */
+            resuelta_en?: string | null;
+            /** Format: date-time */
+            cerrada_en?: string | null;
+        };
+        /** @description El caso tal como lo ve Reacción en su bandeja (DEC-121 #2): SIN `viaje_id`, `cliente_id`, `actor_real` ni notas. Solo lleva lo que el caso ya registra. En el detalle viaja como `caso` dentro de `DetalleEmergenciaReaccion`. No reemplaza a `CasoEmergencia`, que sigue siendo la vista de monitoreo por viaje. */
+        EmergenciaReaccion: {
+            id: components["schemas"]["Id"];
+            estado: components["schemas"]["EstadoEmergencia"];
+            origen: components["schemas"]["OrigenActivacion"];
+            /** @description Versión vigente del reclamo del caso; es la `version_esperada` para reclamar un caso que está en el pool (`reclamo_activo` null). */
+            version_reclamo: components["schemas"]["VersionReclamo"];
+            /** @description Reclamo vigente (responsable y versión); null si el caso está en el pool. */
+            reclamo_activo?: components["schemas"]["Reclamo"] | null;
+            activada_en: components["schemas"]["MarcaTiempo"];
+            /** Format: date-time */
+            resuelta_en?: string | null;
+            /** Format: date-time */
+            cerrada_en?: string | null;
+        };
+        /** @description Página de la bandeja de Reacción. Misma paginación por cursor que las demás páginas de `mensajeria`; sin `revision` de colección (ver `listarBandejaEmergencias`). */
+        PaginaBandejaEmergencias: {
+            items: components["schemas"]["EmergenciaReaccion"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
+            cursor_siguiente: string | null;
+        };
+        /** @description Detalle del caso para Reacción (DEC-121 #2): el caso más la información del viaje que necesita para atender. Es la visibilidad tipo monitorista acotada al caso de DEC-028 #5. Lo COMPONE el `bff`: `caso` viene de `mensajeria` y `viaje` de `operacion` y `catalogos`. Sin `viaje_id`, bitácora, incidencias ni conversación. */
+        DetalleEmergenciaReaccion: {
+            caso: components["schemas"]["EmergenciaReaccion"];
+            viaje: components["schemas"]["ViajeEmergencia"];
+        };
+        /** @description Bloque de viaje del detalle de Reacción, con exactamente los campos de DEC-121 #2. El `bff` lo compone de `operacion` (estado, origen, destinos, fecha y tipo de servicio, ETA, unidades de la escolta) y de `catalogos` (nombre del cliente, vehículo y custodios de cada unidad). El tracto y los contenedores de la ficha técnica entrarán en una ola aditiva posterior, cuando `operacion` implemente la ficha (E8-T12). Fuera de V1: ubicación (DEC-001), operador del tracto y folio legible del viaje. */
+        ViajeEmergencia: {
+            /** @description Nombre del cliente del viaje, de `catalogos`. */
+            cliente_nombre: string;
+            /** @description Token de estado canónico del viaje (`EstadoViaje`, ADR 19), como en `ViajeInterno.estado`. El `bff` no replica el enum. */
+            estado: string;
+            origen: string;
+            destinos: components["schemas"]["DestinoViajeEmergencia"][];
+            /**
+             * Format: date-time
+             * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+             */
+            fecha_hora_servicio?: string | null;
+            /** @description Tipo de servicio/monitoreo del viaje (DEC-010 */
+            tipo_servicio?: string | null;
+            /**
+             * Format: date-time
+             * @description ETA estimado capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado.
+             */
+            eta_estimado?: string | null;
+            /** @description Unidades de la escolta asignada; vacío si el viaje aún no tiene escolta. */
+            escolta: components["schemas"]["UnidadEscoltaEmergencia"][];
+        };
+        /** @description Destino del viaje en el detalle de Reacción. Subconjunto de `Destino` de `operacion`. */
+        DestinoViajeEmergencia: {
+            nombre: string;
+            /**
+             * Format: date-time
+             * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+             */
+            fecha_cita?: string | null;
+            /** @description Si la unidad arribó a este destino (DEC-012). Espejo de `Destino.arribo` de `operacion`. */
+            arribo?: boolean;
+        };
+        /** @description Unidad de la escolta en el detalle de Reacción: `tipo` de la unidad del roster (`operacion`), `economico` y `placas` del vehículo y sus custodios (`catalogos`). Sin identificadores. */
+        UnidadEscoltaEmergencia: {
+            /** @description Token de `Unidad.tipo` (`patrulla` o `moto`). Se declara `string` y no enum para no renombrar las constantes Go de `UnidadTipo` del cliente generado. */
+            tipo: string;
+            /** @description Número económico del vehículo. */
+            economico?: string;
+            placas?: string;
+            custodios: components["schemas"]["CustodioEscoltaEmergencia"][];
+        };
+        /** @description Custodio de una unidad de la escolta. Subconjunto de `Custodio` de `catalogos`. */
+        CustodioEscoltaEmergencia: {
+            nombre: string;
+            telefono?: string;
+        };
+        /** @description Página de notas de un caso (`listarNotasEmergenciaPorId`). */
+        PaginaNotasEmergencia: {
+            items: components["schemas"]["NotaEmergencia"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
+            cursor_siguiente: string | null;
+        };
+        NotaEmergencia: {
+            id: components["schemas"]["Id"];
+            emergencia_id: components["schemas"]["Id"];
+            audiencia_autor: components["schemas"]["Audiencia"];
+            /**
+             * Format: uuid
+             * @description Sujeto que escribió. Solo se entrega a audiencia Interno.
+             */
+            actor_real?: string | null;
+            /** @description Contenido de la nota. Sin edición ni borrado en V1. */
+            cuerpo: string;
+            /** @description true si es la nota que acompañó la resolución del caso. */
+            es_resolucion?: boolean;
+            creado_en: components["schemas"]["MarcaTiempo"];
+        };
+        ResolucionEmergenciaEntrada: {
+            version_esperada: components["schemas"]["VersionReclamo"];
+            /** @description Nota de resolución obligatoria; mismas validaciones que las demás notas. */
+            nota: string;
+        };
+        /**
          * Format: uuid
          * @description Identificador único (UUID). Nunca un correlativo expuesto.
          */
@@ -2113,6 +2429,7 @@ export interface operations {
             };
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
             409: components["responses"]["ResyncRequerido"];
         };
     };
@@ -2137,6 +2454,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -2168,6 +2486,7 @@ export interface operations {
             };
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -2359,6 +2678,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -2385,7 +2705,240 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
+        };
+    };
+    listarBandejaEmergencias: {
+        parameters: {
+            query?: {
+                /** @description Cursor de paginación. */
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Casos de la bandeja de Reacción del llamante. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaBandejaEmergencias"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    obtenerEmergencia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Caso con el bloque de viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetalleEmergenciaReaccion"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    listarNotasEmergenciaPorId: {
+        parameters: {
+            query?: {
+                /** @description Cursor de paginación. */
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notas del caso. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaNotasEmergencia"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    reclamarEmergenciaPorId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionEsperadaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Reclamo abierto; caso en atención. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reclamo"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    liberarReclamoEmergenciaPorId: {
+        parameters: {
+            query: {
+                version_esperada: components["schemas"]["VersionReclamo"];
+            };
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+                /** @description Identificador del reclamo. */
+                rid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reclamo liberado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    transferirEmergenciaPorId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferenciaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Reclamo nuevo del responsable destino. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reclamo"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    resolverEmergenciaPorId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolucionEmergenciaEntrada"];
+            };
+        };
+        responses: {
+            /** @description Caso resuelto, en la vista de Reacción. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmergenciaReaccion"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
+        };
+    };
+    cerrarEmergenciaPorId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Caso cerrado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CasoEmergencia"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ConflictoVersion"];
         };
     };
     listarClientes: {
