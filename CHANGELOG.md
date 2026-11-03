@@ -3,6 +3,31 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-02 17:50 [tracer.33] — conversación de un viaje resuelta por `viaje_id` en `mensajeria` (E9-T8)
+
+**Para quién:** el `bff` y `pf-svc-core` (E9-T8, conversación del cliente en el portal). El `bff` expone `GET /api/v1/viajes/{id}/conversacion` y reenviaba el `viaje_id` a `obtenerConversacion`, que busca por el `id` propio de la conversación (`mensajeria.conversacion.id`, UUID generado por `mensajeria`). Resultado medido en el core compuesto: `404 conversacion no encontrada`. El contrato no tenía forma de encontrar la conversación de un viaje (`listarConversaciones` no filtra por viaje).
+
+**Resumen:** ola aditiva en `mensajeria.yaml`. Añade `GET /api/v1/viajes/{id}/conversacion` (`obtenerConversacionDeViaje`): `{id}` es el `viaje_id` y la respuesta es el mismo `Conversacion` de `obtenerConversacion`. Con el `id` de la respuesta el llamante sigue con las operaciones por conversación que ya existen (`listarMensajes`, `enviarMensaje`, etc.). Sin schemas nuevos. `bff.yaml` no cambia de superficie.
+
+**Forma:** audiencia Cliente del tenant dueño y miembros internos del pool, misma autorización que `obtenerConversacion`. Sin acceso efectivo responde `404`, igual que si el viaje todavía no tuviera conversación (Addendum §7). Devuelve la conversación no cerrada del viaje (a lo más una por tenant y viaje); si sólo hay cerradas, la más reciente.
+
+**Cambios:**
+- `contracts/openapi/mensajeria.yaml`: ruta y operación `obtenerConversacionDeViaje`.
+- Clientes Go y TS de `mensajeria` regenerados. `VERSION`, `packages/api-client-ts/package.json`, el `version:` de los 8 specs y el encabezado de `contracts/events/INVENTARIO.md` a `0.1.0-tracer.33`.
+
+**Compatibilidad:** aditivo. `breaking-openapi` compatible con `tracer.32`; `lint-openapi` en verde; cliente Go compila y pasa `go vet`. La interfaz Go `ClientWithResponsesInterface` de `mensajeria` gana un método: un doble de prueba que la implemente a mano debe añadirlo.
+
+**Siguiente (fuera de esta ola):** `pf-svc-mensajeria` implementa la búsqueda por `(tenant_id, viaje_id)`; `pf-svc-bff` sube pin a `tracer.33` y resuelve primero `obtenerConversacionDeViaje` antes de reenviar mensajes y envío por el `id` de la conversación.
+
+**Archivos modificados:**
+- `VERSION`
+- `packages/api-client-ts/package.json`
+- `contracts/openapi/_comunes.yaml`, `bff.yaml`, `catalogos.yaml`, `identidad.yaml`, `mensajeria.yaml`, `operacion.yaml`, `realtime.yaml`, `reportes.yaml`
+- `contracts/events/INVENTARIO.md`
+- `packages/api-client-go/mensajeria/mensajeria.gen.go`
+- `packages/api-client-ts/src/openapi/mensajeria.gen.ts`
+- `CHANGELOG.md`
+
 ## 2026:11:02 16:52 [tracer.32] — republicación de tracer.31 (el paquete TS de .30 y .31 no se publicó)
 
 **Para quién:** los consumidores TS de `@ai27-tech/contracts` (portal interno), que no podían instalar los tipos de `tracer.30`/`tracer.31`. Deben fijar `0.1.0-tracer.32`. Los consumidores Go **no** necesitan subir pin: `tracer.30` y `tracer.31` siguen válidos para Go (ambos tags, raíz y `packages/api-client-go/`, existen sobre el mismo commit).

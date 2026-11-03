@@ -631,6 +631,9 @@ type ClientInterface interface {
 
 	TransferirConversacion(ctx context.Context, id IdRuta, body TransferirConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ObtenerConversacionDeViaje request
+	ObtenerConversacionDeViaje(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarEmergencias request
 	ListarEmergencias(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -908,6 +911,18 @@ func (c *Client) TransferirConversacionWithBody(ctx context.Context, id IdRuta, 
 
 func (c *Client) TransferirConversacion(ctx context.Context, id IdRuta, body TransferirConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTransferirConversacionRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerConversacionDeViaje(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerConversacionDeViajeRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1826,6 +1841,40 @@ func NewTransferirConversacionRequestWithBody(server string, id IdRuta, contentT
 	return req, nil
 }
 
+// NewObtenerConversacionDeViajeRequest generates requests for ObtenerConversacionDeViaje
+func NewObtenerConversacionDeViajeRequest(server string, id IdRuta) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/conversacion", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListarEmergenciasRequest generates requests for ListarEmergencias
 func NewListarEmergenciasRequest(server string, id IdRuta) (*http.Request, error) {
 	var err error
@@ -2329,6 +2378,9 @@ type ClientWithResponsesInterface interface {
 
 	TransferirConversacionWithResponse(ctx context.Context, id IdRuta, body TransferirConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferirConversacionResponse, error)
 
+	// ObtenerConversacionDeViajeWithResponse request
+	ObtenerConversacionDeViajeWithResponse(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*ObtenerConversacionDeViajeResponse, error)
+
 	// ListarEmergenciasWithResponse request
 	ListarEmergenciasWithResponse(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*ListarEmergenciasResponse, error)
 
@@ -2710,6 +2762,30 @@ func (r TransferirConversacionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r TransferirConversacionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerConversacionDeViajeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Conversacion
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerConversacionDeViajeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerConversacionDeViajeResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3106,6 +3182,15 @@ func (c *ClientWithResponses) TransferirConversacionWithResponse(ctx context.Con
 		return nil, err
 	}
 	return ParseTransferirConversacionResponse(rsp)
+}
+
+// ObtenerConversacionDeViajeWithResponse request returning *ObtenerConversacionDeViajeResponse
+func (c *ClientWithResponses) ObtenerConversacionDeViajeWithResponse(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*ObtenerConversacionDeViajeResponse, error) {
+	rsp, err := c.ObtenerConversacionDeViaje(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerConversacionDeViajeResponse(rsp)
 }
 
 // ListarEmergenciasWithResponse request returning *ListarEmergenciasResponse
@@ -3886,6 +3971,46 @@ func ParseTransferirConversacionResponse(rsp *http.Response) (*TransferirConvers
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerConversacionDeViajeResponse parses an HTTP response from a ObtenerConversacionDeViajeWithResponse call
+func ParseObtenerConversacionDeViajeResponse(rsp *http.Response) (*ObtenerConversacionDeViajeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerConversacionDeViajeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Conversacion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 

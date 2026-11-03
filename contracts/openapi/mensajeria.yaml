@@ -28,7 +28,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — mensajeria
-  version: 0.1.0-tracer.32
+  version: 0.1.0-tracer.33
   description: >-
     Conversación de negocio entre el cliente y la bandeja compartida de AI27:
     enrutamiento, reclamo versionado, orden canónico de mensajes, recibos,
@@ -165,6 +165,38 @@ paths:
       responses:
         "200":
           description: Conversación.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Conversacion"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  # Resolución de la conversación por viaje (E9-T8, tracer.33). La conversación
+  # se crea por evento y su `id` es propio de `mensajeria`, distinto del
+  # `viaje_id`; el `bff` sólo conoce el viaje. Con esta operación obtiene el
+  # `id` y sigue con las operaciones por `{id}` (mensajes, envío).
+  /api/v1/viajes/{id}/conversacion:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    get:
+      operationId: obtenerConversacionDeViaje
+      tags: [conversaciones]
+      summary: Conversación de un viaje, resuelta por el id del viaje.
+      description: >-
+        `{id}` es el `viaje_id`, no el id de la conversación. Devuelve la
+        conversación del viaje con la misma forma que `obtenerConversacion`; el
+        `id` de la respuesta es el que usan `listarMensajes`, `enviarMensaje` y
+        demás operaciones por conversación. Si el viaje tiene una conversación
+        no cerrada (a lo más una por tenant y viaje, Addendum §6) se devuelve
+        ésa; si sólo tiene conversaciones cerradas, la más reciente.
+
+        Audiencia: el Cliente del tenant dueño del viaje y los miembros
+        internos del pool, con la misma autorización que `obtenerConversacion`.
+        Poseer el `viaje_id` no autoriza (Addendum §7): sin acceso efectivo
+        responde 404, igual que si el viaje todavía no tuviera conversación.
+      responses:
+        "200":
+          description: Conversación del viaje.
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Conversacion"}
