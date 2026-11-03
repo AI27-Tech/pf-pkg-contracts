@@ -3174,6 +3174,7 @@ type ObtenerConversacionResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *Conversacion
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3250,6 +3251,7 @@ type ListarMensajesResponse struct {
 	JSON200      *PaginaMensajes
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3301,6 +3303,7 @@ type RegistrarReciboEntregadoResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3324,6 +3327,7 @@ type RegistrarReciboLeidoResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3426,6 +3430,7 @@ type ObtenerEmergenciaResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *CasoEmergencia
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3476,6 +3481,7 @@ type ListarNotasEmergenciaPorIdResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaNotasEmergencia
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3605,6 +3611,7 @@ type ObtenerConversacionDeViajeResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *Conversacion
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -4496,6 +4503,13 @@ func ParseObtenerConversacionResponse(rsp *http.Response) (*ObtenerConversacionR
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4644,6 +4658,13 @@ func ParseListarMensajesResponse(rsp *http.Response) (*ListarMensajesResponse, e
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4745,6 +4766,13 @@ func ParseRegistrarReciboEntregadoResponse(rsp *http.Response) (*RegistrarRecibo
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4777,6 +4805,13 @@ func ParseRegistrarReciboLeidoResponse(rsp *http.Response) (*RegistrarReciboLeid
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
@@ -4980,6 +5015,13 @@ func ParseObtenerEmergenciaResponse(rsp *http.Response) (*ObtenerEmergenciaRespo
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -5073,6 +5115,13 @@ func ParseListarNotasEmergenciaPorIdResponse(rsp *http.Response) (*ListarNotasEm
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
@@ -5336,6 +5385,13 @@ func ParseObtenerConversacionDeViajeResponse(rsp *http.Response) (*ObtenerConver
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado

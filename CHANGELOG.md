@@ -24,7 +24,14 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 - Liberar y transferir: el responsable o cualquier `supervisor`/`coordinador`, sin verificar mando; el resto `403` (DEC-126, atajo de DEC-099; la verificación de mando queda para DT-06).
 - Resolver: solo el responsable vigente, con nota de resolución obligatoria; el resto `403`.
 - Cerrar: solo Monitorista/Supervisor/Coordinador con alcance sobre el viaje, o Administrador; nunca Reacción ni Ejecutivo (`403`, E8-T18).
-- Bandeja, detalle y notas: miembro de Reacción, o `supervisor`/`coordinador` sobre sus integrantes (DEC-121 #5). Sin acceso, `404`.
+- Bandeja, detalle y notas: rol `reaccion`, o `supervisor`/`coordinador` sobre cualquier caso (ver ajuste DEC-129/130/131 abajo).
+
+**Ajuste a DEC-129, DEC-130 y DEC-131 (misma ola, sin subir versión):** solo descripciones y respuestas declaradas; sin operaciones ni schemas nuevos.
+- Convenciones en el `info.description` de `mensajeria.yaml` y `bff.yaml`: la audiencia Interno no se acota por el tenant de quien pregunta y el Cliente sigue acotado a su empresa (DEC-129); bandeja única de conversaciones por rol `ejecutivo` (DEC-127) y de emergencias por rol `reaccion` (DEC-130), sin membresía administrada.
+- Emergencias por id: `supervisor`/`coordinador` ven la bandeja, el detalle y las notas y liberan o transfieren cualquier caso sin verificar mando (DEC-131, DEC-126); no reclaman ni resuelven. Reemplaza la nota PENDIENTE de `listarBandejaEmergencias`. Otro rol: `404` en la bandeja (no tiene bandeja) y `403` en detalle y notas de un caso que existe.
+- Conversaciones (`listarTrabajoMiBandeja`, `listarTrabajoBandeja`, `listarConversaciones`, `obtenerConversacion`, `obtenerConversacionDeViaje`, `listarMensajes` y sus equivalentes del `bff`): `supervisor`/`coordinador` solo leen. Enviar, reclamar, liberar, transferir, marcar atendida y registrar recibos siguen con las reglas del `ejecutivo` (DEC-118, DEC-127) y les responden `403`.
+- Respuestas añadidas: `403` en `mensajeria` `obtenerConversacion`, `obtenerConversacionDeViaje`, `listarMensajes` (GET), `registrarReciboEntregado`, `registrarReciboLeido`, `obtenerEmergencia`, `listarNotasEmergenciaPorId`; en `bff` `obtenerConversacion`, `listarMensajes` (GET), `registrarReciboEntregado`, `registrarReciboLeido`, `obtenerEmergencia`, `listarNotasEmergenciaPorId`. `404` en `bff` `listarTrabajoBandeja`, que ya lo recibía de `mensajeria` sin declararlo.
+- Clientes Go y TS de `mensajeria` y `bff` regenerados: los structs de respuesta ganan campos `JSON403`/`JSON404`. Aditivo; `breaking-openapi` compatible con `tracer.33`.
 
 **Cambios:**
 - `contracts/openapi/mensajeria.yaml`: ocho rutas, `EmergenciaReaccion`, `PaginaBandejaEmergencias`, `PaginaNotasEmergencia` y nota en el encabezado.

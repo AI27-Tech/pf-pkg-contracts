@@ -20,6 +20,15 @@ info:
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
+
+
+    Convenciones de acceso V1 (las aplica el servicio dueño; detalle en
+    `mensajeria.yaml`). La audiencia Interno NO se acota por el tenant de quien
+    pregunta: su límite es el rol (DEC-129). El Cliente sigue acotado a su
+    empresa. Bandeja única de conversaciones por rol `ejecutivo` (DEC-127) y de
+    emergencias por rol `reaccion` (DEC-130). `supervisor` y `coordinador`
+    leen conversaciones y, en emergencias, ven bandeja, detalle y notas y
+    liberan o transfieren, sin reclamar ni resolver (DEC-131, DEC-126).
   x-ai27-servicio: bff
   x-ai27-capa: borde
   x-ai27-tracer: true
@@ -726,8 +735,10 @@ paths:
         El `bff` resuelve la bandeja del sujeto desde los claims de la sesión
         (cola única e implícita, DEC-103) y reenvía a
         `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja.
-        Requiere MEMBRESÍA EFECTIVA en el pool; el rol `ejecutivo` por sí solo no
-        concede acceso (Addendum §7).
+        La bandeja única de chat la ven el rol `ejecutivo` (DEC-127) y, solo en
+        lectura, `supervisor`/`coordinador` (DEC-131); otro rol recibe `404`
+        (no tiene bandeja). Sin acotar por el tenant de quien pregunta
+        (DEC-129).
 
         Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la
         `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el
@@ -757,6 +768,7 @@ paths:
               schema: {$ref: "#/components/schemas/TrabajoBandeja"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
         "409": {$ref: "#/components/responses/ResyncRequerido"}
 
   /api/v1/conversaciones/{id}:
@@ -770,10 +782,12 @@ paths:
       tags: [conversaciones]
       summary: Detalle de una conversación (estado inicial para bootstrap).
       description: >-
-        Reenvía a `mensajeria.obtenerConversacion` con audiencia Interno. Poseer
-        el UUID no autoriza (Addendum §7): sin acceso efectivo responde 404,
-        igual que si no existiera. `ultima_secuencia` es el cursor de dominio del
-        bootstrap (ADR 28 §2).
+        Reenvía a `mensajeria.obtenerConversacion` con audiencia Interno. Leen el
+        `ejecutivo` y, solo en lectura, `supervisor`/`coordinador` (DEC-131),
+        sin acotar por el tenant de quien pregunta (DEC-129); otro rol interno
+        recibe `403`. Poseer el UUID no autoriza (Addendum §7): una
+        conversación inexistente responde 404. `ultima_secuencia` es el cursor
+        de dominio del bootstrap (ADR 28 §2).
       responses:
         "200":
           description: Conversación.
@@ -781,6 +795,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Conversacion"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/conversaciones/{id}/mensajes:
@@ -798,7 +813,8 @@ paths:
         pagina la historia hacia atrás; `despues_de` es la recuperación tras
         reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin
         ninguno, devuelve los más recientes. El orden es siempre por `secuencia`,
-        nunca por `creado_en`.
+        nunca por `creado_en`. Mismo acceso que `obtenerConversacion`:
+        `supervisor`/`coordinador` leen (DEC-131).
       parameters:
       - name: antes_de
         in: query
@@ -822,6 +838,7 @@ paths:
               schema: {$ref: "#/components/schemas/PaginaMensajes"}
         "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
     post:
       operationId: enviarMensaje
@@ -829,7 +846,9 @@ paths:
       summary: Enviar un mensaje interno (idempotente por client_message_id).
       description: >-
         Reenvía a `mensajeria.enviarMensaje` con audiencia Interno. El interno
-        requiere RECLAMO ACTIVO y `version_reclamo_esperada` (Addendum §7).
+        requiere rol `ejecutivo`, RECLAMO ACTIVO y `version_reclamo_esperada`
+        (Addendum §7); `supervisor`/`coordinador` solo leen y reciben `403`
+        (DEC-131).
         Reintentar el mismo `client_message_id` devuelve el mensaje original con
         200 y nunca crea un segundo mensaje.
       requestBody:
@@ -872,9 +891,10 @@ paths:
       tags: [reclamos]
       summary: Reclamar la conversación con versión esperada.
       description: >-
-        Reenvía a `mensajeria.reclamarConversacion`. Dos reclamos concurrentes
-        producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo`
-        (Addendum §4 punto 5).
+        Reenvía a `mensajeria.reclamarConversacion`. Solo el rol `ejecutivo`
+        (DEC-127); `supervisor`/`coordinador` reciben `403` (DEC-131). Dos
+        reclamos concurrentes producen un ganador; el perdedor recibe 409
+        `conflicto_version_reclamo` (Addendum §4 punto 5).
       requestBody:
         required: true
         content:
@@ -907,8 +927,9 @@ paths:
       tags: [reclamos]
       summary: Liberar el reclamo y devolver el trabajo al pool.
       description: >-
-        Reenvía a `mensajeria.liberarReclamo`. Lo hace el responsable o un
-        supervisor dentro de su alcance.
+        Reenvía a `mensajeria.liberarReclamo`. Lo hace el responsable; en V1 un
+        `supervisor`/`coordinador` NO libera una conversación ajena (DEC-118) y
+        recibe `403` (DEC-131).
       parameters:
       - name: version_esperada
         in: query
@@ -932,9 +953,10 @@ paths:
       tags: [reclamos]
       summary: Transferir la responsabilidad a otro miembro del pool.
       description: >-
-        Reenvía a `mensajeria.transferirConversacion`. Cierra el reclamo anterior
-        y abre el siguiente en UNA transacción: no hay ventana sin responsable ni
-        con dos (Addendum §6).
+        Reenvía a `mensajeria.transferirConversacion`. Lo hace el responsable;
+        `supervisor`/`coordinador` reciben `403` (DEC-118, DEC-131). Cierra el
+        reclamo anterior y abre el siguiente en UNA transacción: no hay ventana
+        sin responsable ni con dos (Addendum §6).
       requestBody:
         required: true
         content:
@@ -962,7 +984,9 @@ paths:
       operationId: marcarAtendida
       tags: [reclamos]
       summary: Marcar la conversación como atendida por el responsable.
-      description: Reenvía a `mensajeria.marcarAtendida`.
+      description: >-
+        Reenvía a `mensajeria.marcarAtendida`. Solo el responsable (DEC-117);
+        `supervisor`/`coordinador` reciben `403` (DEC-131).
       requestBody:
         required: true
         content:
@@ -985,7 +1009,10 @@ paths:
       operationId: registrarReciboEntregado
       tags: [mensajes]
       summary: Avanzar el cursor de entrega del llamante.
-      description: Reenvía a `mensajeria.registrarReciboEntregado`.
+      description: >-
+        Reenvía a `mensajeria.registrarReciboEntregado`.
+        `supervisor`/`coordinador` solo leen y no registran recibos: `403`
+        (DEC-131).
       requestBody:
         required: true
         content:
@@ -994,6 +1021,7 @@ paths:
       responses:
         "204": {description: Cursor avanzado (o sin cambio si ya estaba más adelante).}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/conversaciones/{id}/recibos/leido:
@@ -1009,7 +1037,8 @@ paths:
       description: >-
         Reenvía a `mensajeria.registrarReciboLeido`. Una vista incidental de un
         miembro no responsable no genera un "leído" visible al cliente
-        (Addendum §8).
+        (Addendum §8). `supervisor`/`coordinador` solo leen y no registran
+        recibos: `403` (DEC-131).
       requestBody:
         required: true
         content:
@@ -1018,6 +1047,7 @@ paths:
       responses:
         "204": {description: Cursor avanzado (o sin cambio si ya estaba más adelante).}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   # ===========================================================================
@@ -1029,7 +1059,7 @@ paths:
   # no llevan `{id}` de viaje. Misma regla de audiencia que las rutas de panel
   # por viaje (`/api/v1/panel/viajes/{id}/emergencias...`, desde tracer.17):
   # solo audiencia Interno; el `bff` propaga el Bearer del usuario y
-  # `mensajeria` autoriza por membresía y alcance. El `bff` reenvía la vista de
+  # `mensajeria` autoriza por rol (DEC-130, DEC-131). El `bff` reenvía la vista de
   # `mensajeria` salvo en `obtenerEmergencia`, donde COMPONE el detalle con el
   # bloque de viaje (DEC-121 #2). Autorización por operación: ver la gemela en
   # `mensajeria.yaml`; el `bff` no valida rol.
@@ -1041,11 +1071,11 @@ paths:
       summary: Listar los casos de la bandeja de Reacción del llamante.
       description: >-
         Solo audiencia Interno. Reenvía a `mensajeria.listarBandejaEmergencias`:
-        la bandeja de tipo `emergencias` se resuelve por la MEMBRESÍA EFECTIVA
-        del sujeto en el pool de Reacción (DEC-028 #1), sin `{id}`.
-        `supervisor`/`coordinador` ven además los casos de sus integrantes de
-        Reacción (DEC-099, DEC-121 #5; mando pendiente, DT-06). Sin membresía ni
-        mando responde `404`. Cada fila es `EmergenciaReaccion`, sin datos del
+        la bandeja única de emergencias (DEC-130), sin `{id}`. La ven el rol
+        `reaccion`, miembro por su rol, y `supervisor`/`coordinador`, que ven
+        todos los casos de la bandeja sin verificar mando (DEC-131; DT-06). Sin
+        acotar por el tenant de quien pregunta (DEC-129). Otro rol responde
+        `404`. Cada fila es `EmergenciaReaccion`, sin datos del
         viaje ni del cliente ni notas (DEC-121 #2). EXCLUYE los casos en
         `cerrada` y ordena del más antiguo al más reciente por `activada_en`
         (DEC-121 #3).
@@ -1078,10 +1108,9 @@ paths:
       summary: Detalle del caso por su id, con la información del viaje que Reacción necesita.
       description: >-
         Solo audiencia Interno. Mismo acceso que `mensajeria.obtenerEmergencia`:
-        miembro efectivo de Reacción de la bandeja del caso, o
-        `supervisor`/`coordinador` sobre los casos de sus integrantes (DEC-099,
-        DEC-121 #5; mando pendiente, DT-06). Poseer el UUID no autoriza: sin
-        acceso responde `404`.
+        rol `reaccion` (DEC-130), o `supervisor`/`coordinador` sobre cualquier
+        caso sin verificar mando (DEC-131; DT-06). Poseer el UUID no autoriza:
+        un caso inexistente responde `404`; otro rol recibe `403`.
 
         El `bff` COMPONE la respuesta: lee el caso de
         `mensajeria.obtenerEmergencia` (que trae `viaje_id`), el viaje de
@@ -1096,6 +1125,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/DetalleEmergenciaReaccion"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/panel/emergencias/{eid}/notas:
@@ -1111,7 +1141,8 @@ paths:
       summary: Listar las notas del caso nombrado por su id (solo lectura).
       description: >-
         Solo audiencia Interno. Reenvía a `mensajeria.listarNotasEmergenciaPorId`.
-        Mismo acceso que `obtenerEmergencia`. Reacción CONSULTA las notas
+        Mismo acceso que `obtenerEmergencia`: rol `reaccion` y
+        `supervisor`/`coordinador` (DEC-130, DEC-131). Reacción CONSULTA las notas
         (DEC-028 #4) y no las escribe (DEC-034, DEC-121 #4): no hay ruta de
         escritura por id. Incluye la nota de resolución (`es_resolucion`).
         Orden de creación, de la más antigua a la más reciente.
@@ -1128,6 +1159,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/PaginaNotasEmergencia"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/panel/emergencias/{eid}/reclamos:
@@ -1143,9 +1175,9 @@ paths:
       summary: Reclamar el caso por su id (abierta -> en_atencion) con versión esperada.
       description: >-
         Solo audiencia Interno. Reenvía a `mensajeria.reclamarEmergenciaPorId`.
-        Solo un miembro efectivo del pool Reacción de la bandeja del caso
-        (DEC-028 #2); sin esa membresía, `403`. El mando de DEC-099 no concede
-        reclamar. Solo procede si NADIE tiene el caso: con responsable vigente
+        Solo un usuario con rol `reaccion` (DEC-130, DEC-028 #2); cualquier otro
+        rol, `403`. `supervisor` y `coordinador` no reclaman (DEC-131). Solo
+        procede si NADIE tiene el caso: con responsable vigente
         responde `409` aunque la versión sea la vigente (DEC-125). Dos reclamos
         concurrentes producen un ganador; el perdedor recibe 409
         `conflicto_version_reclamo`.
@@ -1185,7 +1217,7 @@ paths:
         Solo audiencia Interno. Reenvía a
         `mensajeria.liberarReclamoEmergenciaPorId`. En V1 lo hace el responsable
         vigente o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando
-        (DEC-126, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el
+        (DEC-126, DEC-131, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el
         responsable, y cualquier otro rol, recibe `403`. El caso vuelve a
         `abierta`.
       parameters:
@@ -1214,10 +1246,10 @@ paths:
       description: >-
         Solo audiencia Interno. Reenvía a `mensajeria.transferirEmergenciaPorId`.
         En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER
-        `supervisor`/`coordinador`, sin verificar el mando (DEC-126; DT-06). Un
+        `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131; DT-06). Un
         miembro de Reacción que no es el responsable, y cualquier otro rol,
-        recibe `403`. El destino debe tener membresía efectiva en el pool
-        Reacción. Cierra el reclamo anterior y abre el siguiente en UNA
+        recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el
+        reclamo anterior y abre el siguiente en UNA
         transacción; conserva el estado del caso.
       requestBody:
         required: true

@@ -359,7 +359,7 @@ export interface paths {
         };
         /**
          * Listar el trabajo de la bandeja del llamante (bootstrap y catch-up).
-         * @description El `bff` resuelve la bandeja del sujeto desde los claims de la sesión (cola única e implícita, DEC-103) y reenvía a `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja. Requiere MEMBRESÍA EFECTIVA en el pool; el rol `ejecutivo` por sí solo no concede acceso (Addendum §7).
+         * @description El `bff` resuelve la bandeja del sujeto desde los claims de la sesión (cola única e implícita, DEC-103) y reenvía a `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja. La bandeja única de chat la ven el rol `ejecutivo` (DEC-127) y, solo en lectura, `supervisor`/`coordinador` (DEC-131); otro rol recibe `404` (no tiene bandeja). Sin acotar por el tenant de quien pregunta (DEC-129).
          *     Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el CATCH-UP: devuelve los cambios de la colección posteriores a esa revisión. Si la revisión pedida quedó fuera de la ventana retenida, responde `409 stream_resync_required` y el cliente repite el bootstrap (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
          */
         get: operations["listarTrabajoBandeja"];
@@ -382,7 +382,7 @@ export interface paths {
         };
         /**
          * Detalle de una conversación (estado inicial para bootstrap).
-         * @description Reenvía a `mensajeria.obtenerConversacion` con audiencia Interno. Poseer el UUID no autoriza (Addendum §7): sin acceso efectivo responde 404, igual que si no existiera. `ultima_secuencia` es el cursor de dominio del bootstrap (ADR 28 §2).
+         * @description Reenvía a `mensajeria.obtenerConversacion` con audiencia Interno. Leen el `ejecutivo` y, solo en lectura, `supervisor`/`coordinador` (DEC-131), sin acotar por el tenant de quien pregunta (DEC-129); otro rol interno recibe `403`. Poseer el UUID no autoriza (Addendum §7): una conversación inexistente responde 404. `ultima_secuencia` es el cursor de dominio del bootstrap (ADR 28 §2).
          */
         get: operations["obtenerConversacion"];
         put?: never;
@@ -404,13 +404,13 @@ export interface paths {
         };
         /**
          * Historia de mensajes por secuencia canónica.
-         * @description Reenvía a `mensajeria.listarMensajes` con audiencia Interno. `antes_de` pagina la historia hacia atrás; `despues_de` es la recuperación tras reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin ninguno, devuelve los más recientes. El orden es siempre por `secuencia`, nunca por `creado_en`.
+         * @description Reenvía a `mensajeria.listarMensajes` con audiencia Interno. `antes_de` pagina la historia hacia atrás; `despues_de` es la recuperación tras reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin ninguno, devuelve los más recientes. El orden es siempre por `secuencia`, nunca por `creado_en`. Mismo acceso que `obtenerConversacion`: `supervisor`/`coordinador` leen (DEC-131).
          */
         get: operations["listarMensajes"];
         put?: never;
         /**
          * Enviar un mensaje interno (idempotente por client_message_id).
-         * @description Reenvía a `mensajeria.enviarMensaje` con audiencia Interno. El interno requiere RECLAMO ACTIVO y `version_reclamo_esperada` (Addendum §7). Reintentar el mismo `client_message_id` devuelve el mensaje original con 200 y nunca crea un segundo mensaje.
+         * @description Reenvía a `mensajeria.enviarMensaje` con audiencia Interno. El interno requiere rol `ejecutivo`, RECLAMO ACTIVO y `version_reclamo_esperada` (Addendum §7); `supervisor`/`coordinador` solo leen y reciben `403` (DEC-131). Reintentar el mismo `client_message_id` devuelve el mensaje original con 200 y nunca crea un segundo mensaje.
          */
         post: operations["enviarMensaje"];
         delete?: never;
@@ -432,7 +432,7 @@ export interface paths {
         put?: never;
         /**
          * Reclamar la conversación con versión esperada.
-         * @description Reenvía a `mensajeria.reclamarConversacion`. Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo` (Addendum §4 punto 5).
+         * @description Reenvía a `mensajeria.reclamarConversacion`. Solo el rol `ejecutivo` (DEC-127); `supervisor`/`coordinador` reciben `403` (DEC-131). Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo` (Addendum §4 punto 5).
          */
         post: operations["reclamarConversacion"];
         delete?: never;
@@ -457,7 +457,7 @@ export interface paths {
         post?: never;
         /**
          * Liberar el reclamo y devolver el trabajo al pool.
-         * @description Reenvía a `mensajeria.liberarReclamo`. Lo hace el responsable o un supervisor dentro de su alcance.
+         * @description Reenvía a `mensajeria.liberarReclamo`. Lo hace el responsable; en V1 un `supervisor`/`coordinador` NO libera una conversación ajena (DEC-118) y recibe `403` (DEC-131).
          */
         delete: operations["liberarReclamo"];
         options?: never;
@@ -478,7 +478,7 @@ export interface paths {
         put?: never;
         /**
          * Transferir la responsabilidad a otro miembro del pool.
-         * @description Reenvía a `mensajeria.transferirConversacion`. Cierra el reclamo anterior y abre el siguiente en UNA transacción: no hay ventana sin responsable ni con dos (Addendum §6).
+         * @description Reenvía a `mensajeria.transferirConversacion`. Lo hace el responsable; `supervisor`/`coordinador` reciben `403` (DEC-118, DEC-131). Cierra el reclamo anterior y abre el siguiente en UNA transacción: no hay ventana sin responsable ni con dos (Addendum §6).
          */
         post: operations["transferirConversacion"];
         delete?: never;
@@ -500,7 +500,7 @@ export interface paths {
         put?: never;
         /**
          * Marcar la conversación como atendida por el responsable.
-         * @description Reenvía a `mensajeria.marcarAtendida`.
+         * @description Reenvía a `mensajeria.marcarAtendida`. Solo el responsable (DEC-117); `supervisor`/`coordinador` reciben `403` (DEC-131).
          */
         post: operations["marcarAtendida"];
         delete?: never;
@@ -522,7 +522,7 @@ export interface paths {
         put?: never;
         /**
          * Avanzar el cursor de entrega del llamante.
-         * @description Reenvía a `mensajeria.registrarReciboEntregado`.
+         * @description Reenvía a `mensajeria.registrarReciboEntregado`. `supervisor`/`coordinador` solo leen y no registran recibos: `403` (DEC-131).
          */
         post: operations["registrarReciboEntregado"];
         delete?: never;
@@ -544,7 +544,7 @@ export interface paths {
         put?: never;
         /**
          * Avanzar el cursor de lectura del llamante.
-         * @description Reenvía a `mensajeria.registrarReciboLeido`. Una vista incidental de un miembro no responsable no genera un "leído" visible al cliente (Addendum §8).
+         * @description Reenvía a `mensajeria.registrarReciboLeido`. Una vista incidental de un miembro no responsable no genera un "leído" visible al cliente (Addendum §8). `supervisor`/`coordinador` solo leen y no registran recibos: `403` (DEC-131).
          */
         post: operations["registrarReciboLeido"];
         delete?: never;
@@ -562,7 +562,7 @@ export interface paths {
         };
         /**
          * Listar los casos de la bandeja de Reacción del llamante.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarBandejaEmergencias`: la bandeja de tipo `emergencias` se resuelve por la MEMBRESÍA EFECTIVA del sujeto en el pool de Reacción (DEC-028 #1), sin `{id}`. `supervisor`/`coordinador` ven además los casos de sus integrantes de Reacción (DEC-099, DEC-121 #5; mando pendiente, DT-06). Sin membresía ni mando responde `404`. Cada fila es `EmergenciaReaccion`, sin datos del viaje ni del cliente ni notas (DEC-121 #2). EXCLUYE los casos en `cerrada` y ordena del más antiguo al más reciente por `activada_en` (DEC-121 #3).
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarBandejaEmergencias`: la bandeja única de emergencias (DEC-130), sin `{id}`. La ven el rol `reaccion`, miembro por su rol, y `supervisor`/`coordinador`, que ven todos los casos de la bandeja sin verificar mando (DEC-131; DT-06). Sin acotar por el tenant de quien pregunta (DEC-129). Otro rol responde `404`. Cada fila es `EmergenciaReaccion`, sin datos del viaje ni del cliente ni notas (DEC-121 #2). EXCLUYE los casos en `cerrada` y ordena del más antiguo al más reciente por `activada_en` (DEC-121 #3).
          */
         get: operations["listarBandejaEmergencias"];
         put?: never;
@@ -585,7 +585,7 @@ export interface paths {
         };
         /**
          * Detalle del caso por su id, con la información del viaje que Reacción necesita.
-         * @description Solo audiencia Interno. Mismo acceso que `mensajeria.obtenerEmergencia`: miembro efectivo de Reacción de la bandeja del caso, o `supervisor`/`coordinador` sobre los casos de sus integrantes (DEC-099, DEC-121 #5; mando pendiente, DT-06). Poseer el UUID no autoriza: sin acceso responde `404`.
+         * @description Solo audiencia Interno. Mismo acceso que `mensajeria.obtenerEmergencia`: rol `reaccion` (DEC-130), o `supervisor`/`coordinador` sobre cualquier caso sin verificar mando (DEC-131; DT-06). Poseer el UUID no autoriza: un caso inexistente responde `404`; otro rol recibe `403`.
          *     El `bff` COMPONE la respuesta: lee el caso de `mensajeria.obtenerEmergencia` (que trae `viaje_id`), el viaje de `operacion` y el nombre del cliente y la escolta de `catalogos`, y devuelve `DetalleEmergenciaReaccion`. Es la visibilidad tipo monitorista acotada al caso de DEC-028 #5: SIN `viaje_id`, bitácora, incidencias ni conversación. No concede acciones sobre el viaje.
          */
         get: operations["obtenerEmergencia"];
@@ -609,7 +609,7 @@ export interface paths {
         };
         /**
          * Listar las notas del caso nombrado por su id (solo lectura).
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarNotasEmergenciaPorId`. Mismo acceso que `obtenerEmergencia`. Reacción CONSULTA las notas (DEC-028 #4) y no las escribe (DEC-034, DEC-121 #4): no hay ruta de escritura por id. Incluye la nota de resolución (`es_resolucion`). Orden de creación, de la más antigua a la más reciente.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarNotasEmergenciaPorId`. Mismo acceso que `obtenerEmergencia`: rol `reaccion` y `supervisor`/`coordinador` (DEC-130, DEC-131). Reacción CONSULTA las notas (DEC-028 #4) y no las escribe (DEC-034, DEC-121 #4): no hay ruta de escritura por id. Incluye la nota de resolución (`es_resolucion`). Orden de creación, de la más antigua a la más reciente.
          */
         get: operations["listarNotasEmergenciaPorId"];
         put?: never;
@@ -634,7 +634,7 @@ export interface paths {
         put?: never;
         /**
          * Reclamar el caso por su id (abierta -> en_atencion) con versión esperada.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.reclamarEmergenciaPorId`. Solo un miembro efectivo del pool Reacción de la bandeja del caso (DEC-028 #2); sin esa membresía, `403`. El mando de DEC-099 no concede reclamar. Solo procede si NADIE tiene el caso: con responsable vigente responde `409` aunque la versión sea la vigente (DEC-125). Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo`.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.reclamarEmergenciaPorId`. Solo un usuario con rol `reaccion` (DEC-130, DEC-028 #2); cualquier otro rol, `403`. `supervisor` y `coordinador` no reclaman (DEC-131). Solo procede si NADIE tiene el caso: con responsable vigente responde `409` aunque la versión sea la vigente (DEC-125). Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo`.
          */
         post: operations["reclamarEmergenciaPorId"];
         delete?: never;
@@ -660,7 +660,7 @@ export interface paths {
         post?: never;
         /**
          * Liberar el reclamo del caso por su id y devolverlo al pool de Reacción.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.liberarReclamoEmergenciaPorId`. En V1 lo hace el responsable vigente o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El caso vuelve a `abierta`.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.liberarReclamoEmergenciaPorId`. En V1 lo hace el responsable vigente o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El caso vuelve a `abierta`.
          */
         delete: operations["liberarReclamoEmergenciaPorId"];
         options?: never;
@@ -682,7 +682,7 @@ export interface paths {
         put?: never;
         /**
          * Transferir el caso por su id a otro miembro de Reacción.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.transferirEmergenciaPorId`. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe tener membresía efectiva en el pool Reacción. Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.transferirEmergenciaPorId`. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso.
          */
         post: operations["transferirEmergenciaPorId"];
         delete?: never;
@@ -2429,6 +2429,7 @@ export interface operations {
             };
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
             409: components["responses"]["ResyncRequerido"];
         };
     };
@@ -2453,6 +2454,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -2484,6 +2486,7 @@ export interface operations {
             };
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -2675,6 +2678,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -2701,6 +2705,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -2752,6 +2757,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -2780,6 +2786,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
