@@ -139,7 +139,7 @@ type Conversacion struct {
 // Cursor Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato.
 type Cursor = string
 
-// EmergenciaReaccion El caso tal como lo ve Reacción en su bandeja y en el detalle (DEC-028): SIN `viaje_id`, `cliente_id`, `actor_real` ni notas, porque Reacción no tiene acceso al viaje ni al cliente. Solo lleva lo que el caso ya registra. Es una vista mínima de arranque: los campos exactos a mostrar están PENDIENTES de confirmación de Producto, y añadir uno después es aditivo. No reemplaza a `CasoEmergencia`, que sigue siendo la vista de monitoreo por viaje.
+// EmergenciaReaccion El caso tal como lo ve Reacción en su bandeja (DEC-121 #2): SIN `viaje_id`, `cliente_id`, `actor_real` ni notas. Solo lleva lo que el caso ya registra. No reemplaza a `CasoEmergencia`, que sigue siendo la vista de monitoreo por viaje y la que `obtenerEmergencia` entrega al `bff` para componer el detalle.
 type EmergenciaReaccion struct {
 	// ActivadaEn Instante en UTC, RFC 3339.
 	ActivadaEn MarcaTiempo `json:"activada_en"`
@@ -327,6 +327,13 @@ type PaginaMensajes struct {
 	Items  []Mensaje `json:"items"`
 }
 
+// PaginaNotasEmergencia Página de notas de un caso (`listarNotasEmergenciaPorId`).
+type PaginaNotasEmergencia struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más.
+	CursorSiguiente *string          `json:"cursor_siguiente"`
+	Items           []NotaEmergencia `json:"items"`
+}
+
 // ReciboEntrada defines model for ReciboEntrada.
 type ReciboEntrada struct {
 	// HastaSecuencia Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una versión de reclamo ni el `seq` de transporte de `realtime`.
@@ -497,6 +504,12 @@ type LiberarReclamoParams struct {
 	VersionEsperada VersionReclamo `form:"version_esperada" json:"version_esperada"`
 }
 
+// ListarNotasEmergenciaPorIdParams defines parameters for ListarNotasEmergenciaPorId.
+type ListarNotasEmergenciaPorIdParams struct {
+	// Cursor Cursor de paginación. No es el cursor de cambios de ADR 28.
+	Cursor *CursorPagina `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // LiberarReclamoEmergenciaPorIdParams defines parameters for LiberarReclamoEmergenciaPorId.
 type LiberarReclamoEmergenciaPorIdParams struct {
 	VersionEsperada VersionReclamo `form:"version_esperada" json:"version_esperada"`
@@ -527,9 +540,6 @@ type ReclamarConversacionJSONRequestBody = VersionEsperadaEntrada
 
 // TransferirConversacionJSONRequestBody defines body for TransferirConversacion for application/json ContentType.
 type TransferirConversacionJSONRequestBody = TransferenciaEntrada
-
-// AgregarNotaEmergenciaPorIdJSONRequestBody defines body for AgregarNotaEmergenciaPorId for application/json ContentType.
-type AgregarNotaEmergenciaPorIdJSONRequestBody = NotaEmergenciaEntrada
 
 // ReclamarEmergenciaPorIdJSONRequestBody defines body for ReclamarEmergenciaPorId for application/json ContentType.
 type ReclamarEmergenciaPorIdJSONRequestBody = VersionEsperadaEntrada
@@ -693,10 +703,8 @@ type ClientInterface interface {
 	// CerrarEmergenciaPorId request
 	CerrarEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AgregarNotaEmergenciaPorIdWithBody request with any body
-	AgregarNotaEmergenciaPorIdWithBody(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	AgregarNotaEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, body AgregarNotaEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// ListarNotasEmergenciaPorId request
+	ListarNotasEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReclamarEmergenciaPorIdWithBody request with any body
 	ReclamarEmergenciaPorIdWithBody(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1042,20 +1050,8 @@ func (c *Client) CerrarEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, 
 	return c.Client.Do(req)
 }
 
-func (c *Client) AgregarNotaEmergenciaPorIdWithBody(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAgregarNotaEmergenciaPorIdRequestWithBody(c.Server, eid, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) AgregarNotaEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, body AgregarNotaEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAgregarNotaEmergenciaPorIdRequest(c.Server, eid, body)
+func (c *Client) ListarNotasEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarNotasEmergenciaPorIdRequest(c.Server, eid, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2187,19 +2183,8 @@ func NewCerrarEmergenciaPorIdRequest(server string, eid EmergenciaRuta) (*http.R
 	return req, nil
 }
 
-// NewAgregarNotaEmergenciaPorIdRequest calls the generic AgregarNotaEmergenciaPorId builder with application/json body
-func NewAgregarNotaEmergenciaPorIdRequest(server string, eid EmergenciaRuta, body AgregarNotaEmergenciaPorIdJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewAgregarNotaEmergenciaPorIdRequestWithBody(server, eid, "application/json", bodyReader)
-}
-
-// NewAgregarNotaEmergenciaPorIdRequestWithBody generates requests for AgregarNotaEmergenciaPorId with any type of body
-func NewAgregarNotaEmergenciaPorIdRequestWithBody(server string, eid EmergenciaRuta, contentType string, body io.Reader) (*http.Request, error) {
+// NewListarNotasEmergenciaPorIdRequest generates requests for ListarNotasEmergenciaPorId
+func NewListarNotasEmergenciaPorIdRequest(server string, eid EmergenciaRuta, params *ListarNotasEmergenciaPorIdParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -2224,12 +2209,32 @@ func NewAgregarNotaEmergenciaPorIdRequestWithBody(server string, eid EmergenciaR
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -2980,10 +2985,8 @@ type ClientWithResponsesInterface interface {
 	// CerrarEmergenciaPorIdWithResponse request
 	CerrarEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, reqEditors ...RequestEditorFn) (*CerrarEmergenciaPorIdResponse, error)
 
-	// AgregarNotaEmergenciaPorIdWithBodyWithResponse request with any body
-	AgregarNotaEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaPorIdResponse, error)
-
-	AgregarNotaEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, body AgregarNotaEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaPorIdResponse, error)
+	// ListarNotasEmergenciaPorIdWithResponse request
+	ListarNotasEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*ListarNotasEmergenciaPorIdResponse, error)
 
 	// ReclamarEmergenciaPorIdWithBodyWithResponse request with any body
 	ReclamarEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReclamarEmergenciaPorIdResponse, error)
@@ -3421,7 +3424,7 @@ func (r TransferirConversacionResponse) StatusCode() int {
 type ObtenerEmergenciaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *EmergenciaReaccion
+	JSON200      *CasoEmergencia
 	JSON401      *NoAutorizado
 	JSON404      *NoEncontrado
 }
@@ -3468,19 +3471,16 @@ func (r CerrarEmergenciaPorIdResponse) StatusCode() int {
 	return 0
 }
 
-type AgregarNotaEmergenciaPorIdResponse struct {
+type ListarNotasEmergenciaPorIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *NotaEmergencia
-	JSON400      *SolicitudInvalida
+	JSON200      *PaginaNotasEmergencia
 	JSON401      *NoAutorizado
-	JSON403      *Prohibido
 	JSON404      *NoEncontrado
-	JSON409      *Error
 }
 
 // Status returns HTTPResponse.Status
-func (r AgregarNotaEmergenciaPorIdResponse) Status() string {
+func (r ListarNotasEmergenciaPorIdResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3488,7 +3488,7 @@ func (r AgregarNotaEmergenciaPorIdResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r AgregarNotaEmergenciaPorIdResponse) StatusCode() int {
+func (r ListarNotasEmergenciaPorIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4043,21 +4043,13 @@ func (c *ClientWithResponses) CerrarEmergenciaPorIdWithResponse(ctx context.Cont
 	return ParseCerrarEmergenciaPorIdResponse(rsp)
 }
 
-// AgregarNotaEmergenciaPorIdWithBodyWithResponse request with arbitrary body returning *AgregarNotaEmergenciaPorIdResponse
-func (c *ClientWithResponses) AgregarNotaEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaPorIdResponse, error) {
-	rsp, err := c.AgregarNotaEmergenciaPorIdWithBody(ctx, eid, contentType, body, reqEditors...)
+// ListarNotasEmergenciaPorIdWithResponse request returning *ListarNotasEmergenciaPorIdResponse
+func (c *ClientWithResponses) ListarNotasEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*ListarNotasEmergenciaPorIdResponse, error) {
+	rsp, err := c.ListarNotasEmergenciaPorId(ctx, eid, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseAgregarNotaEmergenciaPorIdResponse(rsp)
-}
-
-func (c *ClientWithResponses) AgregarNotaEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, body AgregarNotaEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaPorIdResponse, error) {
-	rsp, err := c.AgregarNotaEmergenciaPorId(ctx, eid, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseAgregarNotaEmergenciaPorIdResponse(rsp)
+	return ParseListarNotasEmergenciaPorIdResponse(rsp)
 }
 
 // ReclamarEmergenciaPorIdWithBodyWithResponse request with arbitrary body returning *ReclamarEmergenciaPorIdResponse
@@ -4975,7 +4967,7 @@ func ParseObtenerEmergenciaResponse(rsp *http.Response) (*ObtenerEmergenciaRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest EmergenciaReaccion
+		var dest CasoEmergencia
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -5054,33 +5046,26 @@ func ParseCerrarEmergenciaPorIdResponse(rsp *http.Response) (*CerrarEmergenciaPo
 	return response, nil
 }
 
-// ParseAgregarNotaEmergenciaPorIdResponse parses an HTTP response from a AgregarNotaEmergenciaPorIdWithResponse call
-func ParseAgregarNotaEmergenciaPorIdResponse(rsp *http.Response) (*AgregarNotaEmergenciaPorIdResponse, error) {
+// ParseListarNotasEmergenciaPorIdResponse parses an HTTP response from a ListarNotasEmergenciaPorIdWithResponse call
+func ParseListarNotasEmergenciaPorIdResponse(rsp *http.Response) (*ListarNotasEmergenciaPorIdResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &AgregarNotaEmergenciaPorIdResponse{
+	response := &ListarNotasEmergenciaPorIdResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest NotaEmergencia
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaNotasEmergencia
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest SolicitudInvalida
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest NoAutorizado
@@ -5089,26 +5074,12 @@ func ParseAgregarNotaEmergenciaPorIdResponse(rsp *http.Response) (*AgregarNotaEm
 		}
 		response.JSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Prohibido
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
 
 	}
 

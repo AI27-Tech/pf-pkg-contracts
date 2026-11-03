@@ -562,7 +562,7 @@ export interface paths {
         };
         /**
          * Listar los casos de la bandeja de Reacción del llamante.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarBandejaEmergencias`: la bandeja de tipo `emergencias` se resuelve por la MEMBRESÍA EFECTIVA del sujeto en el pool de Reacción (DEC-028 #1), sin `{id}`. `supervisor`/`coordinador` ven además los casos de los integrantes de Reacción a su mando (DEC-099). Sin membresía ni mando responde `404`. Cada fila es `EmergenciaReaccion`, sin datos del viaje ni del cliente ni notas; los campos exactos, los estados incluidos y el orden de presentación están PENDIENTES de confirmación de Producto.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarBandejaEmergencias`: la bandeja de tipo `emergencias` se resuelve por la MEMBRESÍA EFECTIVA del sujeto en el pool de Reacción (DEC-028 #1), sin `{id}`. `supervisor`/`coordinador` ven además los casos de sus integrantes de Reacción (DEC-099, DEC-121 #5; mando pendiente, DT-06). Sin membresía ni mando responde `404`. Cada fila es `EmergenciaReaccion`, sin datos del viaje ni del cliente ni notas (DEC-121 #2). EXCLUYE los casos en `cerrada` y ordena del más antiguo al más reciente por `activada_en` (DEC-121 #3).
          */
         get: operations["listarBandejaEmergencias"];
         put?: never;
@@ -584,8 +584,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Detalle del caso por su id, en la vista de Reacción.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.obtenerEmergencia`. Miembro efectivo de Reacción de la bandeja del caso, o `supervisor`/`coordinador` con mando sobre sus integrantes (DEC-099). Poseer el UUID no autoriza: sin acceso responde `404`. Devuelve `EmergenciaReaccion`; campos exactos pendientes de Producto.
+         * Detalle del caso por su id, con la información del viaje que Reacción necesita.
+         * @description Solo audiencia Interno. Mismo acceso que `mensajeria.obtenerEmergencia`: miembro efectivo de Reacción de la bandeja del caso, o `supervisor`/`coordinador` sobre los casos de sus integrantes (DEC-099, DEC-121 #5; mando pendiente, DT-06). Poseer el UUID no autoriza: sin acceso responde `404`.
+         *     El `bff` COMPONE la respuesta: lee el caso de `mensajeria.obtenerEmergencia` (que trae `viaje_id`), el viaje de `operacion` y el nombre del cliente y la escolta de `catalogos`, y devuelve `DetalleEmergenciaReaccion`. Es la visibilidad tipo monitorista acotada al caso de DEC-028 #5: SIN `viaje_id`, bitácora, incidencias ni conversación. No concede acciones sobre el viaje.
          */
         get: operations["obtenerEmergencia"];
         put?: never;
@@ -606,13 +607,13 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Agregar una nota al caso nombrado por su id (append-only).
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.agregarNotaEmergenciaPorId`. Operator dentro del alcance del viaje del caso; Reacción NO agrega notas (unidireccionales hacia Reacción, ADR 21 §4, DEC-034). Texto de hasta 1000 caracteres, recortado; vacío tras el recorte es 400; `cerrada` responde 409 `emergencia_cerrada`.
+         * Listar las notas del caso nombrado por su id (solo lectura).
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarNotasEmergenciaPorId`. Mismo acceso que `obtenerEmergencia`. Reacción CONSULTA las notas (DEC-028 #4) y no las escribe (DEC-034, DEC-121 #4): no hay ruta de escritura por id. Incluye la nota de resolución (`es_resolucion`). Orden de creación, de la más antigua a la más reciente.
          */
-        post: operations["agregarNotaEmergenciaPorId"];
+        get: operations["listarNotasEmergenciaPorId"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -633,7 +634,7 @@ export interface paths {
         put?: never;
         /**
          * Reclamar el caso por su id (abierta -> en_atencion) con versión esperada.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.reclamarEmergenciaPorId`. Solo un miembro efectivo del pool Reacción de la bandeja del caso (DEC-028 #2); el mando de DEC-099 no concede reclamar. Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo`.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.reclamarEmergenciaPorId`. Solo un miembro efectivo del pool Reacción de la bandeja del caso (DEC-028 #2); sin esa membresía, `403`. El mando de DEC-099 no concede reclamar. Solo procede si NADIE tiene el caso: con responsable vigente responde `409` aunque la versión sea la vigente (DEC-125). Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo`.
          */
         post: operations["reclamarEmergenciaPorId"];
         delete?: never;
@@ -659,7 +660,7 @@ export interface paths {
         post?: never;
         /**
          * Liberar el reclamo del caso por su id y devolverlo al pool de Reacción.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.liberarReclamoEmergenciaPorId`. Lo hace el responsable vigente, o `supervisor`/`coordinador` con mando sobre ese responsable de Reacción (DEC-099). El caso vuelve a `abierta`.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.liberarReclamoEmergenciaPorId`. En V1 lo hace el responsable vigente o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El caso vuelve a `abierta`.
          */
         delete: operations["liberarReclamoEmergenciaPorId"];
         options?: never;
@@ -681,7 +682,7 @@ export interface paths {
         put?: never;
         /**
          * Transferir el caso por su id a otro miembro de Reacción.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.transferirEmergenciaPorId`. La hace el responsable vigente (DEC-028 #2), o `supervisor`/`coordinador` con mando sobre ese responsable (DEC-099). El destino debe tener membresía efectiva en el pool Reacción. Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.transferirEmergenciaPorId`. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe tener membresía efectiva en el pool Reacción. Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso.
          */
         post: operations["transferirEmergenciaPorId"];
         delete?: never;
@@ -704,7 +705,7 @@ export interface paths {
         put?: never;
         /**
          * Resolver el caso por su id (en_atencion -> resuelta) con nota obligatoria.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.resolverEmergenciaPorId`. Solo el responsable vigente de Reacción (ADR 21 §5, DEC-028 #3); el mando de DEC-099 no resuelve. Nota de resolución OBLIGATORIA de 1 a 1000 caracteres; sin nota válida responde 400 y el caso no cambia de estado. `resuelta` es irreversible. Devuelve `EmergenciaReaccion`.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.resolverEmergenciaPorId`. Solo el responsable vigente de Reacción (ADR 21 §5, DEC-028 #3); cualquier otro sujeto, incluido `supervisor`/`coordinador`, recibe `403`. Nota de resolución OBLIGATORIA de 1 a 1000 caracteres; sin nota válida responde 400 y el caso no cambia de estado. `resuelta` es irreversible. Devuelve `EmergenciaReaccion`.
          */
         post: operations["resolverEmergenciaPorId"];
         delete?: never;
@@ -727,7 +728,7 @@ export interface paths {
         put?: never;
         /**
          * Cerrar administrativamente el caso por su id (resuelta -> cerrada).
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.cerrarEmergenciaPorId`. Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje del caso (eje de monitoreo por unidad), o Administrator global (ADR 21 §5). NUNCA Reacción ni Ejecutivo (E8-T18, DEC-045 #9), tampoco por el mando de DEC-099. No exige texto. `cerrada` es irreversible.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.cerrarEmergenciaPorId`. Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje del caso (eje de monitoreo por unidad), o Administrator global (ADR 21 §5). NUNCA Reacción ni Ejecutivo (E8-T18, DEC-045 #9, DEC-121 #5), tampoco por el mando de DEC-099: responden `403`. No exige texto. `cerrada` es irreversible.
          */
         post: operations["cerrarEmergenciaPorId"];
         delete?: never;
@@ -1562,7 +1563,7 @@ export interface components {
             /** Format: date-time */
             cerrada_en?: string | null;
         };
-        /** @description El caso tal como lo ve Reacción en su bandeja y en el detalle (DEC-028): SIN `viaje_id`, `cliente_id`, `actor_real` ni notas, porque Reacción no tiene acceso al viaje ni al cliente. Solo lleva lo que el caso ya registra. Es una vista mínima de arranque: los campos exactos a mostrar están PENDIENTES de confirmación de Producto, y añadir uno después es aditivo. No reemplaza a `CasoEmergencia`, que sigue siendo la vista de monitoreo por viaje. */
+        /** @description El caso tal como lo ve Reacción en su bandeja (DEC-121 #2): SIN `viaje_id`, `cliente_id`, `actor_real` ni notas. Solo lleva lo que el caso ya registra. En el detalle viaja como `caso` dentro de `DetalleEmergenciaReaccion`. No reemplaza a `CasoEmergencia`, que sigue siendo la vista de monitoreo por viaje. */
         EmergenciaReaccion: {
             id: components["schemas"]["Id"];
             estado: components["schemas"]["EstadoEmergencia"];
@@ -1583,6 +1584,65 @@ export interface components {
             /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
             cursor_siguiente: string | null;
         };
+        /** @description Detalle del caso para Reacción (DEC-121 #2): el caso más la información del viaje que necesita para atender. Es la visibilidad tipo monitorista acotada al caso de DEC-028 #5. Lo COMPONE el `bff`: `caso` viene de `mensajeria` y `viaje` de `operacion` y `catalogos`. Sin `viaje_id`, bitácora, incidencias ni conversación. */
+        DetalleEmergenciaReaccion: {
+            caso: components["schemas"]["EmergenciaReaccion"];
+            viaje: components["schemas"]["ViajeEmergencia"];
+        };
+        /** @description Bloque de viaje del detalle de Reacción, con exactamente los campos de DEC-121 #2. El `bff` lo compone de `operacion` (estado, origen, destinos, fecha y tipo de servicio, ETA, unidades de la escolta) y de `catalogos` (nombre del cliente, vehículo y custodios de cada unidad). El tracto y los contenedores de la ficha técnica entrarán en una ola aditiva posterior, cuando `operacion` implemente la ficha (E8-T12). Fuera de V1: ubicación (DEC-001), operador del tracto y folio legible del viaje. */
+        ViajeEmergencia: {
+            /** @description Nombre del cliente del viaje, de `catalogos`. */
+            cliente_nombre: string;
+            /** @description Token de estado canónico del viaje (`EstadoViaje`, ADR 19), como en `ViajeInterno.estado`. El `bff` no replica el enum. */
+            estado: string;
+            origen: string;
+            destinos: components["schemas"]["DestinoViajeEmergencia"][];
+            /**
+             * Format: date-time
+             * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+             */
+            fecha_hora_servicio?: string | null;
+            /** @description Tipo de servicio/monitoreo del viaje (DEC-010 */
+            tipo_servicio?: string | null;
+            /**
+             * Format: date-time
+             * @description ETA estimado capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado.
+             */
+            eta_estimado?: string | null;
+            /** @description Unidades de la escolta asignada; vacío si el viaje aún no tiene escolta. */
+            escolta: components["schemas"]["UnidadEscoltaEmergencia"][];
+        };
+        /** @description Destino del viaje en el detalle de Reacción. Subconjunto de `Destino` de `operacion`. */
+        DestinoViajeEmergencia: {
+            nombre: string;
+            /**
+             * Format: date-time
+             * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+             */
+            fecha_cita?: string | null;
+            /** @description Si la unidad arribó a este destino (DEC-012). Espejo de `Destino.arribo` de `operacion`. */
+            arribo?: boolean;
+        };
+        /** @description Unidad de la escolta en el detalle de Reacción: `tipo` de la unidad del roster (`operacion`), `economico` y `placas` del vehículo y sus custodios (`catalogos`). Sin identificadores. */
+        UnidadEscoltaEmergencia: {
+            /** @description Token de `Unidad.tipo` (`patrulla` o `moto`). Se declara `string` y no enum para no renombrar las constantes Go de `UnidadTipo` del cliente generado. */
+            tipo: string;
+            /** @description Número económico del vehículo. */
+            economico?: string;
+            placas?: string;
+            custodios: components["schemas"]["CustodioEscoltaEmergencia"][];
+        };
+        /** @description Custodio de una unidad de la escolta. Subconjunto de `Custodio` de `catalogos`. */
+        CustodioEscoltaEmergencia: {
+            nombre: string;
+            telefono?: string;
+        };
+        /** @description Página de notas de un caso (`listarNotasEmergenciaPorId`). */
+        PaginaNotasEmergencia: {
+            items: components["schemas"]["NotaEmergencia"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no hay más. */
+            cursor_siguiente: string | null;
+        };
         NotaEmergencia: {
             id: components["schemas"]["Id"];
             emergencia_id: components["schemas"]["Id"];
@@ -1597,10 +1657,6 @@ export interface components {
             /** @description true si es la nota que acompañó la resolución del caso. */
             es_resolucion?: boolean;
             creado_en: components["schemas"]["MarcaTiempo"];
-        };
-        NotaEmergenciaEntrada: {
-            /** @description Texto de la nota. El servidor recorta espacios de inicio y fin; si queda vacío tras el recorte, responde 400 y no la guarda. */
-            cuerpo: string;
         };
         ResolucionEmergenciaEntrada: {
             version_esperada: components["schemas"]["VersionReclamo"];
@@ -2686,22 +2742,25 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Caso en la vista de Reacción. */
+            /** @description Caso con el bloque de viaje. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EmergenciaReaccion"];
+                    "application/json": components["schemas"]["DetalleEmergenciaReaccion"];
                 };
             };
             401: components["responses"]["NoAutorizado"];
             404: components["responses"]["NoEncontrado"];
         };
     };
-    agregarNotaEmergenciaPorId: {
+    listarNotasEmergenciaPorId: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Cursor de paginación. */
+                cursor?: components["schemas"]["Cursor"];
+            };
             header?: never;
             path: {
                 /** @description Identificador del caso de emergencia. */
@@ -2709,34 +2768,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NotaEmergenciaEntrada"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Nota agregada. */
-            201: {
+            /** @description Notas del caso. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NotaEmergencia"];
+                    "application/json": components["schemas"]["PaginaNotasEmergencia"];
                 };
             };
-            400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
-            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
-            /** @description `codigo` de máquina `emergencia_cerrada`: el caso no admite notas. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
         };
     };
     reclamarEmergenciaPorId: {

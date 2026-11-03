@@ -341,6 +341,12 @@ type CredencialesEntrada struct {
 // Cursor Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato.
 type Cursor = string
 
+// CustodioEscoltaEmergencia Custodio de una unidad de la escolta. Subconjunto de `Custodio` de `catalogos`.
+type CustodioEscoltaEmergencia struct {
+	Nombre   string  `json:"nombre"`
+	Telefono *string `json:"telefono,omitempty"`
+}
+
 // DescargaViaje Expediente de exportación de un viaje. Lo compone `bff` leyendo de `operacion`. No contiene cuenta espejo ni `clave_amago` (no existen en el modelo V1, DEC-009/DEC-039).
 type DescargaViaje struct {
 	// Auditoria Auditoría relevante del viaje (sin exponer todo el detalle interno).
@@ -357,6 +363,25 @@ type DescargaViaje struct {
 
 	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.
 	ViajeId Id `json:"viaje_id"`
+}
+
+// DestinoViajeEmergencia Destino del viaje en el detalle de Reacción. Subconjunto de `Destino` de `operacion`.
+type DestinoViajeEmergencia struct {
+	// Arribo Si la unidad arribó a este destino (DEC-012). Espejo de `Destino.arribo` de `operacion`.
+	Arribo *bool `json:"arribo,omitempty"`
+
+	// FechaCita Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+	FechaCita *time.Time `json:"fecha_cita"`
+	Nombre    string     `json:"nombre"`
+}
+
+// DetalleEmergenciaReaccion Detalle del caso para Reacción (DEC-121 #2): el caso más la información del viaje que necesita para atender. Es la visibilidad tipo monitorista acotada al caso de DEC-028 #5. Lo COMPONE el `bff`: `caso` viene de `mensajeria` y `viaje` de `operacion` y `catalogos`. Sin `viaje_id`, bitácora, incidencias ni conversación.
+type DetalleEmergenciaReaccion struct {
+	// Caso El caso tal como lo ve Reacción en su bandeja (DEC-121 #2): SIN `viaje_id`, `cliente_id`, `actor_real` ni notas. Solo lleva lo que el caso ya registra. En el detalle viaja como `caso` dentro de `DetalleEmergenciaReaccion`. No reemplaza a `CasoEmergencia`, que sigue siendo la vista de monitoreo por viaje.
+	Caso EmergenciaReaccion `json:"caso"`
+
+	// Viaje Bloque de viaje del detalle de Reacción, con exactamente los campos de DEC-121 #2. El `bff` lo compone de `operacion` (estado, origen, destinos, fecha y tipo de servicio, ETA, unidades de la escolta) y de `catalogos` (nombre del cliente, vehículo y custodios de cada unidad). El tracto y los contenedores de la ficha técnica entrarán en una ola aditiva posterior, cuando `operacion` implemente la ficha (E8-T12). Fuera de V1: ubicación (DEC-001), operador del tracto y folio legible del viaje.
+	Viaje ViajeEmergencia `json:"viaje"`
 }
 
 // DispositivoGps Dispositivo GPS del catálogo. Espejo de `DispositivoGps` de `catalogos`.
@@ -386,7 +411,7 @@ type EmergenciaCliente struct {
 // EmergenciaClienteEstado El cliente no distingue `abierta` de `en_atencion` salvo por este valor.
 type EmergenciaClienteEstado string
 
-// EmergenciaReaccion El caso tal como lo ve Reacción en su bandeja y en el detalle (DEC-028): SIN `viaje_id`, `cliente_id`, `actor_real` ni notas, porque Reacción no tiene acceso al viaje ni al cliente. Solo lleva lo que el caso ya registra. Es una vista mínima de arranque: los campos exactos a mostrar están PENDIENTES de confirmación de Producto, y añadir uno después es aditivo. No reemplaza a `CasoEmergencia`, que sigue siendo la vista de monitoreo por viaje.
+// EmergenciaReaccion El caso tal como lo ve Reacción en su bandeja (DEC-121 #2): SIN `viaje_id`, `cliente_id`, `actor_real` ni notas. Solo lleva lo que el caso ya registra. En el detalle viaja como `caso` dentro de `DetalleEmergenciaReaccion`. No reemplaza a `CasoEmergencia`, que sigue siendo la vista de monitoreo por viaje.
 type EmergenciaReaccion struct {
 	// ActivadaEn Instante en UTC, RFC 3339.
 	ActivadaEn MarcaTiempo `json:"activada_en"`
@@ -705,12 +730,6 @@ type NotaEmergenciaClienteEntrada struct {
 	Cuerpo string `json:"cuerpo"`
 }
 
-// NotaEmergenciaEntrada defines model for NotaEmergenciaEntrada.
-type NotaEmergenciaEntrada struct {
-	// Cuerpo Texto de la nota. El servidor recorta espacios de inicio y fin; si queda vacío tras el recorte, responde 400 y no la guarda.
-	Cuerpo string `json:"cuerpo"`
-}
-
 // OrigenActivacion Quién originó la activación (ADR 21 §3).
 type OrigenActivacion string
 
@@ -768,6 +787,13 @@ type PaginaMensajesCliente struct {
 	// HayMas true si hay más mensajes en la dirección pedida.
 	HayMas bool             `json:"hay_mas"`
 	Items  []MensajeCliente `json:"items"`
+}
+
+// PaginaNotasEmergencia Página de notas de un caso (`listarNotasEmergenciaPorId`).
+type PaginaNotasEmergencia struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más.
+	CursorSiguiente *string          `json:"cursor_siguiente"`
+	Items           []NotaEmergencia `json:"items"`
 }
 
 // PaginaTiposServicio defines model for PaginaTiposServicio.
@@ -946,6 +972,18 @@ type UnidadAsignada struct {
 	UnidadId Id `json:"unidad_id"`
 }
 
+// UnidadEscoltaEmergencia Unidad de la escolta en el detalle de Reacción: `tipo` de la unidad del roster (`operacion`), `economico` y `placas` del vehículo y sus custodios (`catalogos`). Sin identificadores.
+type UnidadEscoltaEmergencia struct {
+	Custodios []CustodioEscoltaEmergencia `json:"custodios"`
+
+	// Economico Número económico del vehículo.
+	Economico *string `json:"economico,omitempty"`
+	Placas    *string `json:"placas,omitempty"`
+
+	// Tipo Token de `Unidad.tipo` (`patrulla` o `moto`). Se declara `string` y no enum para no renombrar las constantes Go de `UnidadTipo` del cliente generado.
+	Tipo string `json:"tipo"`
+}
+
 // VersionEsperadaEntrada defines model for VersionEsperadaEntrada.
 type VersionEsperadaEntrada struct {
 	// VersionEsperada Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.
@@ -962,6 +1000,29 @@ type ViajeDetalle struct {
 
 	// Viaje Viaje con su estado canónico, tal como lo expone `operacion` (ADR 19). Los campos mínimos que el frontend interno necesita para derivar acciones y pintar el bucle multi-parada y el estado terminal.
 	Viaje ViajeInterno `json:"viaje"`
+}
+
+// ViajeEmergencia Bloque de viaje del detalle de Reacción, con exactamente los campos de DEC-121 #2. El `bff` lo compone de `operacion` (estado, origen, destinos, fecha y tipo de servicio, ETA, unidades de la escolta) y de `catalogos` (nombre del cliente, vehículo y custodios de cada unidad). El tracto y los contenedores de la ficha técnica entrarán en una ola aditiva posterior, cuando `operacion` implemente la ficha (E8-T12). Fuera de V1: ubicación (DEC-001), operador del tracto y folio legible del viaje.
+type ViajeEmergencia struct {
+	// ClienteNombre Nombre del cliente del viaje, de `catalogos`.
+	ClienteNombre string                   `json:"cliente_nombre"`
+	Destinos      []DestinoViajeEmergencia `json:"destinos"`
+
+	// Escolta Unidades de la escolta asignada; vacío si el viaje aún no tiene escolta.
+	Escolta []UnidadEscoltaEmergencia `json:"escolta"`
+
+	// Estado Token de estado canónico del viaje (`EstadoViaje`, ADR 19), como en `ViajeInterno.estado`. El `bff` no replica el enum.
+	Estado string `json:"estado"`
+
+	// EtaEstimado ETA estimado capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado.
+	EtaEstimado *time.Time `json:"eta_estimado"`
+
+	// FechaHoraServicio Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+	FechaHoraServicio *time.Time `json:"fecha_hora_servicio"`
+	Origen            string     `json:"origen"`
+
+	// TipoServicio Tipo de servicio/monitoreo del viaje (DEC-010
+	TipoServicio *string `json:"tipo_servicio"`
 }
 
 // ViajeInterno Viaje con su estado canónico, tal como lo expone `operacion` (ADR 19). Los campos mínimos que el frontend interno necesita para derivar acciones y pintar el bucle multi-parada y el estado terminal.
@@ -1089,6 +1150,12 @@ type ListarBandejaEmergenciasParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListarNotasEmergenciaPorIdParams defines parameters for ListarNotasEmergenciaPorId.
+type ListarNotasEmergenciaPorIdParams struct {
+	// Cursor Cursor de paginación.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // LiberarReclamoEmergenciaPorIdParams defines parameters for LiberarReclamoEmergenciaPorId.
 type LiberarReclamoEmergenciaPorIdParams struct {
 	VersionEsperada VersionReclamo `form:"version_esperada" json:"version_esperada"`
@@ -1147,9 +1214,6 @@ type ReclamarConversacionJSONRequestBody = VersionEsperadaEntrada
 
 // TransferirConversacionJSONRequestBody defines body for TransferirConversacion for application/json ContentType.
 type TransferirConversacionJSONRequestBody = TransferenciaEntrada
-
-// AgregarNotaEmergenciaPorIdJSONRequestBody defines body for AgregarNotaEmergenciaPorId for application/json ContentType.
-type AgregarNotaEmergenciaPorIdJSONRequestBody = NotaEmergenciaEntrada
 
 // ReclamarEmergenciaPorIdJSONRequestBody defines body for ReclamarEmergenciaPorId for application/json ContentType.
 type ReclamarEmergenciaPorIdJSONRequestBody = VersionEsperadaEntrada
@@ -1344,10 +1408,8 @@ type ClientInterface interface {
 	// CerrarEmergenciaPorId request
 	CerrarEmergenciaPorId(ctx context.Context, eid Id, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AgregarNotaEmergenciaPorIdWithBody request with any body
-	AgregarNotaEmergenciaPorIdWithBody(ctx context.Context, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	AgregarNotaEmergenciaPorId(ctx context.Context, eid Id, body AgregarNotaEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// ListarNotasEmergenciaPorId request
+	ListarNotasEmergenciaPorId(ctx context.Context, eid Id, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReclamarEmergenciaPorIdWithBody request with any body
 	ReclamarEmergenciaPorIdWithBody(ctx context.Context, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1756,20 +1818,8 @@ func (c *Client) CerrarEmergenciaPorId(ctx context.Context, eid Id, reqEditors .
 	return c.Client.Do(req)
 }
 
-func (c *Client) AgregarNotaEmergenciaPorIdWithBody(ctx context.Context, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAgregarNotaEmergenciaPorIdRequestWithBody(c.Server, eid, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) AgregarNotaEmergenciaPorId(ctx context.Context, eid Id, body AgregarNotaEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAgregarNotaEmergenciaPorIdRequest(c.Server, eid, body)
+func (c *Client) ListarNotasEmergenciaPorId(ctx context.Context, eid Id, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarNotasEmergenciaPorIdRequest(c.Server, eid, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3220,19 +3270,8 @@ func NewCerrarEmergenciaPorIdRequest(server string, eid Id) (*http.Request, erro
 	return req, nil
 }
 
-// NewAgregarNotaEmergenciaPorIdRequest calls the generic AgregarNotaEmergenciaPorId builder with application/json body
-func NewAgregarNotaEmergenciaPorIdRequest(server string, eid Id, body AgregarNotaEmergenciaPorIdJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewAgregarNotaEmergenciaPorIdRequestWithBody(server, eid, "application/json", bodyReader)
-}
-
-// NewAgregarNotaEmergenciaPorIdRequestWithBody generates requests for AgregarNotaEmergenciaPorId with any type of body
-func NewAgregarNotaEmergenciaPorIdRequestWithBody(server string, eid Id, contentType string, body io.Reader) (*http.Request, error) {
+// NewListarNotasEmergenciaPorIdRequest generates requests for ListarNotasEmergenciaPorId
+func NewListarNotasEmergenciaPorIdRequest(server string, eid Id, params *ListarNotasEmergenciaPorIdParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -3257,12 +3296,32 @@ func NewAgregarNotaEmergenciaPorIdRequestWithBody(server string, eid Id, content
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -4970,10 +5029,8 @@ type ClientWithResponsesInterface interface {
 	// CerrarEmergenciaPorIdWithResponse request
 	CerrarEmergenciaPorIdWithResponse(ctx context.Context, eid Id, reqEditors ...RequestEditorFn) (*CerrarEmergenciaPorIdResponse, error)
 
-	// AgregarNotaEmergenciaPorIdWithBodyWithResponse request with any body
-	AgregarNotaEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaPorIdResponse, error)
-
-	AgregarNotaEmergenciaPorIdWithResponse(ctx context.Context, eid Id, body AgregarNotaEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaPorIdResponse, error)
+	// ListarNotasEmergenciaPorIdWithResponse request
+	ListarNotasEmergenciaPorIdWithResponse(ctx context.Context, eid Id, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*ListarNotasEmergenciaPorIdResponse, error)
 
 	// ReclamarEmergenciaPorIdWithBodyWithResponse request with any body
 	ReclamarEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReclamarEmergenciaPorIdResponse, error)
@@ -5469,7 +5526,7 @@ func (r ListarBandejaEmergenciasResponse) StatusCode() int {
 type ObtenerEmergenciaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *EmergenciaReaccion
+	JSON200      *DetalleEmergenciaReaccion
 	JSON401      *NoAutorizado
 	JSON404      *NoEncontrado
 }
@@ -5516,19 +5573,16 @@ func (r CerrarEmergenciaPorIdResponse) StatusCode() int {
 	return 0
 }
 
-type AgregarNotaEmergenciaPorIdResponse struct {
+type ListarNotasEmergenciaPorIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *NotaEmergencia
-	JSON400      *SolicitudInvalida
+	JSON200      *PaginaNotasEmergencia
 	JSON401      *NoAutorizado
-	JSON403      *Prohibido
 	JSON404      *NoEncontrado
-	JSON409      *Error
 }
 
 // Status returns HTTPResponse.Status
-func (r AgregarNotaEmergenciaPorIdResponse) Status() string {
+func (r ListarNotasEmergenciaPorIdResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -5536,7 +5590,7 @@ func (r AgregarNotaEmergenciaPorIdResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r AgregarNotaEmergenciaPorIdResponse) StatusCode() int {
+func (r ListarNotasEmergenciaPorIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -6597,21 +6651,13 @@ func (c *ClientWithResponses) CerrarEmergenciaPorIdWithResponse(ctx context.Cont
 	return ParseCerrarEmergenciaPorIdResponse(rsp)
 }
 
-// AgregarNotaEmergenciaPorIdWithBodyWithResponse request with arbitrary body returning *AgregarNotaEmergenciaPorIdResponse
-func (c *ClientWithResponses) AgregarNotaEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaPorIdResponse, error) {
-	rsp, err := c.AgregarNotaEmergenciaPorIdWithBody(ctx, eid, contentType, body, reqEditors...)
+// ListarNotasEmergenciaPorIdWithResponse request returning *ListarNotasEmergenciaPorIdResponse
+func (c *ClientWithResponses) ListarNotasEmergenciaPorIdWithResponse(ctx context.Context, eid Id, params *ListarNotasEmergenciaPorIdParams, reqEditors ...RequestEditorFn) (*ListarNotasEmergenciaPorIdResponse, error) {
+	rsp, err := c.ListarNotasEmergenciaPorId(ctx, eid, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseAgregarNotaEmergenciaPorIdResponse(rsp)
-}
-
-func (c *ClientWithResponses) AgregarNotaEmergenciaPorIdWithResponse(ctx context.Context, eid Id, body AgregarNotaEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaPorIdResponse, error) {
-	rsp, err := c.AgregarNotaEmergenciaPorId(ctx, eid, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseAgregarNotaEmergenciaPorIdResponse(rsp)
+	return ParseListarNotasEmergenciaPorIdResponse(rsp)
 }
 
 // ReclamarEmergenciaPorIdWithBodyWithResponse request with arbitrary body returning *ReclamarEmergenciaPorIdResponse
@@ -7739,7 +7785,7 @@ func ParseObtenerEmergenciaResponse(rsp *http.Response) (*ObtenerEmergenciaRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest EmergenciaReaccion
+		var dest DetalleEmergenciaReaccion
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -7818,33 +7864,26 @@ func ParseCerrarEmergenciaPorIdResponse(rsp *http.Response) (*CerrarEmergenciaPo
 	return response, nil
 }
 
-// ParseAgregarNotaEmergenciaPorIdResponse parses an HTTP response from a AgregarNotaEmergenciaPorIdWithResponse call
-func ParseAgregarNotaEmergenciaPorIdResponse(rsp *http.Response) (*AgregarNotaEmergenciaPorIdResponse, error) {
+// ParseListarNotasEmergenciaPorIdResponse parses an HTTP response from a ListarNotasEmergenciaPorIdWithResponse call
+func ParseListarNotasEmergenciaPorIdResponse(rsp *http.Response) (*ListarNotasEmergenciaPorIdResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &AgregarNotaEmergenciaPorIdResponse{
+	response := &ListarNotasEmergenciaPorIdResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest NotaEmergencia
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaNotasEmergencia
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest SolicitudInvalida
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest NoAutorizado
@@ -7853,26 +7892,12 @@ func ParseAgregarNotaEmergenciaPorIdResponse(rsp *http.Response) (*AgregarNotaEm
 		}
 		response.JSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Prohibido
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
 
 	}
 

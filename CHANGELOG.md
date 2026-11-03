@@ -3,29 +3,39 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
-## 2026-11-02 19:37 [tracer.34] — bandeja de Reacción y caso de emergencia por su propio id (DEC-028, E8-T18)
+## 2026-11-03 12:53 [tracer.34] — bandeja de Reacción y caso de emergencia por su propio id (DEC-028, DEC-121, E8-T18)
 
-**Para quién:** `pf-svc-mensajeria`, `pf-svc-bff` y el frontend interno (panel de Reacción). Hoy un caso de emergencia solo se alcanza por viaje (`/api/v1/viajes/{id}/emergencias...`), pero Reacción no tiene acceso al viaje, la bitácora, las incidencias ni la conversación del cliente: su interfaz es la bandeja y el caso (DEC-028, E8-T18). Decisión del Lead (2026-11-02, opción A): direccionar el caso por su propio id (`mensajeria.emergencia.id`).
+**Para quién:** `pf-svc-mensajeria`, `pf-svc-bff` y el frontend interno (panel de Reacción). Hoy un caso de emergencia solo se alcanza por viaje (`/api/v1/viajes/{id}/emergencias...`), pero Reacción no accede a las acciones ni a la bitácora del viaje: su interfaz es la bandeja y el caso (DEC-028, E8-T18). DEC-121: el caso se direcciona por su propio id (`mensajeria.emergencia.id`).
 
 **Resumen:** ola aditiva en `mensajeria.yaml` y `bff.yaml`. La familia por viaje no cambia y monitoreo la sigue usando.
-- `mensajeria`: `GET /api/v1/bandeja/emergencias` (`listarBandejaEmergencias`), sin `{id}`, resuelta por la membresía del sujeto en el pool de Reacción (mismo patrón que `listarTrabajoMiBandeja`, DEC-103). Acciones por id del caso bajo `/api/v1/emergencias/{eid}`: `obtenerEmergencia`, `agregarNotaEmergenciaPorId`, `reclamarEmergenciaPorId`, `liberarReclamoEmergenciaPorId`, `transferirEmergenciaPorId`, `resolverEmergenciaPorId`, `cerrarEmergenciaPorId`.
-- `bff`: las mismas ocho operaciones (mismos operationId) bajo `/api/v1/panel/emergencias...`, solo audiencia Interno, como las rutas de panel por viaje.
-- Schemas nuevos: `EmergenciaReaccion` (id, estado, origen, version_reclamo, reclamo_activo, activada_en, resuelta_en, cerrada_en; sin `viaje_id`, `cliente_id`, `actor_real` ni notas) y `PaginaBandejaEmergencias`. En `bff.yaml` entran además copias exactas de `EstadoEmergencia`, `OrigenActivacion`, `CasoEmergencia`, `NotaEmergencia`, `NotaEmergenciaEntrada` y `ResolucionEmergenciaEntrada`.
+- `mensajeria`: `GET /api/v1/bandeja/emergencias` (`listarBandejaEmergencias`), sin `{id}`, resuelta por la membresía del sujeto en el pool de Reacción (mismo patrón que `listarTrabajoMiBandeja`, DEC-103). Bajo `/api/v1/emergencias/{eid}`: `obtenerEmergencia`, `listarNotasEmergenciaPorId` (GET `.../notas`), `reclamarEmergenciaPorId`, `liberarReclamoEmergenciaPorId`, `transferirEmergenciaPorId`, `resolverEmergenciaPorId`, `cerrarEmergenciaPorId`.
+- `bff`: las mismas ocho operaciones (mismos operationId) bajo `/api/v1/panel/emergencias...`, solo audiencia Interno.
+- Sin `agregarNotaEmergenciaPorId`: Reacción lee las notas y no las escribe (DEC-034, DEC-121 #4).
 
-**Forma:** cada acción calca entrada, salida y errores de su gemela por viaje; solo cambian los parámetros de ruta. Excepción deliberada: `resolverEmergenciaPorId` devuelve `EmergenciaReaccion` y no `CasoEmergencia`, porque quien resuelve es Reacción y `CasoEmergencia` trae `viaje_id`/`cliente_id`. `obtenerEmergencia` no tiene gemela por viaje: es nueva. La bandeja pagina por `cursor` y no lleva `revision`/`desde_revision`: la tabla `emergencia` no tiene revisión de colección; si hace falta catch-up se añade de forma aditiva. Los campos exactos de la fila, los estados que incluye la bandeja y el orden de presentación quedan PENDIENTES de confirmación de Producto.
+**Forma:**
+- Bandeja: fila `EmergenciaReaccion` (id, estado, origen, version_reclamo, reclamo_activo, activada_en, resuelta_en, cerrada_en; sin `viaje_id`, `cliente_id`, `actor_real` ni notas). Excluye los casos `cerrada` y ordena del más antiguo al más reciente por `activada_en`, con desempate por `id` (DEC-121 #3). Pagina por `cursor`, sin `revision`/`desde_revision`.
+- Detalle en `mensajeria`: `obtenerEmergencia` devuelve `CasoEmergencia`, que trae `viaje_id`. Es solo para el `bff`, que lo usa para componer.
+- Detalle en `bff`: `obtenerEmergencia` devuelve el schema nuevo `DetalleEmergenciaReaccion` = `caso` (`EmergenciaReaccion`) + `viaje` (`ViajeEmergencia`), que el `bff` compone de `operacion` y `catalogos`. `ViajeEmergencia` lleva exactamente los campos de DEC-121 #2: `cliente_nombre`, `estado`, `origen`, `destinos[]` (`nombre`, `fecha_cita`, `arribo`), `fecha_hora_servicio`, `tipo_servicio`, `eta_estimado` y `escolta[]` (`tipo`, `economico`, `placas`, `custodios[]` con `nombre` y `telefono`). Sin `viaje_id`, bitácora, incidencias ni conversación. El tracto y los contenedores de la ficha técnica entran en una ola aditiva posterior, cuando `operacion` implemente la ficha (E8-T12). `estado` y `escolta[].tipo` son `string`, como el resto de tokens del `bff` (no replica enums).
+- Notas: `listarNotasEmergenciaPorId` devuelve `PaginaNotasEmergencia` (ítems `NotaEmergencia`, el schema que ya existía), en orden de creación.
+- Las acciones calcan entrada, salida y errores de su gemela por viaje; `resolverEmergenciaPorId` devuelve `EmergenciaReaccion`.
 
-**Autorización (en la descripción de cada operación):** Reacción por membresía efectiva en la bandeja `emergencias`. `supervisor`/`coordinador` con integrantes de Reacción a su mando (DEC-099, Opción B: tercer eje de alcance, mismas facultades que sobre sus subordinados, sin rol nuevo, alcance resuelto en servidor por DEC-053): ven la bandeja y el caso, liberan y transfieren el reclamo de sus integrantes; no reclaman, no resuelven y no cierran por ese eje. La mecánica del vínculo sigue pendiente (DEC-045/DEC-099). Resolver exige la nota de resolución obligatoria. Cerrar: solo Monitorista/Supervisor/Coordinador con alcance sobre el viaje del caso, o Administrador; nunca Reacción ni Ejecutivo.
+**Autorización (en la descripción de cada operación):**
+- Reclamar: solo un miembro efectivo de Reacción y solo si nadie tiene el caso; con responsable vigente responde `409` aunque la versión sea la vigente (DEC-125).
+- Liberar y transferir: el responsable o cualquier `supervisor`/`coordinador`, sin verificar mando; el resto `403` (DEC-126, atajo de DEC-099; la verificación de mando queda para DT-06).
+- Resolver: solo el responsable vigente, con nota de resolución obligatoria; el resto `403`.
+- Cerrar: solo Monitorista/Supervisor/Coordinador con alcance sobre el viaje, o Administrador; nunca Reacción ni Ejecutivo (`403`, E8-T18).
+- Bandeja, detalle y notas: miembro de Reacción, o `supervisor`/`coordinador` sobre sus integrantes (DEC-121 #5). Sin acceso, `404`.
 
 **Cambios:**
-- `contracts/openapi/mensajeria.yaml`: ocho rutas, `EmergenciaReaccion`, `PaginaBandejaEmergencias` y nota en el encabezado.
-- `contracts/openapi/bff.yaml`: ocho rutas de panel y los schemas de emergencia interna.
+- `contracts/openapi/mensajeria.yaml`: ocho rutas, `EmergenciaReaccion`, `PaginaBandejaEmergencias`, `PaginaNotasEmergencia` y nota en el encabezado.
+- `contracts/openapi/bff.yaml`: ocho rutas de panel; schemas `DetalleEmergenciaReaccion`, `ViajeEmergencia`, `DestinoViajeEmergencia`, `UnidadEscoltaEmergencia`, `CustodioEscoltaEmergencia`, `PaginaNotasEmergencia`, y copias de `EstadoEmergencia`, `OrigenActivacion`, `CasoEmergencia`, `EmergenciaReaccion`, `PaginaBandejaEmergencias`, `NotaEmergencia` y `ResolucionEmergenciaEntrada`.
 - Clientes Go y TS de `mensajeria` y `bff` regenerados. `VERSION`, `packages/api-client-ts/package.json`, el `version:` de los 8 specs y el encabezado de `contracts/events/INVENTARIO.md` a `0.1.0-tracer.34`.
 
-**Compatibilidad:** aditivo en el cable. `breaking-openapi` compatible con `tracer.32` (último tag) y con el commit de `tracer.33` (`30c346c`); `lint-openapi`, `buf lint`, breaking de eventos, `check-estados`, `check-registro`, `check-tags`, `test-breaking-gate`, `check-version-ts`, `check-reproducible`, `go build`/`go vet`, `tsc` y `check-ts-exports` en verde.
+**Compatibilidad:** aditivo en el cable. `breaking-openapi` compatible con `tracer.33`; `lint-openapi`, `buf lint`, breaking de eventos, `check-estados`, `check-registro`, `check-tags`, `test-breaking-gate`, `check-version-ts`, `check-reproducible`, `go build`/`go vet`, `tsc` y `check-ts-exports` en verde.
 - **Renombrado Go en `bff` (git-workflow §8):** `EstadoEmergencia` comparte `abierta`/`cerrada` con `EstadoConversacion`, así que el generador prefija las constantes: `bff.Abierta`, `bff.Cerrada` y `bff.SoloLectura` pasan a `bff.EstadoConversacionAbierta`, `bff.EstadoConversacionCerrada` y `bff.EstadoConversacionSoloLectura`. El valor serializado no cambia. Ningún repo local usa los nombres cortos hoy.
 - Las interfaces Go `ClientInterface`/`ClientWithResponsesInterface` de `mensajeria` y `bff` ganan métodos: un doble de prueba que las implemente a mano debe añadirlos.
 
-**Siguiente (fuera de esta ola):** `pf-svc-mensajeria` implementa las rutas por id y la bandeja (hoy `PuedeAtenderEmergencia` solo mira membresía; el eje DEC-099 no existe todavía). `pf-svc-bff` sube pin a `tracer.34` y monta `/api/v1/panel/emergencias...`. Producto confirma los campos de la fila.
+**Siguiente (fuera de esta ola):** `pf-svc-mensajeria` implementa las rutas por id, la bandeja y las guardas de DEC-125/DEC-126. `pf-svc-bff` sube pin a `tracer.34`, monta `/api/v1/panel/emergencias...` y compone `DetalleEmergenciaReaccion`.
 
 **Archivos modificados:**
 - `VERSION`

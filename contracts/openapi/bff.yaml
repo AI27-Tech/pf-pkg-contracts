@@ -1021,16 +1021,18 @@ paths:
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   # ===========================================================================
-  # PANEL DE REACCIÓN: bandeja y caso por su propio id (tracer.34, DEC-028).
-  # Proyección espejo de la familia nueva de `mensajeria` (`listarBandejaEmergencias`
-  # y las acciones `...PorId`): mismos operationId, schemas y errores. Reacción
-  # no tiene acceso al viaje (DEC-028, E8-T18), así que estas rutas no llevan
-  # `{id}` de viaje. Misma regla de audiencia que las rutas de panel por viaje
-  # (`/api/v1/panel/viajes/{id}/emergencias...`, montadas en el `bff` desde
-  # tracer.17): solo audiencia Interno; el `bff` propaga el Bearer del usuario y
-  # `mensajeria` autoriza por membresía y alcance. El `bff` no valida rol ni
-  # recorta: reenvía la vista de `mensajeria`. Autorización por operación:
-  # ver la gemela en `mensajeria.yaml`.
+  # PANEL DE REACCIÓN: bandeja y caso por su propio id (tracer.34, DEC-028,
+  # DEC-121). Proyección de la familia nueva de `mensajeria`
+  # (`listarBandejaEmergencias`, `obtenerEmergencia`, `listarNotasEmergenciaPorId`
+  # y las acciones `...PorId`): mismos operationId. Reacción no accede a las
+  # acciones ni a la bitácora del viaje (DEC-028, E8-T18), así que estas rutas
+  # no llevan `{id}` de viaje. Misma regla de audiencia que las rutas de panel
+  # por viaje (`/api/v1/panel/viajes/{id}/emergencias...`, desde tracer.17):
+  # solo audiencia Interno; el `bff` propaga el Bearer del usuario y
+  # `mensajeria` autoriza por membresía y alcance. El `bff` reenvía la vista de
+  # `mensajeria` salvo en `obtenerEmergencia`, donde COMPONE el detalle con el
+  # bloque de viaje (DEC-121 #2). Autorización por operación: ver la gemela en
+  # `mensajeria.yaml`; el `bff` no valida rol.
   # ===========================================================================
   /api/v1/panel/emergencias:
     get:
@@ -1041,11 +1043,12 @@ paths:
         Solo audiencia Interno. Reenvía a `mensajeria.listarBandejaEmergencias`:
         la bandeja de tipo `emergencias` se resuelve por la MEMBRESÍA EFECTIVA
         del sujeto en el pool de Reacción (DEC-028 #1), sin `{id}`.
-        `supervisor`/`coordinador` ven además los casos de los integrantes de
-        Reacción a su mando (DEC-099). Sin membresía ni mando responde `404`.
-        Cada fila es `EmergenciaReaccion`, sin datos del viaje ni del cliente ni
-        notas; los campos exactos, los estados incluidos y el orden de
-        presentación están PENDIENTES de confirmación de Producto.
+        `supervisor`/`coordinador` ven además los casos de sus integrantes de
+        Reacción (DEC-099, DEC-121 #5; mando pendiente, DT-06). Sin membresía ni
+        mando responde `404`. Cada fila es `EmergenciaReaccion`, sin datos del
+        viaje ni del cliente ni notas (DEC-121 #2). EXCLUYE los casos en
+        `cerrada` y ordena del más antiguo al más reciente por `activada_en`
+        (DEC-121 #3).
       parameters:
       - name: cursor
         in: query
@@ -1072,19 +1075,26 @@ paths:
     get:
       operationId: obtenerEmergencia
       tags: [emergencias]
-      summary: Detalle del caso por su id, en la vista de Reacción.
+      summary: Detalle del caso por su id, con la información del viaje que Reacción necesita.
       description: >-
-        Solo audiencia Interno. Reenvía a `mensajeria.obtenerEmergencia`.
-        Miembro efectivo de Reacción de la bandeja del caso, o
-        `supervisor`/`coordinador` con mando sobre sus integrantes (DEC-099).
-        Poseer el UUID no autoriza: sin acceso responde `404`. Devuelve
-        `EmergenciaReaccion`; campos exactos pendientes de Producto.
+        Solo audiencia Interno. Mismo acceso que `mensajeria.obtenerEmergencia`:
+        miembro efectivo de Reacción de la bandeja del caso, o
+        `supervisor`/`coordinador` sobre los casos de sus integrantes (DEC-099,
+        DEC-121 #5; mando pendiente, DT-06). Poseer el UUID no autoriza: sin
+        acceso responde `404`.
+
+        El `bff` COMPONE la respuesta: lee el caso de
+        `mensajeria.obtenerEmergencia` (que trae `viaje_id`), el viaje de
+        `operacion` y el nombre del cliente y la escolta de `catalogos`, y
+        devuelve `DetalleEmergenciaReaccion`. Es la visibilidad tipo monitorista
+        acotada al caso de DEC-028 #5: SIN `viaje_id`, bitácora, incidencias ni
+        conversación. No concede acciones sobre el viaje.
       responses:
         "200":
-          description: Caso en la vista de Reacción.
+          description: Caso con el bloque de viaje.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/EmergenciaReaccion"}
+              schema: {$ref: "#/components/schemas/DetalleEmergenciaReaccion"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
@@ -1095,36 +1105,30 @@ paths:
       required: true
       description: Identificador del caso de emergencia.
       schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
-    post:
-      operationId: agregarNotaEmergenciaPorId
+    get:
+      operationId: listarNotasEmergenciaPorId
       tags: [emergencias]
-      summary: Agregar una nota al caso nombrado por su id (append-only).
+      summary: Listar las notas del caso nombrado por su id (solo lectura).
       description: >-
-        Solo audiencia Interno. Reenvía a `mensajeria.agregarNotaEmergenciaPorId`.
-        Operator dentro del alcance del viaje del caso; Reacción NO agrega notas
-        (unidireccionales hacia Reacción, ADR 21 §4, DEC-034). Texto de hasta
-        1000 caracteres, recortado; vacío tras el recorte es 400; `cerrada`
-        responde 409 `emergencia_cerrada`.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: "#/components/schemas/NotaEmergenciaEntrada"}
+        Solo audiencia Interno. Reenvía a `mensajeria.listarNotasEmergenciaPorId`.
+        Mismo acceso que `obtenerEmergencia`. Reacción CONSULTA las notas
+        (DEC-028 #4) y no las escribe (DEC-034, DEC-121 #4): no hay ruta de
+        escritura por id. Incluye la nota de resolución (`es_resolucion`).
+        Orden de creación, de la más antigua a la más reciente.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        description: Cursor de paginación.
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
       responses:
-        "201":
-          description: Nota agregada.
+        "200":
+          description: Notas del caso.
           content:
             application/json:
-              schema: {$ref: "#/components/schemas/NotaEmergencia"}
-        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+              schema: {$ref: "#/components/schemas/PaginaNotasEmergencia"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
-        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
-        "409":
-          description: "`codigo` de máquina `emergencia_cerrada`: el caso no admite notas."
-          content:
-            application/json:
-              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
 
   /api/v1/panel/emergencias/{eid}/reclamos:
     parameters:
@@ -1140,7 +1144,9 @@ paths:
       description: >-
         Solo audiencia Interno. Reenvía a `mensajeria.reclamarEmergenciaPorId`.
         Solo un miembro efectivo del pool Reacción de la bandeja del caso
-        (DEC-028 #2); el mando de DEC-099 no concede reclamar. Dos reclamos
+        (DEC-028 #2); sin esa membresía, `403`. El mando de DEC-099 no concede
+        reclamar. Solo procede si NADIE tiene el caso: con responsable vigente
+        responde `409` aunque la versión sea la vigente (DEC-125). Dos reclamos
         concurrentes producen un ganador; el perdedor recibe 409
         `conflicto_version_reclamo`.
       requestBody:
@@ -1177,9 +1183,11 @@ paths:
       summary: Liberar el reclamo del caso por su id y devolverlo al pool de Reacción.
       description: >-
         Solo audiencia Interno. Reenvía a
-        `mensajeria.liberarReclamoEmergenciaPorId`. Lo hace el responsable
-        vigente, o `supervisor`/`coordinador` con mando sobre ese responsable de
-        Reacción (DEC-099). El caso vuelve a `abierta`.
+        `mensajeria.liberarReclamoEmergenciaPorId`. En V1 lo hace el responsable
+        vigente o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando
+        (DEC-126, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el
+        responsable, y cualquier otro rol, recibe `403`. El caso vuelve a
+        `abierta`.
       parameters:
       - name: version_esperada
         in: query
@@ -1205,10 +1213,12 @@ paths:
       summary: Transferir el caso por su id a otro miembro de Reacción.
       description: >-
         Solo audiencia Interno. Reenvía a `mensajeria.transferirEmergenciaPorId`.
-        La hace el responsable vigente (DEC-028 #2), o `supervisor`/`coordinador`
-        con mando sobre ese responsable (DEC-099). El destino debe tener
-        membresía efectiva en el pool Reacción. Cierra el reclamo anterior y abre
-        el siguiente en UNA transacción; conserva el estado del caso.
+        En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER
+        `supervisor`/`coordinador`, sin verificar el mando (DEC-126; DT-06). Un
+        miembro de Reacción que no es el responsable, y cualquier otro rol,
+        recibe `403`. El destino debe tener membresía efectiva en el pool
+        Reacción. Cierra el reclamo anterior y abre el siguiente en UNA
+        transacción; conserva el estado del caso.
       requestBody:
         required: true
         content:
@@ -1239,8 +1249,9 @@ paths:
       summary: Resolver el caso por su id (en_atencion -> resuelta) con nota obligatoria.
       description: >-
         Solo audiencia Interno. Reenvía a `mensajeria.resolverEmergenciaPorId`.
-        Solo el responsable vigente de Reacción (ADR 21 §5, DEC-028 #3); el
-        mando de DEC-099 no resuelve. Nota de resolución OBLIGATORIA de 1 a 1000
+        Solo el responsable vigente de Reacción (ADR 21 §5, DEC-028 #3);
+        cualquier otro sujeto, incluido `supervisor`/`coordinador`, recibe
+        `403`. Nota de resolución OBLIGATORIA de 1 a 1000
         caracteres; sin nota válida responde 400 y el caso no cambia de estado.
         `resuelta` es irreversible. Devuelve `EmergenciaReaccion`.
       requestBody:
@@ -1275,8 +1286,9 @@ paths:
         Solo audiencia Interno. Reenvía a `mensajeria.cerrarEmergenciaPorId`.
         Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje del
         caso (eje de monitoreo por unidad), o Administrator global (ADR 21 §5).
-        NUNCA Reacción ni Ejecutivo (E8-T18, DEC-045 #9), tampoco por el mando de
-        DEC-099. No exige texto. `cerrada` es irreversible.
+        NUNCA Reacción ni Ejecutivo (E8-T18, DEC-045 #9, DEC-121 #5), tampoco
+        por el mando de DEC-099: responden `403`. No exige texto. `cerrada` es
+        irreversible.
       responses:
         "200":
           description: Caso cerrado.
@@ -2838,8 +2850,10 @@ components:
         hasta_secuencia: {$ref: "#/components/schemas/SecuenciaMensaje"}
 
     # --- Vista interna de emergencia para el panel (tracer.34). Copia exacta de
-    #     los schemas de `mensajeria`; `EmergenciaReaccion` es la vista de
-    #     Reacción, sin viaje ni cliente (DEC-028). ---
+    #     los schemas de `mensajeria`, salvo el detalle de Reacción
+    #     (`DetalleEmergenciaReaccion` y su bloque de viaje), que compone el
+    #     `bff` (DEC-121 #2). `EmergenciaReaccion` es la fila de la bandeja, sin
+    #     viaje ni cliente. ---
     EstadoEmergencia:
       type: string
       description: >-
@@ -2898,13 +2912,11 @@ components:
       additionalProperties: false
       required: [id, estado, origen, version_reclamo, activada_en]
       description: >-
-        El caso tal como lo ve Reacción en su bandeja y en el detalle (DEC-028):
-        SIN `viaje_id`, `cliente_id`, `actor_real` ni notas, porque Reacción no
-        tiene acceso al viaje ni al cliente. Solo lleva lo que el caso ya
-        registra. Es una vista mínima de arranque: los campos exactos a mostrar
-        están PENDIENTES de confirmación de Producto, y añadir uno después es
-        aditivo. No reemplaza a `CasoEmergencia`, que sigue siendo la vista de
-        monitoreo por viaje.
+        El caso tal como lo ve Reacción en su bandeja (DEC-121 #2): SIN
+        `viaje_id`, `cliente_id`, `actor_real` ni notas. Solo lleva lo que el
+        caso ya registra. En el detalle viaja como `caso` dentro de
+        `DetalleEmergenciaReaccion`. No reemplaza a `CasoEmergencia`, que sigue
+        siendo la vista de monitoreo por viaje.
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         estado: {$ref: "#/components/schemas/EstadoEmergencia"}
@@ -2947,6 +2959,127 @@ components:
           nullable: true
           description: Opcional; mismo formato que `Cursor`. null si no hay más.
 
+    DetalleEmergenciaReaccion:
+      type: object
+      additionalProperties: false
+      required: [caso, viaje]
+      description: >-
+        Detalle del caso para Reacción (DEC-121 #2): el caso más la información
+        del viaje que necesita para atender. Es la visibilidad tipo monitorista
+        acotada al caso de DEC-028 #5. Lo COMPONE el `bff`: `caso` viene de
+        `mensajeria` y `viaje` de `operacion` y `catalogos`. Sin `viaje_id`,
+        bitácora, incidencias ni conversación.
+      properties:
+        caso: {$ref: "#/components/schemas/EmergenciaReaccion"}
+        viaje: {$ref: "#/components/schemas/ViajeEmergencia"}
+
+    ViajeEmergencia:
+      type: object
+      additionalProperties: false
+      required: [cliente_nombre, estado, origen, destinos, escolta]
+      description: >-
+        Bloque de viaje del detalle de Reacción, con exactamente los campos de
+        DEC-121 #2. El `bff` lo compone de `operacion` (estado, origen,
+        destinos, fecha y tipo de servicio, ETA, unidades de la escolta) y de
+        `catalogos` (nombre del cliente, vehículo y custodios de cada unidad).
+        El tracto y los contenedores de la ficha técnica entrarán en una ola
+        aditiva posterior, cuando `operacion` implemente la ficha (E8-T12).
+        Fuera de V1: ubicación (DEC-001), operador del tracto y folio legible
+        del viaje.
+      properties:
+        cliente_nombre:
+          type: string
+          description: Nombre del cliente del viaje, de `catalogos`.
+        estado:
+          type: string
+          description: >-
+            Token de estado canónico del viaje (`EstadoViaje`, ADR 19), como en
+            `ViajeInterno.estado`. El `bff` no replica el enum.
+        origen: {type: string}
+        destinos:
+          type: array
+          items: {$ref: "#/components/schemas/DestinoViajeEmergencia"}
+        fecha_hora_servicio:
+          type: string
+          format: date-time
+          nullable: true
+          description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+        tipo_servicio:
+          type: string
+          nullable: true
+          description: Tipo de servicio/monitoreo del viaje (DEC-010 #3). Espejo de `Viaje.tipo_servicio` de `operacion`.
+        eta_estimado:
+          type: string
+          format: date-time
+          nullable: true
+          description: ETA estimado capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado.
+        escolta:
+          type: array
+          description: Unidades de la escolta asignada; vacío si el viaje aún no tiene escolta.
+          items: {$ref: "#/components/schemas/UnidadEscoltaEmergencia"}
+
+    DestinoViajeEmergencia:
+      type: object
+      additionalProperties: false
+      required: [nombre]
+      description: Destino del viaje en el detalle de Reacción. Subconjunto de `Destino` de `operacion`.
+      properties:
+        nombre: {type: string}
+        fecha_cita:
+          type: string
+          format: date-time
+          nullable: true
+          description: Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+        arribo:
+          type: boolean
+          description: Si la unidad arribó a este destino (DEC-012). Espejo de `Destino.arribo` de `operacion`.
+
+    UnidadEscoltaEmergencia:
+      type: object
+      additionalProperties: false
+      required: [tipo, custodios]
+      description: >-
+        Unidad de la escolta en el detalle de Reacción: `tipo` de la unidad del
+        roster (`operacion`), `economico` y `placas` del vehículo y sus
+        custodios (`catalogos`). Sin identificadores.
+      properties:
+        tipo:
+          type: string
+          description: >-
+            Token de `Unidad.tipo` (`patrulla` o `moto`). Se declara `string`
+            y no enum para no renombrar las constantes Go de `UnidadTipo` del
+            cliente generado.
+        economico:
+          type: string
+          description: Número económico del vehículo.
+        placas: {type: string}
+        custodios:
+          type: array
+          items: {$ref: "#/components/schemas/CustodioEscoltaEmergencia"}
+
+    CustodioEscoltaEmergencia:
+      type: object
+      additionalProperties: false
+      required: [nombre]
+      description: Custodio de una unidad de la escolta. Subconjunto de `Custodio` de `catalogos`.
+      properties:
+        nombre: {type: string}
+        telefono: {type: string}
+
+    PaginaNotasEmergencia:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      description: Página de notas de un caso (`listarNotasEmergenciaPorId`).
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/NotaEmergencia"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no hay más.
+
     NotaEmergencia:
       type: object
       additionalProperties: false
@@ -2967,19 +3100,6 @@ components:
           type: boolean
           description: true si es la nota que acompañó la resolución del caso.
         creado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
-
-    NotaEmergenciaEntrada:
-      type: object
-      additionalProperties: false
-      required: [cuerpo]
-      properties:
-        cuerpo:
-          type: string
-          minLength: 1
-          maxLength: 1000
-          description: >-
-            Texto de la nota. El servidor recorta espacios de inicio y fin; si
-            queda vacío tras el recorte, responde 400 y no la guarda.
 
     ResolucionEmergenciaEntrada:
       type: object
