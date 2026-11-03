@@ -1,0 +1,25 @@
+# =============================================================================
+# rompimientos/v0.1.0-tracer.35.yaml
+# -----------------------------------------------------------------------------
+# ALLOWLIST DE RUPTURAS INTENCIONALES de `v0.1.0-tracer.35`.
+#
+# El gate de compatibilidad falla ante CUALQUIER cambio incompatible. Esta
+# allowlist es la ÚNICA forma de que una ruptura pase, y sólo mientras `VERSION`
+# sea exactamente `v0.1.0-tracer.35`. Una ruptura no declarada aquí DEBE seguir
+# fallando. Ver la cabecera de v0.1.0-tracer.4.yaml para el contrato completo.
+# =============================================================================
+version: v0.1.0-tracer.35
+
+# --- Rupturas de OpenAPI (oasdiff). `match` es una subcadena del texto que
+#     oasdiff imprime para la ruptura (regla + operación). `servicio` acota el
+#     spec en el que se permite. ---
+# `nombre` pasa a obligatorio en la intención de subida de adjuntos (E8-T17 /
+# E6-HU-027, decisión de Producto P5 del 2026-11-03): la lista de evidencia
+# necesita identificar cada archivo. Ruptura SEGURA: `crearIntencionSubidaAdjunto`
+# está contratado pero `operacion` aún no lo implementa y ningún consumidor lo
+# cablea (grep en repos/ al declarar: solo coincide un binario compilado, sin
+# fuente). Mismo criterio con el que se aceptó la ruptura de tracer.26.
+openapi:
+  - servicio: operacion
+    match: "POST /api/v1/viajes/{id}/adjuntos/intenciones-subida"
+    fuente: E8-T17 P5 (E6-HU-027) — `nombre` obligatorio en la intención de subida; sin consumidores al declarar
