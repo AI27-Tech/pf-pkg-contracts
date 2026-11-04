@@ -15,6 +15,8 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 - Anotar: los mismos cuatro roles que listar; Reacción no escribe (DEC-121 #4). 409 `emergencia_cerrada`.
 - Otro rol interno: 403 (DEC-132). Los roles los revisa `mensajeria`; el `bff` no valida rol.
 
+**Escolta del viaje en `operacion` (pregunta 10 de E8-T18):** `obtenerAsignacion` (`GET /api/v1/viajes/{id}/asignacion`) devuelve `EscoltaVigente`: las unidades de la asignación vigente, cada una como `Unidad` del roster (`tipo`, `vehiculo_id`, `custodios_ids`). Sin asignación vigente, `unidades` vacío con 200. Solo audiencia Interno; el Cliente recibe 404. La usa el `bff` para armar la escolta del detalle de Reacción (`obtenerEmergencia`, DEC-121 #2), que hasta hoy no tenía de dónde leerla.
+
 **Correcciones de texto (sin cambio de schema):**
 - `listarBandejaEmergencias` (`bff.yaml` y `mensajeria.yaml`): otro rol interno responde `403`, no `404` (DEC-132). El Cliente sigue con `404`.
 - `mensajeria.yaml`: `listarEmergencias`, `activarEmergencia` y `agregarNotaEmergencia` dicen qué roles internos acceden y que el 409 de viaje terminal lo aplica hoy el `bff` (DT-16). `listarEmergencias` declara además la respuesta `403`.
@@ -22,19 +24,20 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 **Cambios:**
 - `contracts/openapi/bff.yaml`: rutas `/api/v1/panel/viajes/{id}/emergencias` (GET, POST) y `/api/v1/panel/viajes/{id}/emergencias/{eid}/notas` (POST); schemas `EmergenciaViaje`, `PaginaEmergenciasViaje`, `ActivarEmergenciaInternoEntrada` y `NotaEmergenciaInternoEntrada`.
 - `contracts/openapi/mensajeria.yaml`: descripciones y `403` en `listarEmergencias`.
-- Clientes Go y TS de `bff` y `mensajeria` regenerados. `VERSION`, `packages/api-client-ts/package.json`, el `version:` de los 8 specs y el encabezado de `contracts/events/INVENTARIO.md` a `0.1.0-tracer.37`.
+- `contracts/openapi/operacion.yaml`: `obtenerAsignacion` y schema `EscoltaVigente`.
+- Clientes Go y TS de `bff`, `mensajeria` y `operacion` regenerados. `VERSION`, `packages/api-client-ts/package.json`, el `version:` de los 8 specs y el encabezado de `contracts/events/INVENTARIO.md` a `0.1.0-tracer.37`.
 
 **Compatibilidad:** compatible. `breaking-openapi` en verde contra `tracer.36` sin allowlist. Sin constantes de enum renombradas en el cliente Go (git-workflow §8). `lint-openapi`, `verify`, `check-version-ts` y `contract-tests` en verde.
 
-**Siguiente (fuera de esta ola):** `pf-svc-mensajeria` revisa los roles (PR #53); `pf-svc-bff` sirve estas tres rutas y las 8 de `tracer.34`, y rechaza la activación sobre viaje terminal; `pf-svc-core` cablea el adaptador en proceso.
+**Siguiente (fuera de esta ola):** `pf-svc-mensajeria` revisa los roles (PR #53); `pf-svc-bff` sirve estas tres rutas y las 8 de `tracer.34`, y rechaza la activación sobre viaje terminal; `pf-svc-operacion` sirve `obtenerAsignacion`; `pf-svc-core` cablea el adaptador en proceso.
 
 **Archivos modificados:**
 - `VERSION`
 - `packages/api-client-ts/package.json`
 - `contracts/openapi/_comunes.yaml`, `bff.yaml`, `catalogos.yaml`, `identidad.yaml`, `mensajeria.yaml`, `operacion.yaml`, `realtime.yaml`, `reportes.yaml`
 - `contracts/events/INVENTARIO.md`
-- `packages/api-client-go/bff/bff.gen.go`, `packages/api-client-go/mensajeria/mensajeria.gen.go`
-- `packages/api-client-ts/src/openapi/bff.gen.ts`, `packages/api-client-ts/src/openapi/mensajeria.gen.ts`
+- `packages/api-client-go/bff/bff.gen.go`, `mensajeria/mensajeria.gen.go`, `operacion/operacion.gen.go`
+- `packages/api-client-ts/src/openapi/bff.gen.ts`, `mensajeria.gen.ts`, `operacion.gen.ts`
 - `CHANGELOG.md`
 
 ## 2026-11-03 [tracer.36] — filtro «viajes en curso» en `reporteViajes` (E8-T17, DT-10)
