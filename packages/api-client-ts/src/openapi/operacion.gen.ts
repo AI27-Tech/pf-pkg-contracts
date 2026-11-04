@@ -745,6 +745,8 @@ export interface components {
         Adjunto: {
             id: components["schemas"]["Id"];
             viaje_id: components["schemas"]["Id"];
+            /** @description Nombre de archivo declarado en la subida, para identificar el adjunto en la lista de evidencia (E6-HU-027). No es el actor que lo subió: el autor queda fuera de V1 (DT-11). */
+            nombre: string;
             /** @description Tipo MIME declarado del adjunto. */
             tipo_medio: string;
             /** Format: int64 */
@@ -762,6 +764,8 @@ export interface components {
             items: components["schemas"]["Adjunto"][];
         };
         IntencionSubidaAdjuntoEntrada: {
+            /** @description Nombre de archivo declarado, mostrado luego en la lista (E6-HU-027). */
+            nombre: string;
             /** @description Tipo MIME declarado. */
             tipo_medio: string;
             /** Format: int64 */

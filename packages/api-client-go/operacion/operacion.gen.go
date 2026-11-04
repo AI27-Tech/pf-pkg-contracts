@@ -120,8 +120,11 @@ type Adjunto struct {
 	EstadoEscaneo AdjuntoEstadoEscaneo `json:"estado_escaneo"`
 
 	// Id Identificador único (UUID). Nunca un correlativo expuesto.
-	Id          Id    `json:"id"`
-	TamanoBytes int64 `json:"tamano_bytes"`
+	Id Id `json:"id"`
+
+	// Nombre Nombre de archivo declarado en la subida, para identificar el adjunto en la lista de evidencia (E6-HU-027). No es el actor que lo subió: el autor queda fuera de V1 (DT-11).
+	Nombre      string `json:"nombre"`
+	TamanoBytes int64  `json:"tamano_bytes"`
 
 	// TipoMedio Tipo MIME declarado del adjunto.
 	TipoMedio string `json:"tipo_medio"`
@@ -409,7 +412,10 @@ type IntencionSubidaAdjunto struct {
 // IntencionSubidaAdjuntoEntrada defines model for IntencionSubidaAdjuntoEntrada.
 type IntencionSubidaAdjuntoEntrada struct {
 	ChecksumSha256 string `json:"checksum_sha256"`
-	TamanoBytes    int64  `json:"tamano_bytes"`
+
+	// Nombre Nombre de archivo declarado, mostrado luego en la lista (E6-HU-027).
+	Nombre      string `json:"nombre"`
+	TamanoBytes int64  `json:"tamano_bytes"`
 
 	// TipoMedio Tipo MIME declarado.
 	TipoMedio string `json:"tipo_medio"`
