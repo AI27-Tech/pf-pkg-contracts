@@ -305,13 +305,13 @@ export interface paths {
         };
         /**
          * Listar los casos de emergencia de un viaje por audiencia.
-         * @description Para el cliente, la VISTA MÍNIMA (ADR 21 §6): solo casos en `abierta`, `en_atencion` o `resuelta`, identificados por fecha/hora, sin cuerpos de nota, contactos, recursos ni personal de Reacción. Para audiencia Interno dentro del alcance del viaje, el caso completo. Un miembro efectivo del pool Reacción ve los casos que puede reclamar (DEC-028).
+         * @description Para el cliente, la VISTA MÍNIMA (ADR 21 §6): solo casos en `abierta`, `en_atencion` o `resuelta`, identificados por fecha/hora, sin cuerpos de nota, contactos, recursos ni personal de Reacción. Para audiencia Interno, el caso completo de cualquier tenant (DEC-129): lo ven `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-135); otro rol interno responde `403`. Reacción trabaja desde la bandeja y el detalle por id. El alcance por unidad del monitoreo aún no se aplica (DT-07).
          */
         get: operations["listarEmergencias"];
         put?: never;
         /**
          * Activar una emergencia sobre el viaje (idempotente por activacion_id).
-         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador) dentro de su alcance, activan el caso (ADR 21 §1, DEC-045 #9). Habilitada desde `SOLICITADO` en estados no terminales; denegada en `CERRADO`, `CANCELADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`.
+         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador), activan el caso (ADR 21 §1, DEC-045 #9); otro rol interno responde `403`. Habilitada desde `SOLICITADO` en estados no terminales; denegada en `CERRADO`, `CANCELADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje (DT-16).
          *     Idempotente por `activacion_id` del llamante (ADR 21 §2, mismo patrón que `enviarMensaje`): reentregar la misma activación devuelve el MISMO caso con 200 y no crea un duplicado; una pulsación nueva con otro `activacion_id` crea OTRO caso con 201, aunque ya exista uno abierto. No crea incidencia ni condición.
          */
         post: operations["activarEmergencia"];
@@ -336,7 +336,7 @@ export interface paths {
         put?: never;
         /**
          * Agregar una nota al caso (append-only, unidireccional a Reacción).
-         * @description Cliente u Operator dentro del alcance agregan notas mientras el caso esté en `abierta`, `en_atencion` o `resuelta`; denegado en `cerrada` con 409 `emergencia_cerrada` (ADR 21 §4). Texto de hasta 1000 caracteres; se recortan espacios de inicio y fin; una nota vacía tras el recorte no se guarda (400). Sin adjuntos en V1. La nota se copia con contenido completo al histórico interno del viaje (evento `emergencia.nota_agregada`, DEC-100).
+         * @description El Cliente sobre los casos de su empresa, y `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-135), agregan notas mientras el caso esté en `abierta`, `en_atencion` o `resuelta`. Reacción lee notas y no las escribe (DEC-121 #4): otro rol interno responde `403`. Denegado en `cerrada` con 409 `emergencia_cerrada` (ADR 21 §4). Texto de hasta 1000 caracteres; se recortan espacios de inicio y fin; una nota vacía tras el recorte no se guarda (400). Sin adjuntos en V1. La nota se copia con contenido completo al histórico interno del viaje (evento `emergencia.nota_agregada`, DEC-100).
          */
         post: operations["agregarNotaEmergencia"];
         delete?: never;
@@ -476,7 +476,7 @@ export interface paths {
         };
         /**
          * Listar los casos de la bandeja de Reacción del sujeto.
-         * @description Sin `{id}` de viaje ni de bandeja: `mensajeria` resuelve la bandeja única de emergencias (DEC-130) por el rol del sujeto, igual que `listarTrabajoMiBandeja` resuelve la de chat (DEC-127). La ven todo usuario con rol `reaccion`, miembro por su rol sin membresía administrada (DEC-130), y `supervisor`/`coordinador`, que ven todos los casos de la bandeja sin verificar mando (DEC-131; DT-06). Sin acotar por el tenant de quien pregunta (DEC-129). Otro rol responde `404` (no tiene bandeja).
+         * @description Sin `{id}` de viaje ni de bandeja: `mensajeria` resuelve la bandeja única de emergencias (DEC-130) por el rol del sujeto, igual que `listarTrabajoMiBandeja` resuelve la de chat (DEC-127). La ven todo usuario con rol `reaccion`, miembro por su rol sin membresía administrada (DEC-130), y `supervisor`/`coordinador`, que ven todos los casos de la bandeja sin verificar mando (DEC-131; DT-06). Sin acotar por el tenant de quien pregunta (DEC-129). Otro rol interno responde `403` y el Cliente `404` (DEC-132).
          *     Cada fila es `EmergenciaReaccion`: el caso sin datos del viaje ni del cliente y sin notas (DEC-121 #2). La bandeja EXCLUYE los casos en `cerrada` y los ordena del más antiguo al más reciente por `activada_en` (DEC-121 #3); a igual `activada_en` desempata por `id`, para que la paginación sea estable. Sin `desde_revision`: el caso de emergencia no lleva revisión de colección (ADR 28 §3) hoy; si se necesita catch-up se añade de forma aditiva.
          */
         get: operations["listarBandejaEmergencias"];
@@ -1454,6 +1454,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };

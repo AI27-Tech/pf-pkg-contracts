@@ -3,6 +3,40 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-04 [tracer.37] — emergencias del monitoreo por viaje en el `bff` (E8-T18, DEC-135)
+
+**Para quién:** `pf-svc-bff` (sirve las tres rutas), `pf-svc-core` (adaptador en proceso) y el panel interno (E8-T18), que necesita activar, anotar y ver los casos de un viaje desde su detalle.
+
+**Resumen:** ola aditiva en `bff.yaml`. Bajo `/api/v1/panel/viajes/{id}/emergencias` el monitoreo lista los casos del viaje (`listarEmergenciasViaje`), activa uno (`activarEmergenciaInterno`) y anota (`agregarNotaEmergenciaInterno`). La lista da el id del caso que piden la nota y `cerrarEmergenciaPorId`. Antes solo existían las rutas del cliente y la bandeja de Reacción, así que un monitorista no tenía de dónde sacar el id de un caso.
+
+**Reglas (DEC-135):**
+- Listar: `monitorista`, `supervisor`, `coordinador` y `administrador`. Fila mínima `EmergenciaViaje` (id, estado, activada_en), todos los estados, del más antiguo al más reciente.
+- Activar: `monitorista`, `supervisor` y `coordinador` (DEC-045 #9). 201 nuevo, 200 reentrega, 409 `viaje_en_estado_terminal` que aplica el `bff` antes de reenviar.
+- Anotar: los mismos cuatro roles que listar; Reacción no escribe (DEC-121 #4). 409 `emergencia_cerrada`.
+- Otro rol interno: 403 (DEC-132). Los roles los revisa `mensajeria`; el `bff` no valida rol.
+
+**Correcciones de texto (sin cambio de schema):**
+- `listarBandejaEmergencias` (`bff.yaml` y `mensajeria.yaml`): otro rol interno responde `403`, no `404` (DEC-132). El Cliente sigue con `404`.
+- `mensajeria.yaml`: `listarEmergencias`, `activarEmergencia` y `agregarNotaEmergencia` dicen qué roles internos acceden y que el 409 de viaje terminal lo aplica hoy el `bff` (DT-16). `listarEmergencias` declara además la respuesta `403`.
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: rutas `/api/v1/panel/viajes/{id}/emergencias` (GET, POST) y `/api/v1/panel/viajes/{id}/emergencias/{eid}/notas` (POST); schemas `EmergenciaViaje`, `PaginaEmergenciasViaje`, `ActivarEmergenciaInternoEntrada` y `NotaEmergenciaInternoEntrada`.
+- `contracts/openapi/mensajeria.yaml`: descripciones y `403` en `listarEmergencias`.
+- Clientes Go y TS de `bff` y `mensajeria` regenerados. `VERSION`, `packages/api-client-ts/package.json`, el `version:` de los 8 specs y el encabezado de `contracts/events/INVENTARIO.md` a `0.1.0-tracer.37`.
+
+**Compatibilidad:** compatible. `breaking-openapi` en verde contra `tracer.36` sin allowlist. Sin constantes de enum renombradas en el cliente Go (git-workflow §8). `lint-openapi`, `verify`, `check-version-ts` y `contract-tests` en verde.
+
+**Siguiente (fuera de esta ola):** `pf-svc-mensajeria` revisa los roles (PR #53); `pf-svc-bff` sirve estas tres rutas y las 8 de `tracer.34`, y rechaza la activación sobre viaje terminal; `pf-svc-core` cablea el adaptador en proceso.
+
+**Archivos modificados:**
+- `VERSION`
+- `packages/api-client-ts/package.json`
+- `contracts/openapi/_comunes.yaml`, `bff.yaml`, `catalogos.yaml`, `identidad.yaml`, `mensajeria.yaml`, `operacion.yaml`, `realtime.yaml`, `reportes.yaml`
+- `contracts/events/INVENTARIO.md`
+- `packages/api-client-go/bff/bff.gen.go`, `packages/api-client-go/mensajeria/mensajeria.gen.go`
+- `packages/api-client-ts/src/openapi/bff.gen.ts`, `packages/api-client-ts/src/openapi/mensajeria.gen.ts`
+- `CHANGELOG.md`
+
 ## 2026-11-03 [tracer.36] — filtro «viajes en curso» en `reporteViajes` (E8-T17, DT-10)
 
 **Para quién:** `pf-svc-reportes` (aplica el filtro), `pf-svc-bff` (lo propaga) y el panel interno (E8-T17), cuya primera vista del dashboard debe ser «viajes en curso» (decisión de Producto, 2026-11-03).
