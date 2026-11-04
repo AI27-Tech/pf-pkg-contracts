@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.35
+  version: 0.1.0-tracer.36
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -1749,16 +1749,29 @@ paths:
       operationId: reporteViajes
       tags: [reportes]
       summary: Reporte operativo de viajes por periodo y alcance (audiencia interna).
-      description: Reenvía a `reportes.reporteViajes`.
+      description: >-
+        Reenvía a `reportes.reporteViajes`. Sin `en_curso`, `desde` y `hasta`
+        son obligatorios (400 si falta alguno). Con `en_curso=true` devuelve los
+        viajes en estado no terminal sin importar su fecha de creación; `desde`
+        y `hasta` son entonces opcionales y, si se mandan, se intersecan.
       parameters:
       - name: desde
         in: query
-        required: true
+        required: false
+        description: Inicio del periodo. Obligatorio salvo con `en_curso=true`.
         schema: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
       - name: hasta
         in: query
-        required: true
+        required: false
+        description: Fin del periodo. Obligatorio salvo con `en_curso=true`.
         schema: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+      - name: en_curso
+        in: query
+        required: false
+        description: >-
+          true devuelve solo los viajes en estado no terminal (E6-HU-025).
+          Ausente o false no filtra por estado.
+        schema: {type: boolean}
       responses:
         "200":
           description: Filas del reporte de viajes.
