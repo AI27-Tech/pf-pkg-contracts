@@ -104,7 +104,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Escolta vigente del viaje, con cada unidad del roster.
+         * @description Devuelve las unidades de la asignación vigente del viaje, cada una con su `tipo`, `vehiculo_id` y `custodios_ids` (referencias a `catalogos`). Sin asignación vigente (viaje aún no asignado o ya liberado), `unidades` va vacío con 200; no responde 404 por eso. Solo audiencia Interno: el Cliente recibe `404` (DEC-132). La consume el `bff` para componer la escolta del detalle de Reacción (`obtenerEmergencia`, DEC-121 #2); el nombre y teléfono de los custodios y las placas del vehículo los resuelve el `bff` en `catalogos` (E8-T18).
+         */
+        get: operations["obtenerAsignacion"];
         put?: never;
         /**
          * Asignar la escolta (una o más unidades) en una escritura atómica.
@@ -588,6 +592,12 @@ export interface components {
             /** @description Unidades de la escolta reservada, cada una con su aptitud informativa por átomo (D1). La reserva ya ocurrió: la aptitud es sólo dato. */
             unidades: components["schemas"]["UnidadAsignada"][];
         };
+        /** @description Escolta de la asignación vigente del viaje (`obtenerAsignacion`). */
+        EscoltaVigente: {
+            viaje_id: components["schemas"]["Id"];
+            /** @description Unidades reservadas, ordenadas por `id`. Vacío sin asignación vigente. */
+            unidades: components["schemas"]["Unidad"][];
+        };
         Unidad: {
             id: components["schemas"]["Id"];
             /** @description Identificador del vehículo en `catalogos`. Referencia, no FK. */
@@ -1037,6 +1047,30 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    obtenerAsignacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Escolta vigente; `unidades` vacío si no hay asignación. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EscoltaVigente"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
         };
     };
     asignarRecursos: {

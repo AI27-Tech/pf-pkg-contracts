@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.36
+  version: 0.1.0-tracer.37
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -1062,13 +1062,128 @@ paths:
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   # ===========================================================================
+  # EMERGENCIAS DEL MONITOREO por viaje (tracer.37, E8-T18, DEC-135). Desde el
+  # panel del viaje el monitoreo lista los casos del viaje, activa uno y anota.
+  # Solo audiencia Interno; el `bff` propaga el Bearer y `mensajeria` autoriza
+  # por rol (misma regla que el panel de Reacción). El `bff` recorta el caso a
+  # la fila mínima `EmergenciaViaje` y, al activar, rechaza el viaje terminal
+  # antes de reenviar (DEC-135 #5). El alcance por unidad del monitoreo aún no
+  # se aplica (DT-07): hoy el límite es el rol. Para cerrar se usa
+  # `cerrarEmergenciaPorId` con el id que da esta lista.
+  # ===========================================================================
+  /api/v1/panel/viajes/{id}/emergencias:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarEmergenciasViaje
+      tags: [emergencias]
+      summary: Casos de emergencia del viaje para el monitoreo (fila mínima).
+      description: >-
+        Solo audiencia Interno. Reenvía a `mensajeria.listarEmergencias` y
+        recorta cada caso a `EmergenciaViaje` (id, estado, activada_en), sin
+        notas, actor ni personal de Reacción (DEC-135 #1). Incluye todos los
+        estados, también `cerrada`, del más antiguo al más reciente por
+        `activada_en`. La ven `monitorista`, `supervisor`, `coordinador` y
+        `administrador`; otro rol interno responde `403` (DEC-132).
+      responses:
+        "200":
+          description: Casos del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaEmergenciasViaje"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    post:
+      operationId: activarEmergenciaInterno
+      tags: [emergencias]
+      summary: El monitoreo activa una emergencia sobre el viaje (idempotente).
+      description: >-
+        Solo audiencia Interno. Activan `monitorista`, `supervisor` y
+        `coordinador` (DEC-045 #9); otro rol interno responde `403`. El `bff`
+        lee el viaje y, si está en `CERRADO`, `CANCELADO`, `RECHAZADO_POR_AI27`
+        o `RECHAZADO_POR_CLIENTE`, responde 409 `viaje_en_estado_terminal` sin
+        reenviar (DEC-135 #5; carrera en DT-16). Si no, reenvía a
+        `mensajeria.activarEmergencia`, que registra origen `operacion` y deja
+        el caso bajo la empresa del viaje (DEC-133). Idempotente por
+        `activacion_id`: la reentrega devuelve el mismo caso con 200; una
+        pulsación nueva con otro `activacion_id` crea otro caso con 201.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ActivarEmergenciaInternoEntrada"}
+      responses:
+        "201":
+          description: Caso creado.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EmergenciaViaje"}
+        "200":
+          description: Reentrega idempotente; caso original.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EmergenciaViaje"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: "`codigo` de máquina `viaje_en_estado_terminal`."
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/panel/viajes/{id}/emergencias/{eid}/notas:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    - name: eid
+      in: path
+      required: true
+      description: Identificador del caso de emergencia.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: agregarNotaEmergenciaInterno
+      tags: [emergencias]
+      summary: El monitoreo agrega una nota a un caso de emergencia.
+      description: >-
+        Solo audiencia Interno. Reenvía a `mensajeria.agregarNotaEmergencia`.
+        Anotan `monitorista`, `supervisor`, `coordinador` y `administrador`
+        (DEC-135 #3); Reacción lee y no escribe (DEC-121 #4), y otro rol
+        interno responde `403`. Texto de 1 a 1000 caracteres, se recorta;
+        vacío tras recortar es 400. Admitida en `abierta`, `en_atencion` y
+        `resuelta`; en `cerrada` responde 409 `emergencia_cerrada`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NotaEmergenciaInternoEntrada"}
+      responses:
+        "201": {description: Nota agregada.}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: "`codigo` de máquina `emergencia_cerrada`."
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  # ===========================================================================
   # PANEL DE REACCIÓN: bandeja y caso por su propio id (tracer.34, DEC-028,
   # DEC-121). Proyección de la familia nueva de `mensajeria`
   # (`listarBandejaEmergencias`, `obtenerEmergencia`, `listarNotasEmergenciaPorId`
   # y las acciones `...PorId`): mismos operationId. Reacción no accede a las
   # acciones ni a la bitácora del viaje (DEC-028, E8-T18), así que estas rutas
   # no llevan `{id}` de viaje. Misma regla de audiencia que las rutas de panel
-  # por viaje (`/api/v1/panel/viajes/{id}/emergencias...`, desde tracer.17):
+  # por viaje (`/api/v1/panel/viajes/{id}/emergencias...`, tracer.37):
   # solo audiencia Interno; el `bff` propaga el Bearer del usuario y
   # `mensajeria` autoriza por rol (DEC-130, DEC-131). El `bff` reenvía la vista de
   # `mensajeria` salvo en `obtenerEmergencia`, donde COMPONE el detalle con el
@@ -1085,8 +1200,8 @@ paths:
         la bandeja única de emergencias (DEC-130), sin `{id}`. La ven el rol
         `reaccion`, miembro por su rol, y `supervisor`/`coordinador`, que ven
         todos los casos de la bandeja sin verificar mando (DEC-131; DT-06). Sin
-        acotar por el tenant de quien pregunta (DEC-129). Otro rol responde
-        `404`. Cada fila es `EmergenciaReaccion`, sin datos del
+        acotar por el tenant de quien pregunta (DEC-129). Otro rol interno
+        responde `403` (DEC-132). Cada fila es `EmergenciaReaccion`, sin datos del
         viaje ni del cliente ni notas (DEC-121 #2). EXCLUYE los casos en
         `cerrada` y ordena del más antiguo al más reciente por `activada_en`
         (DEC-121 #3).
@@ -2323,6 +2438,50 @@ components:
           description: Clave de idempotencia de la activación, generada por el cliente.
 
     NotaEmergenciaClienteEntrada:
+      type: object
+      additionalProperties: false
+      required: [cuerpo]
+      properties:
+        cuerpo:
+          type: string
+          minLength: 1
+          maxLength: 1000
+
+    # --- Emergencias del monitoreo por viaje (tracer.37, DEC-135). Fila mínima
+    #     para el selector del panel: sin notas, actor ni Reacción. ---
+    EmergenciaViaje:
+      type: object
+      additionalProperties: false
+      required: [id, estado, activada_en]
+      description: >-
+        Caso de emergencia del viaje tal como lo ve el monitoreo en el panel. El
+        `id` es el que piden `agregarNotaEmergenciaInterno` y
+        `cerrarEmergenciaPorId`.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        estado: {$ref: "#/components/schemas/EstadoEmergencia"}
+        activada_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    PaginaEmergenciasViaje:
+      type: object
+      additionalProperties: false
+      required: [items]
+      description: Todos los casos del viaje, del más antiguo al más reciente. Sin paginación.
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/EmergenciaViaje"}
+
+    ActivarEmergenciaInternoEntrada:
+      type: object
+      additionalProperties: false
+      required: [activacion_id]
+      properties:
+        activacion_id:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/Id"}]
+          description: Clave de idempotencia de la activación, generada por el panel.
+
+    NotaEmergenciaInternoEntrada:
       type: object
       additionalProperties: false
       required: [cuerpo]

@@ -3636,6 +3636,7 @@ type ListarEmergenciasResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaEmergencias
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -5432,6 +5433,13 @@ func ParseListarEmergenciasResponse(rsp *http.Response) (*ListarEmergenciasRespo
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
