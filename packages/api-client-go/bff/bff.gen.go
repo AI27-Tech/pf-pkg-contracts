@@ -156,6 +156,12 @@ type ActivarEmergenciaClienteEntrada struct {
 	ActivacionId Id `json:"activacion_id"`
 }
 
+// ActivarEmergenciaInternoEntrada defines model for ActivarEmergenciaInternoEntrada.
+type ActivarEmergenciaInternoEntrada struct {
+	// ActivacionId Clave de idempotencia de la activación, generada por el panel.
+	ActivacionId Id `json:"activacion_id"`
+}
+
 // Adjunto Metadatos de un adjunto del viaje. No incluye los bytes.
 type Adjunto struct {
 	// ChecksumSha256 Checksum declarado en la subida; null si no se declaró.
@@ -483,6 +489,18 @@ type EmergenciaReaccion struct {
 
 	// VersionReclamo Versión vigente del reclamo del caso; es la `version_esperada` para reclamar un caso que está en el pool (`reclamo_activo` null).
 	VersionReclamo VersionReclamo `json:"version_reclamo"`
+}
+
+// EmergenciaViaje Caso de emergencia del viaje tal como lo ve el monitoreo en el panel. El `id` es el que piden `agregarNotaEmergenciaInterno` y `cerrarEmergenciaPorId`.
+type EmergenciaViaje struct {
+	// ActivadaEn Instante en UTC, RFC 3339.
+	ActivadaEn MarcaTiempo `json:"activada_en"`
+
+	// Estado Ciclo del caso de emergencia (ADR 21 §5), agregado propio distinto del estado del viaje y de `EstadoConversacion`. `resuelta` y `cerrada` son irreversibles.
+	Estado EstadoEmergencia `json:"estado"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
 }
 
 // EmergenciasCliente defines model for EmergenciasCliente.
@@ -823,6 +841,11 @@ type NotaEmergenciaClienteEntrada struct {
 	Cuerpo string `json:"cuerpo"`
 }
 
+// NotaEmergenciaInternoEntrada defines model for NotaEmergenciaInternoEntrada.
+type NotaEmergenciaInternoEntrada struct {
+	Cuerpo string `json:"cuerpo"`
+}
+
 // OrigenActivacion Quién originó la activación (ADR 21 §3).
 type OrigenActivacion string
 
@@ -850,6 +873,11 @@ type PaginaClientes struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
 	CursorSiguiente *string   `json:"cursor_siguiente"`
 	Items           []Cliente `json:"items"`
+}
+
+// PaginaEmergenciasViaje Todos los casos del viaje, del más antiguo al más reciente. Sin paginación.
+type PaginaEmergenciasViaje struct {
+	Items []EmergenciaViaje `json:"items"`
 }
 
 // PaginaEstadias defines model for PaginaEstadias.
@@ -1363,6 +1391,12 @@ type ResolverEmergenciaPorIdJSONRequestBody = ResolucionEmergenciaEntrada
 // TransferirEmergenciaPorIdJSONRequestBody defines body for TransferirEmergenciaPorId for application/json ContentType.
 type TransferirEmergenciaPorIdJSONRequestBody = TransferenciaEntrada
 
+// ActivarEmergenciaInternoJSONRequestBody defines body for ActivarEmergenciaInterno for application/json ContentType.
+type ActivarEmergenciaInternoJSONRequestBody = ActivarEmergenciaInternoEntrada
+
+// AgregarNotaEmergenciaInternoJSONRequestBody defines body for AgregarNotaEmergenciaInterno for application/json ContentType.
+type AgregarNotaEmergenciaInternoJSONRequestBody = NotaEmergenciaInternoEntrada
+
 // IniciarSesionJSONRequestBody defines body for IniciarSesion for application/json ContentType.
 type IniciarSesionJSONRequestBody = CredencialesEntrada
 
@@ -1570,6 +1604,19 @@ type ClientInterface interface {
 	TransferirEmergenciaPorIdWithBody(ctx context.Context, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	TransferirEmergenciaPorId(ctx context.Context, eid Id, body TransferirEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListarEmergenciasViaje request
+	ListarEmergenciasViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActivarEmergenciaInternoWithBody request with any body
+	ActivarEmergenciaInternoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ActivarEmergenciaInterno(ctx context.Context, id Id, body ActivarEmergenciaInternoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AgregarNotaEmergenciaInternoWithBody request with any body
+	AgregarNotaEmergenciaInternoWithBody(ctx context.Context, id Id, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AgregarNotaEmergenciaInterno(ctx context.Context, id Id, eid Id, body AgregarNotaEmergenciaInternoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReporteEstados request
 	ReporteEstados(ctx context.Context, params *ReporteEstadosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2063,6 +2110,66 @@ func (c *Client) TransferirEmergenciaPorIdWithBody(ctx context.Context, eid Id, 
 
 func (c *Client) TransferirEmergenciaPorId(ctx context.Context, eid Id, body TransferirEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTransferirEmergenciaPorIdRequest(c.Server, eid, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarEmergenciasViaje(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarEmergenciasViajeRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActivarEmergenciaInternoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActivarEmergenciaInternoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActivarEmergenciaInterno(ctx context.Context, id Id, body ActivarEmergenciaInternoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActivarEmergenciaInternoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AgregarNotaEmergenciaInternoWithBody(ctx context.Context, id Id, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgregarNotaEmergenciaInternoRequestWithBody(c.Server, id, eid, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AgregarNotaEmergenciaInterno(ctx context.Context, id Id, eid Id, body AgregarNotaEmergenciaInternoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgregarNotaEmergenciaInternoRequest(c.Server, id, eid, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3738,6 +3845,141 @@ func NewTransferirEmergenciaPorIdRequestWithBody(server string, eid Id, contentT
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/panel/emergencias/%s/transferencias", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListarEmergenciasViajeRequest generates requests for ListarEmergenciasViaje
+func NewListarEmergenciasViajeRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/panel/viajes/%s/emergencias", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActivarEmergenciaInternoRequest calls the generic ActivarEmergenciaInterno builder with application/json body
+func NewActivarEmergenciaInternoRequest(server string, id Id, body ActivarEmergenciaInternoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewActivarEmergenciaInternoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewActivarEmergenciaInternoRequestWithBody generates requests for ActivarEmergenciaInterno with any type of body
+func NewActivarEmergenciaInternoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/panel/viajes/%s/emergencias", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAgregarNotaEmergenciaInternoRequest calls the generic AgregarNotaEmergenciaInterno builder with application/json body
+func NewAgregarNotaEmergenciaInternoRequest(server string, id Id, eid Id, body AgregarNotaEmergenciaInternoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAgregarNotaEmergenciaInternoRequestWithBody(server, id, eid, "application/json", bodyReader)
+}
+
+// NewAgregarNotaEmergenciaInternoRequestWithBody generates requests for AgregarNotaEmergenciaInterno with any type of body
+func NewAgregarNotaEmergenciaInternoRequestWithBody(server string, id Id, eid Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "eid", runtime.ParamLocationPath, eid)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/panel/viajes/%s/emergencias/%s/notas", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -5541,6 +5783,19 @@ type ClientWithResponsesInterface interface {
 
 	TransferirEmergenciaPorIdWithResponse(ctx context.Context, eid Id, body TransferirEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferirEmergenciaPorIdResponse, error)
 
+	// ListarEmergenciasViajeWithResponse request
+	ListarEmergenciasViajeWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ListarEmergenciasViajeResponse, error)
+
+	// ActivarEmergenciaInternoWithBodyWithResponse request with any body
+	ActivarEmergenciaInternoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActivarEmergenciaInternoResponse, error)
+
+	ActivarEmergenciaInternoWithResponse(ctx context.Context, id Id, body ActivarEmergenciaInternoJSONRequestBody, reqEditors ...RequestEditorFn) (*ActivarEmergenciaInternoResponse, error)
+
+	// AgregarNotaEmergenciaInternoWithBodyWithResponse request with any body
+	AgregarNotaEmergenciaInternoWithBodyWithResponse(ctx context.Context, id Id, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaInternoResponse, error)
+
+	AgregarNotaEmergenciaInternoWithResponse(ctx context.Context, id Id, eid Id, body AgregarNotaEmergenciaInternoJSONRequestBody, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaInternoResponse, error)
+
 	// ReporteEstadosWithResponse request
 	ReporteEstadosWithResponse(ctx context.Context, params *ReporteEstadosParams, reqEditors ...RequestEditorFn) (*ReporteEstadosResponse, error)
 
@@ -6211,6 +6466,85 @@ func (r TransferirEmergenciaPorIdResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r TransferirEmergenciaPorIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarEmergenciasViajeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaEmergenciasViaje
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarEmergenciasViajeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarEmergenciasViajeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ActivarEmergenciaInternoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *EmergenciaViaje
+	JSON201      *EmergenciaViaje
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r ActivarEmergenciaInternoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActivarEmergenciaInternoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AgregarNotaEmergenciaInternoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r AgregarNotaEmergenciaInternoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AgregarNotaEmergenciaInternoResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7358,6 +7692,49 @@ func (c *ClientWithResponses) TransferirEmergenciaPorIdWithResponse(ctx context.
 		return nil, err
 	}
 	return ParseTransferirEmergenciaPorIdResponse(rsp)
+}
+
+// ListarEmergenciasViajeWithResponse request returning *ListarEmergenciasViajeResponse
+func (c *ClientWithResponses) ListarEmergenciasViajeWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ListarEmergenciasViajeResponse, error) {
+	rsp, err := c.ListarEmergenciasViaje(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarEmergenciasViajeResponse(rsp)
+}
+
+// ActivarEmergenciaInternoWithBodyWithResponse request with arbitrary body returning *ActivarEmergenciaInternoResponse
+func (c *ClientWithResponses) ActivarEmergenciaInternoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActivarEmergenciaInternoResponse, error) {
+	rsp, err := c.ActivarEmergenciaInternoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActivarEmergenciaInternoResponse(rsp)
+}
+
+func (c *ClientWithResponses) ActivarEmergenciaInternoWithResponse(ctx context.Context, id Id, body ActivarEmergenciaInternoJSONRequestBody, reqEditors ...RequestEditorFn) (*ActivarEmergenciaInternoResponse, error) {
+	rsp, err := c.ActivarEmergenciaInterno(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActivarEmergenciaInternoResponse(rsp)
+}
+
+// AgregarNotaEmergenciaInternoWithBodyWithResponse request with arbitrary body returning *AgregarNotaEmergenciaInternoResponse
+func (c *ClientWithResponses) AgregarNotaEmergenciaInternoWithBodyWithResponse(ctx context.Context, id Id, eid Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaInternoResponse, error) {
+	rsp, err := c.AgregarNotaEmergenciaInternoWithBody(ctx, id, eid, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAgregarNotaEmergenciaInternoResponse(rsp)
+}
+
+func (c *ClientWithResponses) AgregarNotaEmergenciaInternoWithResponse(ctx context.Context, id Id, eid Id, body AgregarNotaEmergenciaInternoJSONRequestBody, reqEditors ...RequestEditorFn) (*AgregarNotaEmergenciaInternoResponse, error) {
+	rsp, err := c.AgregarNotaEmergenciaInterno(ctx, id, eid, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAgregarNotaEmergenciaInternoResponse(rsp)
 }
 
 // ReporteEstadosWithResponse request returning *ReporteEstadosResponse
@@ -8859,6 +9236,175 @@ func ParseTransferirEmergenciaPorIdResponse(rsp *http.Response) (*TransferirEmer
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest ConflictoVersion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarEmergenciasViajeResponse parses an HTTP response from a ListarEmergenciasViajeWithResponse call
+func ParseListarEmergenciasViajeResponse(rsp *http.Response) (*ListarEmergenciasViajeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarEmergenciasViajeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaEmergenciasViaje
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActivarEmergenciaInternoResponse parses an HTTP response from a ActivarEmergenciaInternoWithResponse call
+func ParseActivarEmergenciaInternoResponse(rsp *http.Response) (*ActivarEmergenciaInternoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActivarEmergenciaInternoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EmergenciaViaje
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest EmergenciaViaje
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAgregarNotaEmergenciaInternoResponse parses an HTTP response from a AgregarNotaEmergenciaInternoWithResponse call
+func ParseAgregarNotaEmergenciaInternoResponse(rsp *http.Response) (*AgregarNotaEmergenciaInternoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AgregarNotaEmergenciaInternoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — operacion
-  version: 0.1.0-tracer.36
+  version: 0.1.0-tracer.37
   description: >-
     Progreso del viaje: creación, transiciones, asignación, bitácora,
     incidencias y auditoría. Consumido por `bff`, nunca por el frontend directo.
@@ -221,6 +221,27 @@ paths:
       in: path
       required: true
       schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerAsignacion
+      tags: [asignacion]
+      summary: Escolta vigente del viaje, con cada unidad del roster.
+      description: >-
+        Devuelve las unidades de la asignación vigente del viaje, cada una con
+        su `tipo`, `vehiculo_id` y `custodios_ids` (referencias a `catalogos`).
+        Sin asignación vigente (viaje aún no asignado o ya liberado), `unidades`
+        va vacío con 200; no responde 404 por eso. Solo audiencia Interno: el
+        Cliente recibe `404` (DEC-132). La consume el `bff` para componer la
+        escolta del detalle de Reacción (`obtenerEmergencia`, DEC-121 #2); el
+        nombre y teléfono de los custodios y las placas del vehículo los
+        resuelve el `bff` en `catalogos` (E8-T18).
+      responses:
+        "200":
+          description: Escolta vigente; `unidades` vacío si no hay asignación.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EscoltaVigente"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
     post:
       operationId: asignarRecursos
       tags: [asignacion]
@@ -1157,6 +1178,18 @@ components:
             Unidades de la escolta reservada, cada una con su aptitud informativa
             por átomo (D1). La reserva ya ocurrió: la aptitud es sólo dato.
           items: {$ref: "#/components/schemas/UnidadAsignada"}
+
+    EscoltaVigente:
+      type: object
+      additionalProperties: false
+      required: [viaje_id, unidades]
+      description: Escolta de la asignación vigente del viaje (`obtenerAsignacion`).
+      properties:
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        unidades:
+          type: array
+          description: Unidades reservadas, ordenadas por `id`. Vacío sin asignación vigente.
+          items: {$ref: "#/components/schemas/Unidad"}
 
     # --- Roster de unidades (D6a / ADR 31 §5 / ADR 33). La `unidad` es un
     #     paquete pre-armado: un vehículo (átomo de `catalogos`) con uno o dos
