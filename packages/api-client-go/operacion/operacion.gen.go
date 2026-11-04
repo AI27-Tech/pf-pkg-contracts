@@ -285,7 +285,7 @@ type Error struct {
 
 // EscoltaVigente Escolta de la asignación vigente del viaje (`obtenerAsignacion`).
 type EscoltaVigente struct {
-	// Unidades Unidades reservadas, en orden de reserva. Vacío sin asignación vigente.
+	// Unidades Unidades reservadas, ordenadas por `id`. Vacío sin asignación vigente.
 	Unidades []Unidad `json:"unidades"`
 
 	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.

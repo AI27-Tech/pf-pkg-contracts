@@ -595,7 +595,7 @@ export interface components {
         /** @description Escolta de la asignación vigente del viaje (`obtenerAsignacion`). */
         EscoltaVigente: {
             viaje_id: components["schemas"]["Id"];
-            /** @description Unidades reservadas, en orden de reserva. Vacío sin asignación vigente. */
+            /** @description Unidades reservadas, ordenadas por `id`. Vacío sin asignación vigente. */
             unidades: components["schemas"]["Unidad"][];
         };
         Unidad: {

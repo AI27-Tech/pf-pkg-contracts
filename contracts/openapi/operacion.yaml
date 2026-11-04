@@ -1188,7 +1188,7 @@ components:
         viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         unidades:
           type: array
-          description: Unidades reservadas, en orden de reserva. Vacío sin asignación vigente.
+          description: Unidades reservadas, ordenadas por `id`. Vacío sin asignación vigente.
           items: {$ref: "#/components/schemas/Unidad"}
 
     # --- Roster de unidades (D6a / ADR 31 §5 / ADR 33). La `unidad` es un
