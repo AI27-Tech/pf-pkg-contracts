@@ -107,8 +107,14 @@ type ReporteEstadosParams struct {
 
 // ReporteViajesParams defines parameters for ReporteViajes.
 type ReporteViajesParams struct {
-	Desde MarcaTiempo `form:"desde" json:"desde"`
-	Hasta MarcaTiempo `form:"hasta" json:"hasta"`
+	// Desde Inicio del periodo. Obligatorio salvo con `en_curso=true`.
+	Desde *MarcaTiempo `form:"desde,omitempty" json:"desde,omitempty"`
+
+	// Hasta Fin del periodo. Obligatorio salvo con `en_curso=true`.
+	Hasta *MarcaTiempo `form:"hasta,omitempty" json:"hasta,omitempty"`
+
+	// EnCurso true devuelve solo los viajes en estado no terminal (E6-HU-025, «viajes en curso»). Ausente o false no filtra por estado.
+	EnCurso *bool `form:"en_curso,omitempty" json:"en_curso,omitempty"`
 }
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
@@ -294,28 +300,52 @@ func NewReporteViajesRequest(server string, params *ReporteViajesParams) (*http.
 	if params != nil {
 		queryValues := queryURL.Query()
 
-		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "desde", runtime.ParamLocationQuery, params.Desde); err != nil {
-			return nil, err
-		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-			return nil, err
-		} else {
-			for k, v := range parsed {
-				for _, v2 := range v {
-					queryValues.Add(k, v2)
+		if params.Desde != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "desde", runtime.ParamLocationQuery, *params.Desde); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
 				}
 			}
+
 		}
 
-		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "hasta", runtime.ParamLocationQuery, params.Hasta); err != nil {
-			return nil, err
-		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-			return nil, err
-		} else {
-			for k, v := range parsed {
-				for _, v2 := range v {
-					queryValues.Add(k, v2)
+		if params.Hasta != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "hasta", runtime.ParamLocationQuery, *params.Hasta); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
 				}
 			}
+
+		}
+
+		if params.EnCurso != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "en_curso", runtime.ParamLocationQuery, *params.EnCurso); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
 		}
 
 		queryURL.RawQuery = queryValues.Encode()
