@@ -963,6 +963,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reportes/viajes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reporte operativo de viajes por periodo y alcance (audiencia interna).
+         * @description Reenvía a `reportes.reporteViajes`.
+         */
+        get: operations["reporteViajes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reportes/estados": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Distribución y tiempos de permanencia por estado (audiencia interna).
+         * @description Reenvía a `reportes.reporteEstados`.
+         */
+        get: operations["reporteEstados"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/adjuntos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Listar los adjuntos de un viaje con sus metadatos (audiencia interna).
+         * @description Reenvía a `operacion.listarAdjuntos`. No devuelve bytes. El `estado_escaneo` de cada adjunto se refresca releyendo esta lista (sondeo HTTP, ADR 27): no hay evento de empuje para el fin del escaneo. Un usuario fuera del alcance del viaje recibe 403 antes de listar nada.
+         */
+        get: operations["listarAdjuntos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/adjuntos/intenciones-subida": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Intención de subida de un adjunto con autorización de vida corta.
+         * @description Reenvía a `operacion.crearIntencionSubidaAdjunto`. Los bytes NO pasan por el `bff`: el cliente los sube al almacenamiento de objetos con la URL devuelta. Un usuario fuera del alcance del viaje recibe 403 antes de emitir la intención.
+         */
+        post: operations["crearIntencionSubidaAdjunto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/viajes/{id}/adjuntos/{aid}/descarga": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                aid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Autorización de vida corta para descargar un adjunto (audiencia interna).
+         * @description Reenvía a `operacion.descargarAdjunto`. Devuelve una URL de vida corta del almacenamiento de objetos; los bytes NO pasan por el `bff`. Cada descarga la audita `operacion`. Un usuario fuera del alcance recibe 403 antes de autorizar nada.
+         */
+        get: operations["descargarAdjunto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1662,6 +1769,86 @@ export interface components {
             version_esperada: components["schemas"]["VersionReclamo"];
             /** @description Nota de resolución obligatoria; mismas validaciones que las demás notas. */
             nota: string;
+        };
+        FilaViaje: {
+            viaje_id: components["schemas"]["Id"];
+            cliente_id?: components["schemas"]["Id"];
+            /** @description Token de estado (ADR 19), tal como lo proyecta el evento. */
+            estado: string;
+            creado_en?: components["schemas"]["MarcaTiempo"];
+            /**
+             * Format: date-time
+             * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+             */
+            cerrado_en?: string | null;
+        };
+        ReporteViajes: {
+            filas: components["schemas"]["FilaViaje"][];
+            total: number;
+            /** @description Instante hasta el que la proyección aplicó eventos del origen (`reportes` es una proyección por eventos, ADR 18). El reporte refleja el estado del dominio hasta este momento, no el de ahora. Opcional (expand/contract): el servicio lo llena siempre. null solo si la proyección aún no aplicó ningún evento. */
+            proyeccion_al?: components["schemas"]["MarcaTiempo"] | null;
+            /** @description true si el retraso de la proyección (now menos `proyeccion_al`) excede el techo de frescura configurado del servicio. Distingue un reporte al día de uno congelado por un consumo detenido. El valor del techo es configuración del servicio, no del contrato. Opcional: si falta, el consumidor lo trata como frescura no informada, nunca como fresca (P4 de E8-T17). */
+            stale?: boolean;
+        };
+        ConteoEstado: {
+            estado: string;
+            conteo: number;
+            permanencia_promedio_seg?: number | null;
+        };
+        ReporteEstados: {
+            conteos: components["schemas"]["ConteoEstado"][];
+            /** @description Instante hasta el que la proyección aplicó eventos del origen (`reportes` es una proyección por eventos, ADR 18). El reporte refleja el estado del dominio hasta este momento, no el de ahora. Opcional (expand/contract): el servicio lo llena siempre. null solo si la proyección aún no aplicó ningún evento. */
+            proyeccion_al?: components["schemas"]["MarcaTiempo"] | null;
+            /** @description true si el retraso de la proyección (now menos `proyeccion_al`) excede el techo de frescura configurado del servicio. Distingue un reporte al día de uno congelado por un consumo detenido. El valor del techo es configuración del servicio, no del contrato. Opcional: si falta, el consumidor lo trata como frescura no informada, nunca como fresca (P4 de E8-T17). */
+            stale?: boolean;
+        };
+        /** @description Metadatos de un adjunto del viaje. No incluye los bytes. */
+        Adjunto: {
+            id: components["schemas"]["Id"];
+            viaje_id: components["schemas"]["Id"];
+            /** @description Nombre de archivo declarado en la subida, para identificar el adjunto en la lista de evidencia (E6-HU-027). No es el actor que lo subió: el autor queda fuera de V1 (DT-11). */
+            nombre: string;
+            /** @description Tipo MIME declarado del adjunto. */
+            tipo_medio: string;
+            /** Format: int64 */
+            tamano_bytes: number;
+            /** @description Checksum declarado en la subida; null si no se declaró. */
+            checksum_sha256?: string | null;
+            /**
+             * @description Estado del escaneo antivirus del objeto. `pendiente` tras crear la intención; `limpio`/`infectado` cuando el escaneo concluye. Un adjunto no `limpio` no autoriza descarga. Se refresca releyendo `listarAdjuntos` (sondeo; no hay evento de empuje en V1).
+             * @enum {string}
+             */
+            estado_escaneo: "pendiente" | "limpio" | "infectado";
+            creado_en: components["schemas"]["MarcaTiempo"];
+        };
+        PaginaAdjuntos: {
+            items: components["schemas"]["Adjunto"][];
+        };
+        IntencionSubidaAdjuntoEntrada: {
+            /** @description Nombre de archivo declarado, mostrado luego en la lista (E6-HU-027). */
+            nombre: string;
+            /** @description Tipo MIME declarado. */
+            tipo_medio: string;
+            /** Format: int64 */
+            tamano_bytes: number;
+            checksum_sha256: string;
+        };
+        IntencionSubidaAdjunto: {
+            adjunto_id: components["schemas"]["Id"];
+            /**
+             * Format: uri
+             * @description URL de vida corta del almacenamiento de objetos.
+             */
+            url_subida: string;
+            expira_en: components["schemas"]["MarcaTiempo"];
+        };
+        DescargaAdjunto: {
+            /**
+             * Format: uri
+             * @description URL de vida corta del almacenamiento de objetos.
+             */
+            url_descarga: string;
+            expira_en: components["schemas"]["MarcaTiempo"];
         };
         /**
          * Format: uuid
@@ -3318,6 +3505,138 @@ export interface operations {
             };
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+        };
+    };
+    reporteViajes: {
+        parameters: {
+            query: {
+                desde: components["schemas"]["MarcaTiempo"];
+                hasta: components["schemas"]["MarcaTiempo"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Filas del reporte de viajes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteViajes"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    reporteEstados: {
+        parameters: {
+            query: {
+                desde: components["schemas"]["MarcaTiempo"];
+                hasta: components["schemas"]["MarcaTiempo"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Distribución por estado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReporteEstados"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    listarAdjuntos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Adjuntos del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaAdjuntos"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    crearIntencionSubidaAdjunto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntencionSubidaAdjuntoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Intención creada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntencionSubidaAdjunto"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    descargarAdjunto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                aid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Autorización de descarga. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DescargaAdjunto"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
         };
     };
 }

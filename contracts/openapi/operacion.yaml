@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — operacion
-  version: 0.1.0-tracer.34
+  version: 0.1.0-tracer.35
   description: >-
     Progreso del viaje: creación, transiciones, asignación, bitácora,
     incidencias y auditoría. Consumido por `bff`, nunca por el frontend directo.
@@ -1505,11 +1505,18 @@ components:
     Adjunto:
       type: object
       additionalProperties: false
-      required: [id, viaje_id, tipo_medio, tamano_bytes, estado_escaneo, creado_en]
+      required: [id, viaje_id, nombre, tipo_medio, tamano_bytes, estado_escaneo, creado_en]
       description: Metadatos de un adjunto del viaje. No incluye los bytes.
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        nombre:
+          type: string
+          minLength: 1
+          description: >-
+            Nombre de archivo declarado en la subida, para identificar el
+            adjunto en la lista de evidencia (E6-HU-027). No es el actor que lo
+            subió: el autor queda fuera de V1 (DT-11).
         tipo_medio:
           type: string
           description: Tipo MIME declarado del adjunto.
@@ -1543,8 +1550,12 @@ components:
     IntencionSubidaAdjuntoEntrada:
       type: object
       additionalProperties: false
-      required: [tipo_medio, tamano_bytes, checksum_sha256]
+      required: [nombre, tipo_medio, tamano_bytes, checksum_sha256]
       properties:
+        nombre:
+          type: string
+          minLength: 1
+          description: Nombre de archivo declarado, mostrado luego en la lista (E6-HU-027).
         tipo_medio:
           type: string
           description: Tipo MIME declarado.
