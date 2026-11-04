@@ -3,6 +3,33 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-03 [tracer.36] — filtro «viajes en curso» en `reporteViajes` (E8-T17, DT-10)
+
+**Para quién:** `pf-svc-reportes` (aplica el filtro), `pf-svc-bff` (lo propaga) y el panel interno (E8-T17), cuya primera vista del dashboard debe ser «viajes en curso» (decisión de Producto, 2026-11-03).
+
+**Resumen:** ola aditiva en `reportes.yaml` con su espejo en `bff.yaml`. `reporteViajes` gana el parámetro opcional `en_curso` (booleano) y `desde`/`hasta` pasan de obligatorios a opcionales. Sin `en_curso` el comportamiento es el de siempre: `desde` y `hasta` obligatorios, 400 si falta alguno. Con `en_curso=true` devuelve los viajes en estado NO terminal sin importar cuándo se crearon; si además se manda rango, se interseca con la fecha de creación. Antes, un viaje en curso creado fuera del periodo no podía aparecer en la vista.
+
+**Estados «en curso»:** todo estado no terminal según `contracts/estados/` (ADR 19): los terminales son `CERRADO`, `CANCELADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE`. El servicio los deriva de `EstadoViaje.EsTerminal()` del paquete generado; ningún enum se copia a mano. `PATRULLA_EN_CAMINO` (V2, inalcanzable) cuenta como no terminal y no tiene filas.
+
+**Cambios:**
+- `contracts/openapi/reportes.yaml` y `bff.yaml`: parámetro `en_curso`; `desde`/`hasta` opcionales en `reporteViajes`. `reporteEstados` no cambia.
+- Clientes Go y TS de `reportes` y `bff` regenerados. `VERSION`, `packages/api-client-ts/package.json`, el `version:` de los 8 specs y el encabezado de `contracts/events/INVENTARIO.md` a `0.1.0-tracer.36`.
+
+**Compatibilidad:** compatible en el cable. `breaking-openapi` en verde contra `tracer.35` sin allowlist (hacer opcional un parámetro obligatorio no rompe a un consumidor). `lint-openapi` en verde; el cliente Go compila y pasa `go vet`.
+
+**Atención, rompe la compilación de los consumidores Go:** al volverse opcionales, `ReporteViajesParams.Desde` y `.Hasta` pasan de `MarcaTiempo` a `*MarcaTiempo` en el cliente generado (más `EnCurso *bool`). `repclient.ReporteViajesParams{Desde: desde, Hasta: hasta}` deja de compilar al subir el pin; hay que pasar punteros. Afecta a `pf-svc-reportes` (`reportes.go`) y a `pf-svc-bff` (`internal/agregacion/monitoreo.go`). El valor serializado no cambia. Es el mismo efecto del §8 de git-workflow, y la forma de resolverlo es ajustar al subir el pin. `ReporteEstadosParams` no cambia.
+
+**Siguiente (fuera de esta ola):** `pf-svc-reportes` implementa el filtro y la validación (400 sin `en_curso` y sin rango); `pf-svc-bff` relaja `periodoDe` y propaga `en_curso`; el frontend abre el dashboard con `en_curso=true`.
+
+**Archivos modificados:**
+- `VERSION`
+- `packages/api-client-ts/package.json`
+- `contracts/openapi/_comunes.yaml`, `bff.yaml`, `catalogos.yaml`, `identidad.yaml`, `mensajeria.yaml`, `operacion.yaml`, `realtime.yaml`, `reportes.yaml`
+- `contracts/events/INVENTARIO.md`
+- `packages/api-client-go/bff/bff.gen.go`, `packages/api-client-go/reportes/reportes.gen.go`
+- `packages/api-client-ts/src/openapi/bff.gen.ts`, `packages/api-client-ts/src/openapi/reportes.gen.ts`
+- `CHANGELOG.md`
+
 ## 2026-11-03 [tracer.35] — dashboard de monitoreo y evidencia del viaje proyectados al `bff` (E8-T17, E6-HU-025/027)
 
 **Para quién:** el panel interno (`pf-web-frontend-internal`, E8-T17), que solo habla con el `bff`. Dos de las tres capacidades de E8-T17 no tenían operación en `bff.yaml`: el dashboard (vivía en `reportes.yaml`) y la evidencia (vivía en `operacion.yaml`). La descarga del expediente ya estaba publicada y no se toca.

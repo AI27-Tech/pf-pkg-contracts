@@ -972,7 +972,7 @@ export interface paths {
         };
         /**
          * Reporte operativo de viajes por periodo y alcance (audiencia interna).
-         * @description Reenvía a `reportes.reporteViajes`.
+         * @description Reenvía a `reportes.reporteViajes`. Sin `en_curso`, `desde` y `hasta` son obligatorios (400 si falta alguno). Con `en_curso=true` devuelve los viajes en estado no terminal sin importar su fecha de creación; `desde` y `hasta` son entonces opcionales y, si se mandan, se intersecan.
          */
         get: operations["reporteViajes"];
         put?: never;
@@ -3509,9 +3509,13 @@ export interface operations {
     };
     reporteViajes: {
         parameters: {
-            query: {
-                desde: components["schemas"]["MarcaTiempo"];
-                hasta: components["schemas"]["MarcaTiempo"];
+            query?: {
+                /** @description Inicio del periodo. Obligatorio salvo con `en_curso=true`. */
+                desde?: components["schemas"]["MarcaTiempo"];
+                /** @description Fin del periodo. Obligatorio salvo con `en_curso=true`. */
+                hasta?: components["schemas"]["MarcaTiempo"];
+                /** @description true devuelve solo los viajes en estado no terminal (E6-HU-025). Ausente o false no filtra por estado. */
+                en_curso?: boolean;
             };
             header?: never;
             path?: never;
