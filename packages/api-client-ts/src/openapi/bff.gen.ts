@@ -553,6 +553,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/panel/viajes/{id}/emergencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Casos de emergencia del viaje para el monitoreo (fila mínima).
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarEmergencias` y recorta cada caso a `EmergenciaViaje` (id, estado, activada_en), sin notas, actor ni personal de Reacción (DEC-135 #1). Incluye todos los estados, también `cerrada`, del más antiguo al más reciente por `activada_en`. La ven `monitorista`, `supervisor`, `coordinador` y `administrador`; otro rol interno responde `403` (DEC-132).
+         */
+        get: operations["listarEmergenciasViaje"];
+        put?: never;
+        /**
+         * El monitoreo activa una emergencia sobre el viaje (idempotente).
+         * @description Solo audiencia Interno. Activan `monitorista`, `supervisor` y `coordinador` (DEC-045 #9); otro rol interno responde `403`. El `bff` lee el viaje y, si está en `CERRADO`, `CANCELADO`, `RECHAZADO_POR_AI27` o `RECHAZADO_POR_CLIENTE`, responde 409 `viaje_en_estado_terminal` sin reenviar (DEC-135 #5; carrera en DT-16). Si no, reenvía a `mensajeria.activarEmergencia`, que registra origen `operacion` y deja el caso bajo la empresa del viaje (DEC-133). Idempotente por `activacion_id`: la reentrega devuelve el mismo caso con 200; una pulsación nueva con otro `activacion_id` crea otro caso con 201.
+         */
+        post: operations["activarEmergenciaInterno"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/panel/viajes/{id}/emergencias/{eid}/notas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * El monitoreo agrega una nota a un caso de emergencia.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.agregarNotaEmergencia`. Anotan `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-135 #3); Reacción lee y no escribe (DEC-121 #4), y otro rol interno responde `403`. Texto de 1 a 1000 caracteres, se recorta; vacío tras recortar es 400. Admitida en `abierta`, `en_atencion` y `resuelta`; en `cerrada` responde 409 `emergencia_cerrada`.
+         */
+        post: operations["agregarNotaEmergenciaInterno"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/panel/emergencias": {
         parameters: {
             query?: never;
@@ -562,7 +612,7 @@ export interface paths {
         };
         /**
          * Listar los casos de la bandeja de Reacción del llamante.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarBandejaEmergencias`: la bandeja única de emergencias (DEC-130), sin `{id}`. La ven el rol `reaccion`, miembro por su rol, y `supervisor`/`coordinador`, que ven todos los casos de la bandeja sin verificar mando (DEC-131; DT-06). Sin acotar por el tenant de quien pregunta (DEC-129). Otro rol responde `404`. Cada fila es `EmergenciaReaccion`, sin datos del viaje ni del cliente ni notas (DEC-121 #2). EXCLUYE los casos en `cerrada` y ordena del más antiguo al más reciente por `activada_en` (DEC-121 #3).
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.listarBandejaEmergencias`: la bandeja única de emergencias (DEC-130), sin `{id}`. La ven el rol `reaccion`, miembro por su rol, y `supervisor`/`coordinador`, que ven todos los casos de la bandeja sin verificar mando (DEC-131; DT-06). Sin acotar por el tenant de quien pregunta (DEC-129). Otro rol interno responde `403` (DEC-132). Cada fila es `EmergenciaReaccion`, sin datos del viaje ni del cliente ni notas (DEC-121 #2). EXCLUYE los casos en `cerrada` y ordena del más antiguo al más reciente por `activada_en` (DEC-121 #3).
          */
         get: operations["listarBandejaEmergencias"];
         put?: never;
@@ -1278,6 +1328,23 @@ export interface components {
             activacion_id: components["schemas"]["Id"];
         };
         NotaEmergenciaClienteEntrada: {
+            cuerpo: string;
+        };
+        /** @description Caso de emergencia del viaje tal como lo ve el monitoreo en el panel. El `id` es el que piden `agregarNotaEmergenciaInterno` y `cerrarEmergenciaPorId`. */
+        EmergenciaViaje: {
+            id: components["schemas"]["Id"];
+            estado: components["schemas"]["EstadoEmergencia"];
+            activada_en: components["schemas"]["MarcaTiempo"];
+        };
+        /** @description Todos los casos del viaje, del más antiguo al más reciente. Sin paginación. */
+        PaginaEmergenciasViaje: {
+            items: components["schemas"]["EmergenciaViaje"][];
+        };
+        ActivarEmergenciaInternoEntrada: {
+            /** @description Clave de idempotencia de la activación, generada por el panel. */
+            activacion_id: components["schemas"]["Id"];
+        };
+        NotaEmergenciaInternoEntrada: {
             cuerpo: string;
         };
         /** @description Conversación del viaje tal como la ve el cliente: el viaje al que pertenece, su estado de ciclo de vida y si AI27 ya la atendió. Sin `conversacion_id`, bandeja, reclamo ni actor interno. */
@@ -2894,6 +2961,118 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
+        };
+    };
+    listarEmergenciasViaje: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Casos del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaEmergenciasViaje"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    activarEmergenciaInterno: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivarEmergenciaInternoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Reentrega idempotente; caso original. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmergenciaViaje"];
+                };
+            };
+            /** @description Caso creado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmergenciaViaje"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina `viaje_en_estado_terminal`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    agregarNotaEmergenciaInterno: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+                /** @description Identificador del caso de emergencia. */
+                eid: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotaEmergenciaInternoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Nota agregada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina `emergencia_cerrada`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listarBandejaEmergencias: {
