@@ -1423,7 +1423,7 @@ export interface components {
             /** @description Unidades de la escolta reservada, cada una con su aptitud informativa. */
             unidades: components["schemas"]["UnidadAsignada"][];
         };
-        /** @description Unidad del roster tal como la expone `operacion`. Espejo de `Unidad` de `operacion`. */
+        /** @description Unidad del roster tal como la expone `operacion` (espejo de su `Unidad`), más `vehiculo` y `custodios` legibles que agrega el `bff` (tracer.38). */
         Unidad: {
             id: components["schemas"]["Id"];
             /** @description Identificador del vehículo en `catalogos`. Referencia, no FK. */
@@ -1437,6 +1437,20 @@ export interface components {
             readonly tipo: "patrulla" | "moto";
             /** @description Si la unidad está activa (disponible para asignarse). */
             activa: boolean;
+            /** @description Datos legibles del vehículo para el selector del roster (tracer.38, DT-19). Los compone el `bff` desde `catalogos`. Ausente si el vehículo ya no existe en el catálogo: el consumidor muestra `vehiculo_id`. */
+            readonly vehiculo?: components["schemas"]["VehiculoUnidad"];
+            /** @description Nombre de cada custodio de `custodios_ids`, en el mismo orden (tracer.38, DT-19). Los compone el `bff` desde `catalogos`. Un custodio que ya no existe en el catálogo no aparece. */
+            readonly custodios?: components["schemas"]["CustodioUnidad"][];
+        };
+        /** @description Opcionales como en `catalogos`, donde el vehículo puede no tenerlos capturados. */
+        VehiculoUnidad: {
+            /** @description Número económico del vehículo. */
+            economico?: string;
+            placas?: string;
+        };
+        CustodioUnidad: {
+            id: components["schemas"]["Id"];
+            nombre: string;
         };
         PaginaUnidades: {
             items: components["schemas"]["Unidad"][];

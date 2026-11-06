@@ -3,6 +3,23 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-06 [tracer.38] — unidad del roster legible en el `bff` (DT-19)
+
+**Para quién:** el panel interno, que en "Asignar escolta" y en el alta de viaje mostraba cada unidad del roster como UUID de vehículo y de custodios. También `pf-svc-bff`, que compone los datos.
+
+**Resumen:** ola aditiva en `bff.yaml`. `Unidad` (respuesta de `listarUnidades`) gana dos campos opcionales y de solo lectura:
+- `vehiculo`: `{economico, placas}`, ambos opcionales como en `catalogos`;
+- `custodios`: `[{id, nombre}]`, en el orden de `custodios_ids`.
+
+Los arma el `bff` desde `catalogos`, como ya hace con la escolta del detalle de Reacción (DEC-121). Si el vehículo o un custodio ya no existe en el catálogo, el campo o el custodio no aparece y el consumidor muestra el id. No cambia `operacion`.
+
+**Cambios:**
+- `contracts/openapi/bff.yaml`: `Unidad.vehiculo` y `Unidad.custodios`, schemas nuevos `VehiculoUnidad` y `CustodioUnidad`.
+- `info.version`, `VERSION`, `INVENTARIO.md` y `packages/api-client-ts/package.json` a `0.1.0-tracer.38`.
+- Regenerados `packages/api-client-go/bff/bff.gen.go` y `packages/api-client-ts/src/openapi/bff.gen.ts`.
+
+**Verificación:** `make generate`, `make verify`, `make check-version-ts`, `make breaking-openapi` (compatible con `v0.1.0-tracer.37`) y `make contract-tests` en verde.
+
 ## 2026-11-04 [tracer.37] — emergencias del monitoreo por viaje en el `bff` (E8-T18, DEC-135)
 
 **Para quién:** `pf-svc-bff` (sirve las tres rutas), `pf-svc-core` (adaptador en proceso) y el panel interno (E8-T18), que necesita activar, anotar y ver los casos de un viaje desde su detalle.
