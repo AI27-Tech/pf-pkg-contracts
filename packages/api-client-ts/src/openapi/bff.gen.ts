@@ -1442,10 +1442,11 @@ export interface components {
             /** @description Nombre de cada custodio de `custodios_ids`, en el mismo orden (tracer.38, DT-19). Los compone el `bff` desde `catalogos`. Un custodio que ya no existe en el catálogo no aparece. */
             readonly custodios?: components["schemas"]["CustodioUnidad"][];
         };
+        /** @description Opcionales como en `catalogos`, donde el vehículo puede no tenerlos capturados. */
         VehiculoUnidad: {
             /** @description Número económico del vehículo. */
-            economico: string;
-            placas: string;
+            economico?: string;
+            placas?: string;
         };
         CustodioUnidad: {
             id: components["schemas"]["Id"];

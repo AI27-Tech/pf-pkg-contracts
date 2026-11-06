@@ -8,7 +8,7 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 **Para quién:** el panel interno, que en "Asignar escolta" y en el alta de viaje mostraba cada unidad del roster como UUID de vehículo y de custodios. También `pf-svc-bff`, que compone los datos.
 
 **Resumen:** ola aditiva en `bff.yaml`. `Unidad` (respuesta de `listarUnidades`) gana dos campos opcionales y de solo lectura:
-- `vehiculo`: `{economico, placas}`;
+- `vehiculo`: `{economico, placas}`, ambos opcionales como en `catalogos`;
 - `custodios`: `[{id, nombre}]`, en el orden de `custodios_ids`.
 
 Los arma el `bff` desde `catalogos`, como ya hace con la escolta del detalle de Reacción (DEC-121). Si el vehículo o un custodio ya no existe en el catálogo, el campo o el custodio no aparece y el consumidor muestra el id. No cambia `operacion`.

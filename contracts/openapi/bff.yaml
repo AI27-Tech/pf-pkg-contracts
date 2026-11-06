@@ -2714,7 +2714,7 @@ components:
     VehiculoUnidad:
       type: object
       additionalProperties: false
-      required: [economico, placas]
+      description: Opcionales como en `catalogos`, donde el vehículo puede no tenerlos capturados.
       properties:
         economico: {type: string, description: Número económico del vehículo.}
         placas: {type: string}

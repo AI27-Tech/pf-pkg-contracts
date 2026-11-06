@@ -1146,11 +1146,11 @@ type UnidadEscoltaEmergencia struct {
 	Tipo string `json:"tipo"`
 }
 
-// VehiculoUnidad defines model for VehiculoUnidad.
+// VehiculoUnidad Opcionales como en `catalogos`, donde el vehículo puede no tenerlos capturados.
 type VehiculoUnidad struct {
 	// Economico Número económico del vehículo.
-	Economico string `json:"economico"`
-	Placas    string `json:"placas"`
+	Economico *string `json:"economico,omitempty"`
+	Placas    *string `json:"placas,omitempty"`
 }
 
 // VersionEsperadaEntrada defines model for VersionEsperadaEntrada.
