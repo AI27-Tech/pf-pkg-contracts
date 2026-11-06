@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.37
+  version: 0.1.0-tracer.38
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -2671,7 +2671,9 @@ components:
       type: object
       additionalProperties: false
       required: [id, vehiculo_id, custodios_ids, tipo, activa]
-      description: Unidad del roster tal como la expone `operacion`. Espejo de `Unidad` de `operacion`.
+      description: >-
+        Unidad del roster tal como la expone `operacion` (espejo de su `Unidad`),
+        más `vehiculo` y `custodios` legibles que agrega el `bff` (tracer.38).
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         vehiculo_id:
@@ -2693,6 +2695,37 @@ components:
         activa:
           type: boolean
           description: Si la unidad está activa (disponible para asignarse).
+        vehiculo:
+          readOnly: true
+          description: >-
+            Datos legibles del vehículo para el selector del roster (tracer.38,
+            DT-19). Los compone el `bff` desde `catalogos`. Ausente si el vehículo
+            ya no existe en el catálogo: el consumidor muestra `vehiculo_id`.
+          allOf: [{$ref: "#/components/schemas/VehiculoUnidad"}]
+        custodios:
+          type: array
+          readOnly: true
+          description: >-
+            Nombre de cada custodio de `custodios_ids`, en el mismo orden
+            (tracer.38, DT-19). Los compone el `bff` desde `catalogos`. Un
+            custodio que ya no existe en el catálogo no aparece.
+          items: {$ref: "#/components/schemas/CustodioUnidad"}
+
+    VehiculoUnidad:
+      type: object
+      additionalProperties: false
+      description: Opcionales como en `catalogos`, donde el vehículo puede no tenerlos capturados.
+      properties:
+        economico: {type: string, description: Número económico del vehículo.}
+        placas: {type: string}
+
+    CustodioUnidad:
+      type: object
+      additionalProperties: false
+      required: [id, nombre]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        nombre: {type: string}
 
     PaginaUnidades:
       type: object

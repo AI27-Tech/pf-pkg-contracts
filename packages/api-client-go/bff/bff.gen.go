@@ -395,6 +395,13 @@ type CustodioEscoltaEmergencia struct {
 	Telefono *string `json:"telefono,omitempty"`
 }
 
+// CustodioUnidad defines model for CustodioUnidad.
+type CustodioUnidad struct {
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id     Id     `json:"id"`
+	Nombre string `json:"nombre"`
+}
+
 // DescargaAdjunto defines model for DescargaAdjunto.
 type DescargaAdjunto struct {
 	// ExpiraEn Instante en UTC, RFC 3339.
@@ -1091,10 +1098,13 @@ type TransicionEntrada struct {
 	MotivoCierre *MotivoCierre `json:"motivo_cierre,omitempty"`
 }
 
-// Unidad Unidad del roster tal como la expone `operacion`. Espejo de `Unidad` de `operacion`.
+// Unidad Unidad del roster tal como la expone `operacion` (espejo de su `Unidad`), más `vehiculo` y `custodios` legibles que agrega el `bff` (tracer.38).
 type Unidad struct {
 	// Activa Si la unidad está activa (disponible para asignarse).
 	Activa bool `json:"activa"`
+
+	// Custodios Nombre de cada custodio de `custodios_ids`, en el mismo orden (tracer.38, DT-19). Los compone el `bff` desde `catalogos`. Un custodio que ya no existe en el catálogo no aparece.
+	Custodios *[]CustodioUnidad `json:"custodios,omitempty"`
 
 	// CustodiosIds Custodios de la unidad, por identificador. Un coche lleva uno o dos; una moto, uno (ADR 31).
 	CustodiosIds []Id `json:"custodios_ids"`
@@ -1104,6 +1114,9 @@ type Unidad struct {
 
 	// Tipo Tipo de unidad, SOLO LECTURA, derivado del vehículo (coche -> patrulla, moto -> moto, ADR 31). Nunca se envía en una petición.
 	Tipo *UnidadTipo `json:"tipo,omitempty"`
+
+	// Vehiculo Datos legibles del vehículo para el selector del roster (tracer.38, DT-19). Los compone el `bff` desde `catalogos`. Ausente si el vehículo ya no existe en el catálogo: el consumidor muestra `vehiculo_id`.
+	Vehiculo *VehiculoUnidad `json:"vehiculo,omitempty"`
 
 	// VehiculoId Identificador del vehículo en `catalogos`. Referencia, no FK.
 	VehiculoId Id `json:"vehiculo_id"`
@@ -1131,6 +1144,13 @@ type UnidadEscoltaEmergencia struct {
 
 	// Tipo Token de `Unidad.tipo` (`patrulla` o `moto`). Se declara `string` y no enum para no renombrar las constantes Go de `UnidadTipo` del cliente generado.
 	Tipo string `json:"tipo"`
+}
+
+// VehiculoUnidad Opcionales como en `catalogos`, donde el vehículo puede no tenerlos capturados.
+type VehiculoUnidad struct {
+	// Economico Número económico del vehículo.
+	Economico *string `json:"economico,omitempty"`
+	Placas    *string `json:"placas,omitempty"`
 }
 
 // VersionEsperadaEntrada defines model for VersionEsperadaEntrada.
