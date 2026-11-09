@@ -831,8 +831,11 @@ components:
     VehiculoEntrada:
       type: object
       additionalProperties: false
-      required: [tipo, estado, cliente_id]
-      description: Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión.
+      required: [tipo, estado]
+      description: >-
+        Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión.
+        `cliente_id` es obsoleto (DEC-143): la flota es de AI27, no de un
+        cliente. Ya no es obligatorio; si llega, se acepta y se ignora.
       properties:
         tipo:
           type: string

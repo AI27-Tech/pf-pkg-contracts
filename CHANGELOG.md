@@ -11,6 +11,8 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 
 **Escolta del viaje para la ficha técnica (E8-T12):** `obtenerAsignacion` (`GET /api/v1/viajes/{id}/asignacion`) se proyecta al `bff` con cada unidad legible (`vehiculo` y `custodios`, como `listarUnidades`). Cualquier rol interno la lee; el Cliente recibe `404`. La ficha deja de pedir el roster completo con `listarUnidades` (que responde `403` al monitorista) y muestra la escolta de su viaje. Schema nuevo `EscoltaVigente` en el bff, espejo del de `operacion` con `Unidad` legible.
 
+**La flota es de AI27 (DEC-143):** `VehiculoEntrada` del `bff` no lleva `cliente_id`. En `catalogos.yaml`, `cliente_id` deja de ser obligatorio en `VehiculoEntrada` y queda obsoleto: si llega se acepta y se ignora (cambio compatible: solo relaja la entrada).
+
 **Reglas (DEC-142):**
 - Unidades (`crearUnidad`, `obtenerUnidad`, `modificarUnidad`): entran `jefe_operativo` y `administrador`; otro rol, `403` (#3).
 - Exclusividad: un vehículo y un custodio están en una sola unidad activa a la vez; en una desactivada se pueden reusar. `409` `vehiculo_en_otra_unidad` o `custodio_en_otra_unidad`, también al reactivar (#4).

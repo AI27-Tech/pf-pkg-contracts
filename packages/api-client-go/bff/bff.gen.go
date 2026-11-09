@@ -1338,8 +1338,6 @@ type VehiculoCambiosTipo string
 
 // VehiculoEntrada Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión. Espejo de `VehiculoEntrada` de `catalogos`.
 type VehiculoEntrada struct {
-	// ClienteId Cliente contra cuyo contrato/SLA `catalogos` evalúa la aptitud informativa del vehículo (DEC-055). Requerido en `catalogos`.
-	ClienteId Id                    `json:"cliente_id"`
 	Economico *string               `json:"economico,omitempty"`
 	Estado    VehiculoEntradaEstado `json:"estado"`
 	Placas    *string               `json:"placas,omitempty"`

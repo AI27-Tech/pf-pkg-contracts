@@ -3169,7 +3169,7 @@ components:
     VehiculoEntrada:
       type: object
       additionalProperties: false
-      required: [tipo, estado, cliente_id]
+      required: [tipo, estado]
       description: >-
         Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión.
         Espejo de `VehiculoEntrada` de `catalogos`.
@@ -3182,11 +3182,6 @@ components:
         estado:
           type: string
           enum: [activa, inactiva]
-        cliente_id:
-          allOf: [{$ref: "_comunes.yaml#/components/schemas/Id"}]
-          description: >-
-            Cliente contra cuyo contrato/SLA `catalogos` evalúa la aptitud
-            informativa del vehículo (DEC-055). Requerido en `catalogos`.
 
     VehiculoCambios:
       type: object

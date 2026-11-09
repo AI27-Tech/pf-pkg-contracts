@@ -1642,8 +1642,6 @@ export interface components {
             placas?: string;
             /** @enum {string} */
             estado: "activa" | "inactiva";
-            /** @description Cliente contra cuyo contrato/SLA `catalogos` evalúa la aptitud informativa del vehículo (DEC-055). Requerido en `catalogos`. */
-            cliente_id: components["schemas"]["Id"];
         };
         /** @description Cuerpo de modificación de un vehículo (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. Espejo de `VehiculoCambios` de `catalogos`. */
         VehiculoCambios: {
