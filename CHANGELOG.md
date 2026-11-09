@@ -9,6 +9,8 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 
 **Resumen:** ola aditiva. En `operacion.yaml`, `crearUnidad` y `modificarUnidad` declaran `409` con su `codigo` y documentan sus `400` y `403`; la "PREGUNTA ABIERTA (Operación)" sobre exclusividad se reemplaza por la regla decidida. En `bff.yaml`, once proyecciones espejo nuevas, solo audiencia Interno, con los mismos `operationId` de `operacion` y `catalogos`. No cambia la forma de `Unidad`, `UnidadEntrada` ni `UnidadModificacion`.
 
+**Escolta del viaje para la ficha técnica (E8-T12):** `obtenerAsignacion` (`GET /api/v1/viajes/{id}/asignacion`) se proyecta al `bff` con cada unidad legible (`vehiculo` y `custodios`, como `listarUnidades`). Cualquier rol interno la lee; el Cliente recibe `404`. La ficha deja de pedir el roster completo con `listarUnidades` (que responde `403` al monitorista) y muestra la escolta de su viaje. Schema nuevo `EscoltaVigente` en el bff, espejo del de `operacion` con `Unidad` legible.
+
 **Reglas (DEC-142):**
 - Unidades (`crearUnidad`, `obtenerUnidad`, `modificarUnidad`): entran `jefe_operativo` y `administrador`; otro rol, `403` (#3).
 - Exclusividad: un vehículo y un custodio están en una sola unidad activa a la vez; en una desactivada se pueden reusar. `409` `vehiculo_en_otra_unidad` o `custodio_en_otra_unidad`, también al reactivar (#4).
@@ -18,7 +20,7 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 
 **Cambios:**
 - `contracts/openapi/operacion.yaml`: `409` en `crearUnidad` y `modificarUnidad`; `403` en `obtenerUnidad`; descripciones con roles, `400` y `codigo`; comentario de exclusividad en el schema `Unidad`.
-- `contracts/openapi/bff.yaml`: `crearUnidad` (`POST /api/v1/unidades`), `obtenerUnidad` y `modificarUnidad` (`GET` y `PATCH /api/v1/unidades/{id}`), que responden la `Unidad` legible de tracer.38; `listarVehiculos`, `crearVehiculo`, `obtenerVehiculo`, `actualizarVehiculo`, `listarCustodios`, `crearCustodio`, `obtenerCustodio`, `actualizarCustodio` bajo `/api/v1/vehiculos` y `/api/v1/custodios`. Schemas espejo `UnidadEntrada`, `UnidadModificacion`, `Vehiculo`, `VehiculoEntrada`, `VehiculoCambios`, `PaginaVehiculos`, `Custodio`, `CustodioEntrada`, `CustodioCambios`, `PaginaCustodios`. Tags `roster` y `recursos`.
+- `contracts/openapi/bff.yaml`: `obtenerAsignacion` (`GET /api/v1/viajes/{id}/asignacion`) y schema `EscoltaVigente`; `crearUnidad` (`POST /api/v1/unidades`), `obtenerUnidad` y `modificarUnidad` (`GET` y `PATCH /api/v1/unidades/{id}`), que responden la `Unidad` legible de tracer.38; `listarVehiculos`, `crearVehiculo`, `obtenerVehiculo`, `actualizarVehiculo`, `listarCustodios`, `crearCustodio`, `obtenerCustodio`, `actualizarCustodio` bajo `/api/v1/vehiculos` y `/api/v1/custodios`. Schemas espejo `UnidadEntrada`, `UnidadModificacion`, `Vehiculo`, `VehiculoEntrada`, `VehiculoCambios`, `PaginaVehiculos`, `Custodio`, `CustodioEntrada`, `CustodioCambios`, `PaginaCustodios`. Tags `roster` y `recursos`.
 - Las listas proyectan solo `cursor`. No se proyectan `ids` (lectura por lote, mismo criterio que `listarClientes`) ni `a_fecha` (lectura probatoria); agregarlos después es aditivo. `catalogos` no filtra por estado: las listas traen activos e inactivos.
 - `info.version`, `VERSION`, `INVENTARIO.md` y `packages/api-client-ts/package.json` a `0.1.0-tracer.39`.
 - Regenerados `packages/api-client-go/{bff,operacion}` y `packages/api-client-ts/src/openapi/{bff,operacion}.gen.ts`.
