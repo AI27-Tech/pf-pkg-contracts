@@ -184,7 +184,7 @@ export interface paths {
         put?: never;
         /**
          * Crear una unidad del roster (jefe_operativo).
-         * @description Arma una `unidad` emparejando un vehículo con uno o dos custodios (coche: uno o dos; moto: uno — ADR 31). El `tipo` NO se envía: se deriva del vehículo en el servidor.
+         * @description Arma una `unidad` emparejando un vehículo con uno o dos custodios (coche: uno o dos; moto: uno — ADR 31). El `tipo` NO se envía: se deriva del vehículo en el servidor. Crean `jefe_operativo` y `administrador` (DEC-142 #3). El vehículo y los custodios no pueden estar en otra unidad activa (DEC-142 #4). Responde 400 si el vehículo o algún custodio no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
          */
         post: operations["crearUnidad"];
         delete?: never;
@@ -202,7 +202,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Detalle de una unidad del roster. */
+        /**
+         * Detalle de una unidad del roster.
+         * @description Leen `jefe_operativo` y `administrador` (DEC-142
+         */
         get: operations["obtenerUnidad"];
         put?: never;
         post?: never;
@@ -211,7 +214,7 @@ export interface paths {
         head?: never;
         /**
          * Modificar una unidad del roster, incluido activar/desactivar.
-         * @description Cambia el vehículo, los custodios o el estado `activa` de la unidad. Activar/desactivar es un cambio de `activa` por esta misma ruta. El `tipo` nunca se escribe: se deriva del vehículo.
+         * @description Cambia el vehículo, los custodios o el estado `activa` de la unidad. Activar/desactivar es un cambio de `activa` por esta misma ruta. El `tipo` nunca se escribe: se deriva del vehículo. Modifican `jefe_operativo` y `administrador` (DEC-142 #3). La exclusividad (DEC-142 #4) se revisa sobre el resultado del cambio, también al reactivar. Una unidad con reserva en un viaje no terminal no se edita ni se desactiva: primero se reasigna la escolta de ese viaje (`PATCH /api/v1/viajes/{id}/asignacion`, DEC-142 #5). Responde 400 si el vehículo o algún custodio no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
          */
         patch: operations["modificarUnidad"];
         trace?: never;
@@ -1267,6 +1270,15 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            /** @description Exclusividad del roster (DEC-142 #4). `codigo` de máquina `vehiculo_en_otra_unidad` si el vehículo ya está en otra unidad activa, o `custodio_en_otra_unidad` si algún custodio lo está. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     obtenerUnidad: {
@@ -1290,6 +1302,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -1321,6 +1334,15 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
+            /** @description El cambio choca con el roster (DEC-142 #4 y #5). `codigo` de máquina: `vehiculo_en_otra_unidad` o `custodio_en_otra_unidad` si el vehículo o algún custodio ya está en otra unidad activa (también al reactivar); `unidad_con_reserva_vigente` si la unidad tiene una reserva en un viaje no terminal. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listarBitacora: {

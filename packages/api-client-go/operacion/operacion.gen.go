@@ -2893,6 +2893,7 @@ type CrearUnidadResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON409      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -2916,6 +2917,7 @@ type ObtenerUnidadResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *Unidad
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -2943,6 +2945,7 @@ type ModificarUnidadResponse struct {
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
 	JSON404      *NoEncontrado
+	JSON409      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -4019,6 +4022,13 @@ func ParseCrearUnidadResponse(rsp *http.Response) (*CrearUnidadResponse, error) 
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
 	}
 
 	return response, nil
@@ -4051,6 +4061,13 @@ func ParseObtenerUnidadResponse(rsp *http.Response) (*ObtenerUnidadResponse, err
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
@@ -4112,6 +4129,13 @@ func ParseModificarUnidadResponse(rsp *http.Response) (*ModificarUnidadResponse,
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

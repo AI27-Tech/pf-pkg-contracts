@@ -429,7 +429,7 @@ export interface components {
              */
             vigencia_hasta?: string | null;
         };
-        /** @description Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión. */
+        /** @description Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión. `cliente_id` es obsoleto (DEC-143): la flota es de AI27, no de un cliente. Ya no es obligatorio; si llega, se acepta y se ignora. */
         VehiculoEntrada: {
             /** @enum {string} */
             tipo: "coche" | "moto";
@@ -437,7 +437,7 @@ export interface components {
             placas?: string;
             /** @enum {string} */
             estado: "activa" | "inactiva";
-            cliente_id: components["schemas"]["Id"];
+            cliente_id?: components["schemas"]["Id"];
         };
         /** @description Cuerpo de modificación de un vehículo (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. No incluye `id` ni `version` (los gobierna el servidor). */
         VehiculoCambios: {
