@@ -3,6 +3,34 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-09 [tracer.39] — `/roster` del Jefe Operativo y vehículos y custodios de `/catalogos` en el `bff` (E8-T21, DEC-142)
+
+**Para quién:** el panel interno, que necesita armar el roster (alta y edición de unidades) en `/roster` y dar de alta vehículos y custodios en `/catalogos` (adelanto de E8-T16). También `pf-svc-operacion`, que implementa las reglas del roster, y `pf-svc-bff`, que reenvía. Hoy las unidades se siembran por SQL.
+
+**Resumen:** ola aditiva. En `operacion.yaml`, `crearUnidad` y `modificarUnidad` declaran `409` con su `codigo` y documentan sus `400` y `403`; la "PREGUNTA ABIERTA (Operación)" sobre exclusividad se reemplaza por la regla decidida. En `bff.yaml`, once proyecciones espejo nuevas, solo audiencia Interno, con los mismos `operationId` de `operacion` y `catalogos`. No cambia la forma de `Unidad`, `UnidadEntrada` ni `UnidadModificacion`.
+
+**Escolta del viaje para la ficha técnica (E8-T12):** `obtenerAsignacion` (`GET /api/v1/viajes/{id}/asignacion`) se proyecta al `bff` con cada unidad legible (`vehiculo` y `custodios`, como `listarUnidades`). Cualquier rol interno la lee; el Cliente recibe `404`. La ficha deja de pedir el roster completo con `listarUnidades` (que responde `403` al monitorista) y muestra la escolta de su viaje. Schema nuevo `EscoltaVigente` en el bff, espejo del de `operacion` con `Unidad` legible.
+
+**La flota es de AI27 (DEC-143):** `VehiculoEntrada` del `bff` no lleva `cliente_id`. En `catalogos.yaml`, `cliente_id` deja de ser obligatorio en `VehiculoEntrada` y queda obsoleto: si llega se acepta y se ignora (cambio compatible: solo relaja la entrada).
+
+**Reglas (DEC-142):**
+- Unidades (`crearUnidad`, `obtenerUnidad`, `modificarUnidad`): entran `jefe_operativo` y `administrador`; otro rol, `403` (#3).
+- Exclusividad: un vehículo y un custodio están en una sola unidad activa a la vez; en una desactivada se pueden reusar. `409` `vehiculo_en_otra_unidad` o `custodio_en_otra_unidad`, también al reactivar (#4).
+- Reserva: una unidad con reserva en un viaje no terminal no se edita ni se desactiva. `409` `unidad_con_reserva_vigente`, solo en `modificarUnidad` (#5).
+- `400`: vehículo o custodio inexistente o inactivo, custodios repetidos, o cantidad fuera de regla por tipo (patrulla 1 o 2, moto 1).
+- Vehículos y custodios: leen (`listar*`, `obtener*`) `jefe_operativo` y `administrador`; escribe (`crear*`, `actualizar*`) solo `administrador` (#6). `catalogos` no revisa rol, así que la guarda la aplica el `bff`.
+
+**Cambios:**
+- `contracts/openapi/operacion.yaml`: `409` en `crearUnidad` y `modificarUnidad`; `403` en `obtenerUnidad`; descripciones con roles, `400` y `codigo`; comentario de exclusividad en el schema `Unidad`.
+- `contracts/openapi/bff.yaml`: `obtenerAsignacion` (`GET /api/v1/viajes/{id}/asignacion`) y schema `EscoltaVigente`; `crearUnidad` (`POST /api/v1/unidades`), `obtenerUnidad` y `modificarUnidad` (`GET` y `PATCH /api/v1/unidades/{id}`), que responden la `Unidad` legible de tracer.38; `listarVehiculos`, `crearVehiculo`, `obtenerVehiculo`, `actualizarVehiculo`, `listarCustodios`, `crearCustodio`, `obtenerCustodio`, `actualizarCustodio` bajo `/api/v1/vehiculos` y `/api/v1/custodios`. Schemas espejo `UnidadEntrada`, `UnidadModificacion`, `Vehiculo`, `VehiculoEntrada`, `VehiculoCambios`, `PaginaVehiculos`, `Custodio`, `CustodioEntrada`, `CustodioCambios`, `PaginaCustodios`. Tags `roster` y `recursos`.
+- Las listas proyectan solo `cursor`. No se proyectan `ids` (lectura por lote, mismo criterio que `listarClientes`) ni `a_fecha` (lectura probatoria); agregarlos después es aditivo. `catalogos` no filtra por estado: las listas traen activos e inactivos.
+- `info.version`, `VERSION`, `INVENTARIO.md` y `packages/api-client-ts/package.json` a `0.1.0-tracer.39`.
+- Regenerados `packages/api-client-go/{bff,operacion}` y `packages/api-client-ts/src/openapi/{bff,operacion}.gen.ts`.
+
+**Aviso al subir el pin del cliente Go del `bff` (git-workflow §8):** los enums nuevos comparten valores con enums que ya existían, así que el generador prefija constantes viejas. Cambian `Custodio` y `Vehiculo` (de `AptitudRecursoRecurso`) a `AptitudRecursoRecursoCustodio` y `AptitudRecursoRecursoVehiculo`; `Activo` e `Inactivo` (de `ClienteEstado`) a `ClienteEstadoActivo` y `ClienteEstadoInactivo`; `Moto` y `Patrulla` (de `UnidadTipo`) a `UnidadTipoMoto` y `UnidadTipoPatrulla`. `bffclient.Vehiculo` y `bffclient.Custodio` pasan a ser los tipos nuevos. El valor en el cable no cambia.
+
+**Verificación:** `make generate`, `make verify`, `make check-version-ts`, `make check-reproducible`, `make breaking-openapi` (compatible con `v0.1.0-tracer.38`) y `make contract-tests` en verde.
+
 ## 2026-11-06 [tracer.38] — unidad del roster legible en el `bff` (DT-19)
 
 **Para quién:** el panel interno, que en "Asignar escolta" y en el alta de viaje mostraba cada unidad del roster como UUID de vehículo y de custodios. También `pf-svc-bff`, que compone los datos.

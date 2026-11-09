@@ -404,10 +404,10 @@ type VehiculoCambiosEstado string
 // VehiculoCambiosTipo defines model for VehiculoCambios.Tipo.
 type VehiculoCambiosTipo string
 
-// VehiculoEntrada Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión.
+// VehiculoEntrada Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión. `cliente_id` es obsoleto (DEC-143): la flota es de AI27, no de un cliente. Ya no es obligatorio; si llega, se acepta y se ignora.
 type VehiculoEntrada struct {
 	// ClienteId Identificador único (UUID). Nunca un correlativo expuesto.
-	ClienteId Id                    `json:"cliente_id"`
+	ClienteId *Id                   `json:"cliente_id,omitempty"`
 	Economico *string               `json:"economico,omitempty"`
 	Estado    VehiculoEntradaEstado `json:"estado"`
 	Placas    *string               `json:"placas,omitempty"`
