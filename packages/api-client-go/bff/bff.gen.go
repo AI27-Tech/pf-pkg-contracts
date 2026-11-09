@@ -687,6 +687,15 @@ type Error struct {
 	Mensaje string `json:"mensaje"`
 }
 
+// EscoltaVigente Escolta de la asignación vigente del viaje (`obtenerAsignacion`). Espejo de `EscoltaVigente` de `operacion`, con cada unidad en la forma legible del bff (`vehiculo` y `custodios`).
+type EscoltaVigente struct {
+	// Unidades Unidades reservadas, ordenadas por `id`. Vacío sin asignación vigente.
+	Unidades []Unidad `json:"unidades"`
+
+	// ViajeId Identificador único (UUID). Nunca un correlativo expuesto.
+	ViajeId Id `json:"viaje_id"`
+}
+
 // Estadia Estadía del viaje. La duración se deriva de `inicio` y `cierre`; sin `prolongada` ni umbral (DEC-038). Espejo de `Estadia` de `operacion`.
 type Estadia struct {
 	// Cierre Cierre de la estadía, o null si sigue abierta. Mismo formato que `MarcaTiempo`.
@@ -1952,6 +1961,9 @@ type ClientInterface interface {
 	// DescargarAdjunto request
 	DescargarAdjunto(ctx context.Context, id Id, aid Id, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ObtenerAsignacion request
+	ObtenerAsignacion(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AsignarRecursosWithBody request with any body
 	AsignarRecursosWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -2856,6 +2868,18 @@ func (c *Client) CrearIntencionSubidaAdjunto(ctx context.Context, id Id, body Cr
 
 func (c *Client) DescargarAdjunto(ctx context.Context, id Id, aid Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDescargarAdjuntoRequest(c.Server, id, aid)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerAsignacion(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerAsignacionRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -5509,6 +5533,40 @@ func NewDescargarAdjuntoRequest(server string, id Id, aid Id) (*http.Request, er
 	return req, nil
 }
 
+// NewObtenerAsignacionRequest generates requests for ObtenerAsignacion
+func NewObtenerAsignacionRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/viajes/%s/asignacion", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewAsignarRecursosRequest calls the generic AsignarRecursos builder with application/json body
 func NewAsignarRecursosRequest(server string, id Id, body AsignarRecursosJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -6840,6 +6898,9 @@ type ClientWithResponsesInterface interface {
 	// DescargarAdjuntoWithResponse request
 	DescargarAdjuntoWithResponse(ctx context.Context, id Id, aid Id, reqEditors ...RequestEditorFn) (*DescargarAdjuntoResponse, error)
 
+	// ObtenerAsignacionWithResponse request
+	ObtenerAsignacionWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerAsignacionResponse, error)
+
 	// AsignarRecursosWithBodyWithResponse request with any body
 	AsignarRecursosWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AsignarRecursosResponse, error)
 
@@ -8127,6 +8188,30 @@ func (r DescargarAdjuntoResponse) StatusCode() int {
 	return 0
 }
 
+type ObtenerAsignacionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *EscoltaVigente
+	JSON401      *NoAutorizado
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerAsignacionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerAsignacionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type AsignarRecursosResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -9306,6 +9391,15 @@ func (c *ClientWithResponses) DescargarAdjuntoWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseDescargarAdjuntoResponse(rsp)
+}
+
+// ObtenerAsignacionWithResponse request returning *ObtenerAsignacionResponse
+func (c *ClientWithResponses) ObtenerAsignacionWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerAsignacionResponse, error) {
+	rsp, err := c.ObtenerAsignacion(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerAsignacionResponse(rsp)
 }
 
 // AsignarRecursosWithBodyWithResponse request with arbitrary body returning *AsignarRecursosResponse
@@ -11921,6 +12015,46 @@ func ParseDescargarAdjuntoResponse(rsp *http.Response) (*DescargarAdjuntoRespons
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerAsignacionResponse parses an HTTP response from a ObtenerAsignacionWithResponse call
+func ParseObtenerAsignacionResponse(rsp *http.Response) (*ObtenerAsignacionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerAsignacionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EscoltaVigente
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado

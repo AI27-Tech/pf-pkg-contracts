@@ -1550,6 +1550,25 @@ paths:
       in: path
       required: true
       schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerAsignacion
+      tags: [viajes]
+      summary: Escolta vigente del viaje, con sus unidades legibles (audiencia interna).
+      description: >-
+        Reenvía a `operacion.obtenerAsignacion` y compone cada unidad con el
+        vehículo y los custodios legibles de `catalogos`, como `listarUnidades`
+        (tracer.38). Es la lectura de la ficha técnica y del detalle del viaje:
+        la escolta asignada a ESTE viaje, no el roster completo (DEC-142,
+        E8-T12). Cualquier rol interno la lee; un actor Cliente recibe 404.
+        `unidades` vacío con 200 si el viaje no tiene asignación vigente.
+      responses:
+        "200":
+          description: Escolta vigente; `unidades` vacío si no hay asignación.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EscoltaVigente"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
     post:
       operationId: asignarRecursos
       tags: [viajes]
@@ -3039,6 +3058,21 @@ components:
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         nombre: {type: string}
+
+    EscoltaVigente:
+      type: object
+      additionalProperties: false
+      required: [viaje_id, unidades]
+      description: >-
+        Escolta de la asignación vigente del viaje (`obtenerAsignacion`).
+        Espejo de `EscoltaVigente` de `operacion`, con cada unidad en la forma
+        legible del bff (`vehiculo` y `custodios`).
+      properties:
+        viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        unidades:
+          type: array
+          description: Unidades reservadas, ordenadas por `id`. Vacío sin asignación vigente.
+          items: {$ref: "#/components/schemas/Unidad"}
 
     PaginaUnidades:
       type: object
