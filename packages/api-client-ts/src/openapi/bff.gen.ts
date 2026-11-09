@@ -862,11 +862,142 @@ export interface paths {
          */
         get: operations["listarUnidades"];
         put?: never;
-        post?: never;
+        /**
+         * Crear una unidad del roster (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `operacion.crearUnidad`. Crean `jefe_operativo` y `administrador` (DEC-142 #3). El `tipo` no se envía: se deriva del vehículo. El vehículo y los custodios no pueden estar en otra unidad activa (DEC-142 #4). Responde 400 si el vehículo o algún custodio no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
+         */
+        post: operations["crearUnidad"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/unidades/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Detalle de una unidad del roster (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `operacion.obtenerUnidad`. Leen `jefe_operativo` y `administrador` (DEC-142 #3); otro rol responde 403.
+         */
+        get: operations["obtenerUnidad"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modificar una unidad del roster, incluido activar/desactivar (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `operacion.modificarUnidad`. Modifican `jefe_operativo` y `administrador` (DEC-142 #3). Activar o desactivar es cambiar `activa`. La exclusividad (DEC-142 #4) se revisa también al reactivar. Una unidad con reserva en un viaje no terminal no se edita ni se desactiva: primero se reasigna la escolta de ese viaje (DEC-142 #5).
+         *     Responde 400 si el vehículo o algún custodio no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
+         */
+        patch: operations["modificarUnidad"];
+        trace?: never;
+    };
+    "/api/v1/vehiculos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar vehículos de la flota (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.listarVehiculos`, paginado por cursor, con vehículos activos e inactivos (`catalogos` no filtra por estado). Leen `jefe_operativo` y `administrador`.
+         */
+        get: operations["listarVehiculos"];
+        put?: never;
+        /**
+         * Alta de un vehículo (audiencia interna, solo administrador).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.crearVehiculo`, que crea la versión 1. Escribe solo `administrador` (DEC-142 #6).
+         */
+        post: operations["crearVehiculo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vehiculos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Vehículo vigente (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.obtenerVehiculo` y devuelve la versión vigente. Leen `jefe_operativo` y `administrador`.
+         */
+        get: operations["obtenerVehiculo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modifica un vehículo creando una nueva versión (audiencia interna, solo administrador).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.actualizarVehiculo`, que no sobrescribe: crea la versión siguiente. Activar o desactivar es cambiar `estado`. Escribe solo `administrador` (DEC-142 #6).
+         */
+        patch: operations["actualizarVehiculo"];
+        trace?: never;
+    };
+    "/api/v1/custodios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar custodios (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.listarCustodios`, paginado por cursor, con custodios activos e inactivos (`catalogos` no filtra por estado). Leen `jefe_operativo` y `administrador`.
+         */
+        get: operations["listarCustodios"];
+        put?: never;
+        /**
+         * Alta de un custodio (audiencia interna, solo administrador).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.crearCustodio`, que crea la versión 1. Escribe solo `administrador` (DEC-142 #6).
+         */
+        post: operations["crearCustodio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/custodios/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Custodio vigente (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.obtenerCustodio` y devuelve la versión vigente. Leen `jefe_operativo` y `administrador`.
+         */
+        get: operations["obtenerCustodio"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Modifica un custodio creando una nueva versión (audiencia interna, solo administrador).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.actualizarCustodio`, que no sobrescribe: crea la versión siguiente. Activar o desactivar es cambiar `estado`. Escribe solo `administrador` (DEC-142 #6).
+         */
+        patch: operations["actualizarCustodio"];
         trace?: never;
     };
     "/api/v1/viajes/{id}/bitacora": {
@@ -1454,6 +1585,118 @@ export interface components {
         };
         PaginaUnidades: {
             items: components["schemas"]["Unidad"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
+        };
+        /** @description Alta de unidad. El `tipo` NO se envía: se deriva del vehículo. `activa` es opcional al crear (el servidor decide el valor por defecto). Espejo de `UnidadEntrada` de `operacion`. */
+        UnidadEntrada: {
+            vehiculo_id: components["schemas"]["Id"];
+            custodios_ids: components["schemas"]["Id"][];
+            /** @description Opcional al crear. Si se omite, el servidor fija el valor por defecto. */
+            activa?: boolean;
+        };
+        /** @description Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). Espejo de `UnidadModificacion` de `operacion`. */
+        UnidadModificacion: {
+            vehiculo_id?: components["schemas"]["Id"];
+            custodios_ids?: components["schemas"]["Id"][];
+            activa?: boolean;
+        };
+        /** @description Vehículo de la flota de AI27 (átomo de `catalogos`). Espejo de `Vehiculo` de `catalogos`. */
+        Vehiculo: {
+            id: components["schemas"]["Id"];
+            /** @description Versión de la entidad. Opcional como en `catalogos`, que la llena siempre. */
+            version?: number;
+            /**
+             * @description Tipo de vehículo. Un coche lleva uno o dos custodios; una moto, uno (ADR 31). El `tipo` de la unidad (patrulla|moto) se deriva de este valor en `operacion`.
+             * @enum {string}
+             */
+            tipo: "coche" | "moto";
+            /** @description Número económico del vehículo. */
+            economico?: string;
+            placas?: string;
+            /** @enum {string} */
+            estado: "activa" | "inactiva";
+            /** @description Inicio de vigencia de esta versión. */
+            vigencia_desde?: components["schemas"]["MarcaTiempo"];
+            /**
+             * Format: date-time
+             * @description Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+             */
+            vigencia_hasta?: string | null;
+        };
+        /** @description Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión. Espejo de `VehiculoEntrada` de `catalogos`. */
+        VehiculoEntrada: {
+            /** @enum {string} */
+            tipo: "coche" | "moto";
+            economico?: string;
+            placas?: string;
+            /** @enum {string} */
+            estado: "activa" | "inactiva";
+            /** @description Cliente contra cuyo contrato/SLA `catalogos` evalúa la aptitud informativa del vehículo (DEC-055). Requerido en `catalogos`. */
+            cliente_id: components["schemas"]["Id"];
+        };
+        /** @description Cuerpo de modificación de un vehículo (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. Espejo de `VehiculoCambios` de `catalogos`. */
+        VehiculoCambios: {
+            /** @enum {string} */
+            tipo?: "coche" | "moto";
+            economico?: string;
+            placas?: string;
+            /** @enum {string} */
+            estado?: "activa" | "inactiva";
+        };
+        PaginaVehiculos: {
+            items: components["schemas"]["Vehiculo"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
+        };
+        /** @description Custodio de AI27 (átomo de `catalogos`, persona). Espejo de `Custodio` de `catalogos`. Datos personales (nombre, teléfono). */
+        Custodio: {
+            id: components["schemas"]["Id"];
+            /** @description Versión de la entidad. Opcional como en `catalogos`, que la llena siempre. */
+            version?: number;
+            nombre: string;
+            telefono?: string;
+            /** @enum {string} */
+            estado: "activo" | "inactivo";
+            /**
+             * Format: uuid
+             * @description Referencia opcional al usuario de `identidad` cuando el custodio también tiene acceso al sistema. Identificador, no FK. null si el custodio no es usuario.
+             */
+            usuario_id?: string | null;
+            /** @description Inicio de vigencia de esta versión. */
+            vigencia_desde?: components["schemas"]["MarcaTiempo"];
+            /**
+             * Format: date-time
+             * @description Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+             */
+            vigencia_hasta?: string | null;
+        };
+        /** @description Cuerpo de alta de un custodio (POST). El servicio asigna id y versión. Espejo de `CustodioEntrada` de `catalogos`. */
+        CustodioEntrada: {
+            nombre: string;
+            telefono?: string;
+            /** @enum {string} */
+            estado: "activo" | "inactivo";
+            /**
+             * Format: uuid
+             * @description Referencia opcional al usuario de `identidad` (identificador, no FK).
+             */
+            usuario_id?: string | null;
+        };
+        /** @description Cuerpo de modificación de un custodio (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. Espejo de `CustodioCambios` de `catalogos`. */
+        CustodioCambios: {
+            nombre?: string;
+            telefono?: string;
+            /** @enum {string} */
+            estado?: "activo" | "inactivo";
+            /**
+             * Format: uuid
+             * @description Referencia opcional al usuario de `identidad` (identificador, no FK).
+             */
+            usuario_id?: string | null;
+        };
+        PaginaCustodios: {
+            items: components["schemas"]["Custodio"][];
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
@@ -3429,6 +3672,324 @@ export interface operations {
             };
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+        };
+    };
+    crearUnidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnidadEntrada"];
+            };
+        };
+        responses: {
+            /** @description Unidad creada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unidad"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            /** @description Exclusividad del roster (DEC-142 #4). `codigo` de máquina `vehiculo_en_otra_unidad` si el vehículo ya está en otra unidad activa, o `custodio_en_otra_unidad` si algún custodio lo está. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    obtenerUnidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unidad. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unidad"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    modificarUnidad: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnidadModificacion"];
+            };
+        };
+        responses: {
+            /** @description Unidad modificada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unidad"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description El cambio choca con el roster (DEC-142 #4 y #5). `codigo` de máquina: `vehiculo_en_otra_unidad` o `custodio_en_otra_unidad` si el vehículo o algún custodio ya está en otra unidad activa (también al reactivar); `unidad_con_reserva_vigente` si la unidad tiene una reserva en un viaje no terminal. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listarVehiculos: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de vehículos. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaVehiculos"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    crearVehiculo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VehiculoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Vehículo creado (versión 1). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Vehiculo"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
+    obtenerVehiculo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vehículo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Vehiculo"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    actualizarVehiculo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VehiculoCambios"];
+            };
+        };
+        responses: {
+            /** @description Vehículo con su nueva versión. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Vehiculo"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
+    listarCustodios: {
+        parameters: {
+            query?: {
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de custodios. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaCustodios"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    crearCustodio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustodioEntrada"];
+            };
+        };
+        responses: {
+            /** @description Custodio creado (versión 1). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Custodio"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
+    obtenerCustodio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Custodio. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Custodio"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    actualizarCustodio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustodioCambios"];
+            };
+        };
+        responses: {
+            /** @description Custodio con su nueva versión. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Custodio"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["Conflicto"];
         };
     };
     listarBitacora: {

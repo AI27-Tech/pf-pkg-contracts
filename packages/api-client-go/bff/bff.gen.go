@@ -38,8 +38,8 @@ const (
 
 // Defines values for AptitudRecursoRecurso.
 const (
-	Custodio AptitudRecursoRecurso = "custodio"
-	Vehiculo AptitudRecursoRecurso = "vehiculo"
+	AptitudRecursoRecursoCustodio AptitudRecursoRecurso = "custodio"
+	AptitudRecursoRecursoVehiculo AptitudRecursoRecurso = "vehiculo"
 )
 
 // Defines values for Audiencia.
@@ -50,8 +50,8 @@ const (
 
 // Defines values for ClienteEstado.
 const (
-	Activo   ClienteEstado = "activo"
-	Inactivo ClienteEstado = "inactivo"
+	ClienteEstadoActivo   ClienteEstado = "activo"
+	ClienteEstadoInactivo ClienteEstado = "inactivo"
 )
 
 // Defines values for CondicionAbiertaTipo.
@@ -65,6 +65,24 @@ const (
 	ConversacionClienteEstadoAbierta     ConversacionClienteEstado = "abierta"
 	ConversacionClienteEstadoCerrada     ConversacionClienteEstado = "cerrada"
 	ConversacionClienteEstadoSoloLectura ConversacionClienteEstado = "solo_lectura"
+)
+
+// Defines values for CustodioEstado.
+const (
+	CustodioEstadoActivo   CustodioEstado = "activo"
+	CustodioEstadoInactivo CustodioEstado = "inactivo"
+)
+
+// Defines values for CustodioCambiosEstado.
+const (
+	CustodioCambiosEstadoActivo   CustodioCambiosEstado = "activo"
+	CustodioCambiosEstadoInactivo CustodioCambiosEstado = "inactivo"
+)
+
+// Defines values for CustodioEntradaEstado.
+const (
+	CustodioEntradaEstadoActivo   CustodioEntradaEstado = "activo"
+	CustodioEntradaEstadoInactivo CustodioEntradaEstado = "inactivo"
 )
 
 // Defines values for EjeAutorizacionEstadia.
@@ -146,8 +164,44 @@ const (
 
 // Defines values for UnidadTipo.
 const (
-	Moto     UnidadTipo = "moto"
-	Patrulla UnidadTipo = "patrulla"
+	UnidadTipoMoto     UnidadTipo = "moto"
+	UnidadTipoPatrulla UnidadTipo = "patrulla"
+)
+
+// Defines values for VehiculoEstado.
+const (
+	VehiculoEstadoActiva   VehiculoEstado = "activa"
+	VehiculoEstadoInactiva VehiculoEstado = "inactiva"
+)
+
+// Defines values for VehiculoTipo.
+const (
+	VehiculoTipoCoche VehiculoTipo = "coche"
+	VehiculoTipoMoto  VehiculoTipo = "moto"
+)
+
+// Defines values for VehiculoCambiosEstado.
+const (
+	VehiculoCambiosEstadoActiva   VehiculoCambiosEstado = "activa"
+	VehiculoCambiosEstadoInactiva VehiculoCambiosEstado = "inactiva"
+)
+
+// Defines values for VehiculoCambiosTipo.
+const (
+	VehiculoCambiosTipoCoche VehiculoCambiosTipo = "coche"
+	VehiculoCambiosTipoMoto  VehiculoCambiosTipo = "moto"
+)
+
+// Defines values for VehiculoEntradaEstado.
+const (
+	Activa   VehiculoEntradaEstado = "activa"
+	Inactiva VehiculoEntradaEstado = "inactiva"
+)
+
+// Defines values for VehiculoEntradaTipo.
+const (
+	VehiculoEntradaTipoCoche VehiculoEntradaTipo = "coche"
+	VehiculoEntradaTipoMoto  VehiculoEntradaTipo = "moto"
 )
 
 // ActivarEmergenciaClienteEntrada defines model for ActivarEmergenciaClienteEntrada.
@@ -388,6 +442,57 @@ type CredencialesEntrada struct {
 
 // Cursor Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato.
 type Cursor = string
+
+// Custodio Custodio de AI27 (átomo de `catalogos`, persona). Espejo de `Custodio` de `catalogos`. Datos personales (nombre, teléfono).
+type Custodio struct {
+	Estado CustodioEstado `json:"estado"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id       Id      `json:"id"`
+	Nombre   string  `json:"nombre"`
+	Telefono *string `json:"telefono,omitempty"`
+
+	// UsuarioId Referencia opcional al usuario de `identidad` cuando el custodio también tiene acceso al sistema. Identificador, no FK. null si el custodio no es usuario.
+	UsuarioId *openapi_types.UUID `json:"usuario_id"`
+
+	// Version Versión de la entidad. Opcional como en `catalogos`, que la llena siempre.
+	Version *int `json:"version,omitempty"`
+
+	// VigenciaDesde Inicio de vigencia de esta versión.
+	VigenciaDesde *MarcaTiempo `json:"vigencia_desde,omitempty"`
+
+	// VigenciaHasta Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+	VigenciaHasta *time.Time `json:"vigencia_hasta"`
+}
+
+// CustodioEstado defines model for Custodio.Estado.
+type CustodioEstado string
+
+// CustodioCambios Cuerpo de modificación de un custodio (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. Espejo de `CustodioCambios` de `catalogos`.
+type CustodioCambios struct {
+	Estado   *CustodioCambiosEstado `json:"estado,omitempty"`
+	Nombre   *string                `json:"nombre,omitempty"`
+	Telefono *string                `json:"telefono,omitempty"`
+
+	// UsuarioId Referencia opcional al usuario de `identidad` (identificador, no FK).
+	UsuarioId *openapi_types.UUID `json:"usuario_id"`
+}
+
+// CustodioCambiosEstado defines model for CustodioCambios.Estado.
+type CustodioCambiosEstado string
+
+// CustodioEntrada Cuerpo de alta de un custodio (POST). El servicio asigna id y versión. Espejo de `CustodioEntrada` de `catalogos`.
+type CustodioEntrada struct {
+	Estado   CustodioEntradaEstado `json:"estado"`
+	Nombre   string                `json:"nombre"`
+	Telefono *string               `json:"telefono,omitempty"`
+
+	// UsuarioId Referencia opcional al usuario de `identidad` (identificador, no FK).
+	UsuarioId *openapi_types.UUID `json:"usuario_id"`
+}
+
+// CustodioEntradaEstado defines model for CustodioEntrada.Estado.
+type CustodioEntradaEstado string
 
 // CustodioEscoltaEmergencia Custodio de una unidad de la escolta. Subconjunto de `Custodio` de `catalogos`.
 type CustodioEscoltaEmergencia struct {
@@ -882,6 +987,13 @@ type PaginaClientes struct {
 	Items           []Cliente `json:"items"`
 }
 
+// PaginaCustodios defines model for PaginaCustodios.
+type PaginaCustodios struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string    `json:"cursor_siguiente"`
+	Items           []Custodio `json:"items"`
+}
+
 // PaginaEmergenciasViaje Todos los casos del viaje, del más antiguo al más reciente. Sin paginación.
 type PaginaEmergenciasViaje struct {
 	Items []EmergenciaViaje `json:"items"`
@@ -941,6 +1053,13 @@ type PaginaUnidades struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
 	CursorSiguiente *string  `json:"cursor_siguiente"`
 	Items           []Unidad `json:"items"`
+}
+
+// PaginaVehiculos defines model for PaginaVehiculos.
+type PaginaVehiculos struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string    `json:"cursor_siguiente"`
+	Items           []Vehiculo `json:"items"`
 }
 
 // PaginaViajesResumen defines model for PaginaViajesResumen.
@@ -1134,6 +1253,16 @@ type UnidadAsignada struct {
 	UnidadId Id `json:"unidad_id"`
 }
 
+// UnidadEntrada Alta de unidad. El `tipo` NO se envía: se deriva del vehículo. `activa` es opcional al crear (el servidor decide el valor por defecto). Espejo de `UnidadEntrada` de `operacion`.
+type UnidadEntrada struct {
+	// Activa Opcional al crear. Si se omite, el servidor fija el valor por defecto.
+	Activa       *bool `json:"activa,omitempty"`
+	CustodiosIds []Id  `json:"custodios_ids"`
+
+	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
+	VehiculoId Id `json:"vehiculo_id"`
+}
+
 // UnidadEscoltaEmergencia Unidad de la escolta en el detalle de Reacción: `tipo` de la unidad del roster (`operacion`), `economico` y `placas` del vehículo y sus custodios (`catalogos`). Sin identificadores.
 type UnidadEscoltaEmergencia struct {
 	Custodios []CustodioEscoltaEmergencia `json:"custodios"`
@@ -1145,6 +1274,74 @@ type UnidadEscoltaEmergencia struct {
 	// Tipo Token de `Unidad.tipo` (`patrulla` o `moto`). Se declara `string` y no enum para no renombrar las constantes Go de `UnidadTipo` del cliente generado.
 	Tipo string `json:"tipo"`
 }
+
+// UnidadModificacion Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). Espejo de `UnidadModificacion` de `operacion`.
+type UnidadModificacion struct {
+	Activa       *bool `json:"activa,omitempty"`
+	CustodiosIds *[]Id `json:"custodios_ids,omitempty"`
+
+	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
+	VehiculoId *Id `json:"vehiculo_id,omitempty"`
+}
+
+// Vehiculo Vehículo de la flota de AI27 (átomo de `catalogos`). Espejo de `Vehiculo` de `catalogos`.
+type Vehiculo struct {
+	// Economico Número económico del vehículo.
+	Economico *string        `json:"economico,omitempty"`
+	Estado    VehiculoEstado `json:"estado"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id     Id      `json:"id"`
+	Placas *string `json:"placas,omitempty"`
+
+	// Tipo Tipo de vehículo. Un coche lleva uno o dos custodios; una moto, uno (ADR 31). El `tipo` de la unidad (patrulla|moto) se deriva de este valor en `operacion`.
+	Tipo VehiculoTipo `json:"tipo"`
+
+	// Version Versión de la entidad. Opcional como en `catalogos`, que la llena siempre.
+	Version *int `json:"version,omitempty"`
+
+	// VigenciaDesde Inicio de vigencia de esta versión.
+	VigenciaDesde *MarcaTiempo `json:"vigencia_desde,omitempty"`
+
+	// VigenciaHasta Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+	VigenciaHasta *time.Time `json:"vigencia_hasta"`
+}
+
+// VehiculoEstado defines model for Vehiculo.Estado.
+type VehiculoEstado string
+
+// VehiculoTipo Tipo de vehículo. Un coche lleva uno o dos custodios; una moto, uno (ADR 31). El `tipo` de la unidad (patrulla|moto) se deriva de este valor en `operacion`.
+type VehiculoTipo string
+
+// VehiculoCambios Cuerpo de modificación de un vehículo (PATCH). Todos los campos son opcionales; los presentes forman la nueva versión. Espejo de `VehiculoCambios` de `catalogos`.
+type VehiculoCambios struct {
+	Economico *string                `json:"economico,omitempty"`
+	Estado    *VehiculoCambiosEstado `json:"estado,omitempty"`
+	Placas    *string                `json:"placas,omitempty"`
+	Tipo      *VehiculoCambiosTipo   `json:"tipo,omitempty"`
+}
+
+// VehiculoCambiosEstado defines model for VehiculoCambios.Estado.
+type VehiculoCambiosEstado string
+
+// VehiculoCambiosTipo defines model for VehiculoCambios.Tipo.
+type VehiculoCambiosTipo string
+
+// VehiculoEntrada Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión. Espejo de `VehiculoEntrada` de `catalogos`.
+type VehiculoEntrada struct {
+	// ClienteId Cliente contra cuyo contrato/SLA `catalogos` evalúa la aptitud informativa del vehículo (DEC-055). Requerido en `catalogos`.
+	ClienteId Id                    `json:"cliente_id"`
+	Economico *string               `json:"economico,omitempty"`
+	Estado    VehiculoEntradaEstado `json:"estado"`
+	Placas    *string               `json:"placas,omitempty"`
+	Tipo      VehiculoEntradaTipo   `json:"tipo"`
+}
+
+// VehiculoEntradaEstado defines model for VehiculoEntrada.Estado.
+type VehiculoEntradaEstado string
+
+// VehiculoEntradaTipo defines model for VehiculoEntrada.Tipo.
+type VehiculoEntradaTipo string
 
 // VehiculoUnidad Opcionales como en `catalogos`, donde el vehículo puede no tenerlos capturados.
 type VehiculoUnidad struct {
@@ -1308,6 +1505,11 @@ type LiberarReclamoParams struct {
 	VersionEsperada VersionReclamo `form:"version_esperada" json:"version_esperada"`
 }
 
+// ListarCustodiosParams defines parameters for ListarCustodios.
+type ListarCustodiosParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListarGpsParams defines parameters for ListarGps.
 type ListarGpsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -1350,6 +1552,11 @@ type ReporteViajesParams struct {
 
 // ListarUnidadesParams defines parameters for ListarUnidades.
 type ListarUnidadesParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListarVehiculosParams defines parameters for ListarVehiculos.
+type ListarVehiculosParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
@@ -1402,6 +1609,12 @@ type ReclamarConversacionJSONRequestBody = VersionEsperadaEntrada
 // TransferirConversacionJSONRequestBody defines body for TransferirConversacion for application/json ContentType.
 type TransferirConversacionJSONRequestBody = TransferenciaEntrada
 
+// CrearCustodioJSONRequestBody defines body for CrearCustodio for application/json ContentType.
+type CrearCustodioJSONRequestBody = CustodioEntrada
+
+// ActualizarCustodioJSONRequestBody defines body for ActualizarCustodio for application/json ContentType.
+type ActualizarCustodioJSONRequestBody = CustodioCambios
+
 // ReclamarEmergenciaPorIdJSONRequestBody defines body for ReclamarEmergenciaPorId for application/json ContentType.
 type ReclamarEmergenciaPorIdJSONRequestBody = VersionEsperadaEntrada
 
@@ -1422,6 +1635,18 @@ type IniciarSesionJSONRequestBody = CredencialesEntrada
 
 // RefrescarSesionJSONRequestBody defines body for RefrescarSesion for application/json ContentType.
 type RefrescarSesionJSONRequestBody = RefrescoEntrada
+
+// CrearUnidadJSONRequestBody defines body for CrearUnidad for application/json ContentType.
+type CrearUnidadJSONRequestBody = UnidadEntrada
+
+// ModificarUnidadJSONRequestBody defines body for ModificarUnidad for application/json ContentType.
+type ModificarUnidadJSONRequestBody = UnidadModificacion
+
+// CrearVehiculoJSONRequestBody defines body for CrearVehiculo for application/json ContentType.
+type CrearVehiculoJSONRequestBody = VehiculoEntrada
+
+// ActualizarVehiculoJSONRequestBody defines body for ActualizarVehiculo for application/json ContentType.
+type ActualizarVehiculoJSONRequestBody = VehiculoCambios
 
 // CrearViajeJSONRequestBody defines body for CrearViaje for application/json ContentType.
 type CrearViajeJSONRequestBody = CrearViajeEntrada
@@ -1592,6 +1817,22 @@ type ClientInterface interface {
 
 	TransferirConversacion(ctx context.Context, id Id, body TransferirConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListarCustodios request
+	ListarCustodios(ctx context.Context, params *ListarCustodiosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CrearCustodioWithBody request with any body
+	CrearCustodioWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearCustodio(ctx context.Context, body CrearCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerCustodio request
+	ObtenerCustodio(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActualizarCustodioWithBody request with any body
+	ActualizarCustodioWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ActualizarCustodio(ctx context.Context, id Id, body ActualizarCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarGps request
 	ListarGps(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1659,6 +1900,35 @@ type ClientInterface interface {
 
 	// ListarUnidades request
 	ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CrearUnidadWithBody request with any body
+	CrearUnidadWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearUnidad(ctx context.Context, body CrearUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerUnidad request
+	ObtenerUnidad(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ModificarUnidadWithBody request with any body
+	ModificarUnidadWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ModificarUnidad(ctx context.Context, id Id, body ModificarUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListarVehiculos request
+	ListarVehiculos(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CrearVehiculoWithBody request with any body
+	CrearVehiculoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearVehiculo(ctx context.Context, body CrearVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerVehiculo request
+	ObtenerVehiculo(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActualizarVehiculoWithBody request with any body
+	ActualizarVehiculoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ActualizarVehiculo(ctx context.Context, id Id, body ActualizarVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListarViajes request
 	ListarViajes(ctx context.Context, params *ListarViajesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1996,6 +2266,78 @@ func (c *Client) TransferirConversacion(ctx context.Context, id Id, body Transfe
 	return c.Client.Do(req)
 }
 
+func (c *Client) ListarCustodios(ctx context.Context, params *ListarCustodiosParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarCustodiosRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearCustodioWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearCustodioRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearCustodio(ctx context.Context, body CrearCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearCustodioRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerCustodio(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerCustodioRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarCustodioWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarCustodioRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarCustodio(ctx context.Context, id Id, body ActualizarCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarCustodioRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ListarGps(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarGpsRequest(c.Server, params)
 	if err != nil {
@@ -2286,6 +2628,138 @@ func (c *Client) RefrescarSesion(ctx context.Context, body RefrescarSesionJSONRe
 
 func (c *Client) ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarUnidadesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearUnidadWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearUnidadRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearUnidad(ctx context.Context, body CrearUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearUnidadRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerUnidad(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerUnidadRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ModificarUnidadWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewModificarUnidadRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ModificarUnidad(ctx context.Context, id Id, body ModificarUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewModificarUnidadRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarVehiculos(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarVehiculosRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearVehiculoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearVehiculoRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearVehiculo(ctx context.Context, body CrearVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearVehiculoRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerVehiculo(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerVehiculoRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarVehiculoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarVehiculoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarVehiculo(ctx context.Context, id Id, body ActualizarVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarVehiculoRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3462,6 +3936,176 @@ func NewTransferirConversacionRequestWithBody(server string, id Id, contentType 
 	return req, nil
 }
 
+// NewListarCustodiosRequest generates requests for ListarCustodios
+func NewListarCustodiosRequest(server string, params *ListarCustodiosParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/custodios")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCrearCustodioRequest calls the generic CrearCustodio builder with application/json body
+func NewCrearCustodioRequest(server string, body CrearCustodioJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearCustodioRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCrearCustodioRequestWithBody generates requests for CrearCustodio with any type of body
+func NewCrearCustodioRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/custodios")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewObtenerCustodioRequest generates requests for ObtenerCustodio
+func NewObtenerCustodioRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/custodios/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActualizarCustodioRequest calls the generic ActualizarCustodio builder with application/json body
+func NewActualizarCustodioRequest(server string, id Id, body ActualizarCustodioJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewActualizarCustodioRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewActualizarCustodioRequestWithBody generates requests for ActualizarCustodio with any type of body
+func NewActualizarCustodioRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/custodios/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListarGpsRequest generates requests for ListarGps
 func NewListarGpsRequest(server string, params *ListarGpsParams) (*http.Request, error) {
 	var err error
@@ -4309,6 +4953,297 @@ func NewListarUnidadesRequest(server string, params *ListarUnidadesParams) (*htt
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewCrearUnidadRequest calls the generic CrearUnidad builder with application/json body
+func NewCrearUnidadRequest(server string, body CrearUnidadJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearUnidadRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCrearUnidadRequestWithBody generates requests for CrearUnidad with any type of body
+func NewCrearUnidadRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/unidades")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewObtenerUnidadRequest generates requests for ObtenerUnidad
+func NewObtenerUnidadRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/unidades/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewModificarUnidadRequest calls the generic ModificarUnidad builder with application/json body
+func NewModificarUnidadRequest(server string, id Id, body ModificarUnidadJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewModificarUnidadRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewModificarUnidadRequestWithBody generates requests for ModificarUnidad with any type of body
+func NewModificarUnidadRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/unidades/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListarVehiculosRequest generates requests for ListarVehiculos
+func NewListarVehiculosRequest(server string, params *ListarVehiculosParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/vehiculos")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCrearVehiculoRequest calls the generic CrearVehiculo builder with application/json body
+func NewCrearVehiculoRequest(server string, body CrearVehiculoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearVehiculoRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCrearVehiculoRequestWithBody generates requests for CrearVehiculo with any type of body
+func NewCrearVehiculoRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/vehiculos")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewObtenerVehiculoRequest generates requests for ObtenerVehiculo
+func NewObtenerVehiculoRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/vehiculos/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActualizarVehiculoRequest calls the generic ActualizarVehiculo builder with application/json body
+func NewActualizarVehiculoRequest(server string, id Id, body ActualizarVehiculoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewActualizarVehiculoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewActualizarVehiculoRequestWithBody generates requests for ActualizarVehiculo with any type of body
+func NewActualizarVehiculoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/vehiculos/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -5770,6 +6705,22 @@ type ClientWithResponsesInterface interface {
 
 	TransferirConversacionWithResponse(ctx context.Context, id Id, body TransferirConversacionJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferirConversacionResponse, error)
 
+	// ListarCustodiosWithResponse request
+	ListarCustodiosWithResponse(ctx context.Context, params *ListarCustodiosParams, reqEditors ...RequestEditorFn) (*ListarCustodiosResponse, error)
+
+	// CrearCustodioWithBodyWithResponse request with any body
+	CrearCustodioWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearCustodioResponse, error)
+
+	CrearCustodioWithResponse(ctx context.Context, body CrearCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearCustodioResponse, error)
+
+	// ObtenerCustodioWithResponse request
+	ObtenerCustodioWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerCustodioResponse, error)
+
+	// ActualizarCustodioWithBodyWithResponse request with any body
+	ActualizarCustodioWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarCustodioResponse, error)
+
+	ActualizarCustodioWithResponse(ctx context.Context, id Id, body ActualizarCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarCustodioResponse, error)
+
 	// ListarGpsWithResponse request
 	ListarGpsWithResponse(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*ListarGpsResponse, error)
 
@@ -5837,6 +6788,35 @@ type ClientWithResponsesInterface interface {
 
 	// ListarUnidadesWithResponse request
 	ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error)
+
+	// CrearUnidadWithBodyWithResponse request with any body
+	CrearUnidadWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearUnidadResponse, error)
+
+	CrearUnidadWithResponse(ctx context.Context, body CrearUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearUnidadResponse, error)
+
+	// ObtenerUnidadWithResponse request
+	ObtenerUnidadWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerUnidadResponse, error)
+
+	// ModificarUnidadWithBodyWithResponse request with any body
+	ModificarUnidadWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ModificarUnidadResponse, error)
+
+	ModificarUnidadWithResponse(ctx context.Context, id Id, body ModificarUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*ModificarUnidadResponse, error)
+
+	// ListarVehiculosWithResponse request
+	ListarVehiculosWithResponse(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*ListarVehiculosResponse, error)
+
+	// CrearVehiculoWithBodyWithResponse request with any body
+	CrearVehiculoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearVehiculoResponse, error)
+
+	CrearVehiculoWithResponse(ctx context.Context, body CrearVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearVehiculoResponse, error)
+
+	// ObtenerVehiculoWithResponse request
+	ObtenerVehiculoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerVehiculoResponse, error)
+
+	// ActualizarVehiculoWithBodyWithResponse request with any body
+	ActualizarVehiculoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarVehiculoResponse, error)
+
+	ActualizarVehiculoWithResponse(ctx context.Context, id Id, body ActualizarVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarVehiculoResponse, error)
 
 	// ListarViajesWithResponse request
 	ListarViajesWithResponse(ctx context.Context, params *ListarViajesParams, reqEditors ...RequestEditorFn) (*ListarViajesResponse, error)
@@ -6256,6 +7236,109 @@ func (r TransferirConversacionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r TransferirConversacionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarCustodiosResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaCustodios
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarCustodiosResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarCustodiosResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearCustodioResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Custodio
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearCustodioResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearCustodioResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerCustodioResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Custodio
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerCustodioResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerCustodioResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ActualizarCustodioResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Custodio
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r ActualizarCustodioResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActualizarCustodioResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -6708,6 +7791,187 @@ func (r ListarUnidadesResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ListarUnidadesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearUnidadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Unidad
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearUnidadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearUnidadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerUnidadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Unidad
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerUnidadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerUnidadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ModificarUnidadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Unidad
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r ModificarUnidadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ModificarUnidadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarVehiculosResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaVehiculos
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarVehiculosResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarVehiculosResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearVehiculoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Vehiculo
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearVehiculoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearVehiculoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerVehiculoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Vehiculo
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerVehiculoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerVehiculoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ActualizarVehiculoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Vehiculo
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r ActualizarVehiculoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActualizarVehiculoResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7609,6 +8873,58 @@ func (c *ClientWithResponses) TransferirConversacionWithResponse(ctx context.Con
 	return ParseTransferirConversacionResponse(rsp)
 }
 
+// ListarCustodiosWithResponse request returning *ListarCustodiosResponse
+func (c *ClientWithResponses) ListarCustodiosWithResponse(ctx context.Context, params *ListarCustodiosParams, reqEditors ...RequestEditorFn) (*ListarCustodiosResponse, error) {
+	rsp, err := c.ListarCustodios(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarCustodiosResponse(rsp)
+}
+
+// CrearCustodioWithBodyWithResponse request with arbitrary body returning *CrearCustodioResponse
+func (c *ClientWithResponses) CrearCustodioWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearCustodioResponse, error) {
+	rsp, err := c.CrearCustodioWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearCustodioResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearCustodioWithResponse(ctx context.Context, body CrearCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearCustodioResponse, error) {
+	rsp, err := c.CrearCustodio(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearCustodioResponse(rsp)
+}
+
+// ObtenerCustodioWithResponse request returning *ObtenerCustodioResponse
+func (c *ClientWithResponses) ObtenerCustodioWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerCustodioResponse, error) {
+	rsp, err := c.ObtenerCustodio(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerCustodioResponse(rsp)
+}
+
+// ActualizarCustodioWithBodyWithResponse request with arbitrary body returning *ActualizarCustodioResponse
+func (c *ClientWithResponses) ActualizarCustodioWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarCustodioResponse, error) {
+	rsp, err := c.ActualizarCustodioWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarCustodioResponse(rsp)
+}
+
+func (c *ClientWithResponses) ActualizarCustodioWithResponse(ctx context.Context, id Id, body ActualizarCustodioJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarCustodioResponse, error) {
+	rsp, err := c.ActualizarCustodio(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarCustodioResponse(rsp)
+}
+
 // ListarGpsWithResponse request returning *ListarGpsResponse
 func (c *ClientWithResponses) ListarGpsWithResponse(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*ListarGpsResponse, error) {
 	rsp, err := c.ListarGps(ctx, params, reqEditors...)
@@ -7825,6 +9141,101 @@ func (c *ClientWithResponses) ListarUnidadesWithResponse(ctx context.Context, pa
 		return nil, err
 	}
 	return ParseListarUnidadesResponse(rsp)
+}
+
+// CrearUnidadWithBodyWithResponse request with arbitrary body returning *CrearUnidadResponse
+func (c *ClientWithResponses) CrearUnidadWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearUnidadResponse, error) {
+	rsp, err := c.CrearUnidadWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearUnidadResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearUnidadWithResponse(ctx context.Context, body CrearUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearUnidadResponse, error) {
+	rsp, err := c.CrearUnidad(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearUnidadResponse(rsp)
+}
+
+// ObtenerUnidadWithResponse request returning *ObtenerUnidadResponse
+func (c *ClientWithResponses) ObtenerUnidadWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerUnidadResponse, error) {
+	rsp, err := c.ObtenerUnidad(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerUnidadResponse(rsp)
+}
+
+// ModificarUnidadWithBodyWithResponse request with arbitrary body returning *ModificarUnidadResponse
+func (c *ClientWithResponses) ModificarUnidadWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ModificarUnidadResponse, error) {
+	rsp, err := c.ModificarUnidadWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseModificarUnidadResponse(rsp)
+}
+
+func (c *ClientWithResponses) ModificarUnidadWithResponse(ctx context.Context, id Id, body ModificarUnidadJSONRequestBody, reqEditors ...RequestEditorFn) (*ModificarUnidadResponse, error) {
+	rsp, err := c.ModificarUnidad(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseModificarUnidadResponse(rsp)
+}
+
+// ListarVehiculosWithResponse request returning *ListarVehiculosResponse
+func (c *ClientWithResponses) ListarVehiculosWithResponse(ctx context.Context, params *ListarVehiculosParams, reqEditors ...RequestEditorFn) (*ListarVehiculosResponse, error) {
+	rsp, err := c.ListarVehiculos(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarVehiculosResponse(rsp)
+}
+
+// CrearVehiculoWithBodyWithResponse request with arbitrary body returning *CrearVehiculoResponse
+func (c *ClientWithResponses) CrearVehiculoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearVehiculoResponse, error) {
+	rsp, err := c.CrearVehiculoWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearVehiculoResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearVehiculoWithResponse(ctx context.Context, body CrearVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearVehiculoResponse, error) {
+	rsp, err := c.CrearVehiculo(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearVehiculoResponse(rsp)
+}
+
+// ObtenerVehiculoWithResponse request returning *ObtenerVehiculoResponse
+func (c *ClientWithResponses) ObtenerVehiculoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerVehiculoResponse, error) {
+	rsp, err := c.ObtenerVehiculo(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerVehiculoResponse(rsp)
+}
+
+// ActualizarVehiculoWithBodyWithResponse request with arbitrary body returning *ActualizarVehiculoResponse
+func (c *ClientWithResponses) ActualizarVehiculoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarVehiculoResponse, error) {
+	rsp, err := c.ActualizarVehiculoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarVehiculoResponse(rsp)
+}
+
+func (c *ClientWithResponses) ActualizarVehiculoWithResponse(ctx context.Context, id Id, body ActualizarVehiculoJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarVehiculoResponse, error) {
+	rsp, err := c.ActualizarVehiculo(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarVehiculoResponse(rsp)
 }
 
 // ListarViajesWithResponse request returning *ListarViajesResponse
@@ -8808,6 +10219,215 @@ func ParseTransferirConversacionResponse(rsp *http.Response) (*TransferirConvers
 	return response, nil
 }
 
+// ParseListarCustodiosResponse parses an HTTP response from a ListarCustodiosWithResponse call
+func ParseListarCustodiosResponse(rsp *http.Response) (*ListarCustodiosResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarCustodiosResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaCustodios
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearCustodioResponse parses an HTTP response from a CrearCustodioWithResponse call
+func ParseCrearCustodioResponse(rsp *http.Response) (*CrearCustodioResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearCustodioResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Custodio
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerCustodioResponse parses an HTTP response from a ObtenerCustodioWithResponse call
+func ParseObtenerCustodioResponse(rsp *http.Response) (*ObtenerCustodioResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerCustodioResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Custodio
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActualizarCustodioResponse parses an HTTP response from a ActualizarCustodioWithResponse call
+func ParseActualizarCustodioResponse(rsp *http.Response) (*ActualizarCustodioResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActualizarCustodioResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Custodio
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListarGpsResponse parses an HTTP response from a ListarGpsWithResponse call
 func ParseListarGpsResponse(rsp *http.Response) (*ListarGpsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -9662,6 +11282,377 @@ func ParseListarUnidadesResponse(rsp *http.Response) (*ListarUnidadesResponse, e
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearUnidadResponse parses an HTTP response from a CrearUnidadWithResponse call
+func ParseCrearUnidadResponse(rsp *http.Response) (*CrearUnidadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearUnidadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Unidad
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerUnidadResponse parses an HTTP response from a ObtenerUnidadWithResponse call
+func ParseObtenerUnidadResponse(rsp *http.Response) (*ObtenerUnidadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerUnidadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Unidad
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseModificarUnidadResponse parses an HTTP response from a ModificarUnidadWithResponse call
+func ParseModificarUnidadResponse(rsp *http.Response) (*ModificarUnidadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ModificarUnidadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Unidad
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarVehiculosResponse parses an HTTP response from a ListarVehiculosWithResponse call
+func ParseListarVehiculosResponse(rsp *http.Response) (*ListarVehiculosResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarVehiculosResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaVehiculos
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearVehiculoResponse parses an HTTP response from a CrearVehiculoWithResponse call
+func ParseCrearVehiculoResponse(rsp *http.Response) (*CrearVehiculoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearVehiculoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Vehiculo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerVehiculoResponse parses an HTTP response from a ObtenerVehiculoWithResponse call
+func ParseObtenerVehiculoResponse(rsp *http.Response) (*ObtenerVehiculoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerVehiculoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Vehiculo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActualizarVehiculoResponse parses an HTTP response from a ActualizarVehiculoWithResponse call
+func ParseActualizarVehiculoResponse(rsp *http.Response) (*ActualizarVehiculoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActualizarVehiculoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Vehiculo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

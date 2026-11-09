@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.38
+  version: 0.1.0-tracer.39
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -74,6 +74,15 @@ tags:
     espejo de `operacion`: los bytes NO pasan por el `bff` (subida y descarga
     van a la URL de vida corta del almacenamiento de objetos); la auditoría de
     cada acceso la sigue escribiendo `operacion`.
+- name: roster
+  description: >-
+    Roster de unidades para `/roster` (E8-T21 / DEC-142). Proyección espejo de
+    `operacion`; entran `jefe_operativo` y `administrador`.
+- name: recursos
+  description: >-
+    Vehículos y custodios para `/catalogos` (adelanto de E8-T16 / DEC-142 #6).
+    Proyección espejo de `catalogos`; leen `jefe_operativo` y `administrador`,
+    escribe solo `administrador`.
 
 paths:
   /api/v1/sesion:
@@ -1599,6 +1608,310 @@ paths:
               schema: {$ref: "#/components/schemas/PaginaUnidades"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    # Sección `/roster` del Jefe Operativo (E8-T21 / DEC-142, tracer.39).
+    # Proyección espejo de `operacion` (crearUnidad, obtenerUnidad,
+    # modificarUnidad): mismos `operationId`, rutas y cuerpos. Solo audiencia
+    # Interno; entran `jefe_operativo` y `administrador` (DEC-142 #3). Las
+    # reglas del roster (exclusividad, reserva vigente, cantidad por tipo)
+    # viven en `operacion`; el `bff` reenvía y preserva sus 400/403/404/409 y
+    # su `codigo`. La respuesta es la `Unidad` del `bff`, con `vehiculo` y
+    # `custodios` legibles compuestos desde `catalogos` (tracer.38).
+    post:
+      operationId: crearUnidad
+      tags: [roster]
+      summary: Crear una unidad del roster (audiencia interna).
+      description: >-
+        Solo audiencia Interno. Reenvía a `operacion.crearUnidad`. Crean
+        `jefe_operativo` y `administrador` (DEC-142 #3). El `tipo` no se envía:
+        se deriva del vehículo. El vehículo y los custodios no pueden estar en
+        otra unidad activa (DEC-142 #4).
+        Responde 400 si el vehículo o algún custodio no existe o está
+        inactivo en `catalogos`, si hay custodios repetidos o si la cantidad
+        de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31).
+        Otro rol responde 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UnidadEntrada"}
+      responses:
+        "201":
+          description: Unidad creada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Unidad"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409":
+          description: >-
+            Exclusividad del roster (DEC-142 #4). `codigo` de máquina
+            `vehiculo_en_otra_unidad` si el vehículo ya está en otra unidad
+            activa, o `custodio_en_otra_unidad` si algún custodio lo está.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/unidades/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerUnidad
+      tags: [roster]
+      summary: Detalle de una unidad del roster (audiencia interna).
+      description: >-
+        Solo audiencia Interno. Reenvía a `operacion.obtenerUnidad`. Leen
+        `jefe_operativo` y `administrador` (DEC-142 #3); otro rol responde 403.
+      responses:
+        "200":
+          description: Unidad.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Unidad"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: modificarUnidad
+      tags: [roster]
+      summary: Modificar una unidad del roster, incluido activar/desactivar (audiencia interna).
+      description: >-
+        Solo audiencia Interno. Reenvía a `operacion.modificarUnidad`. Modifican
+        `jefe_operativo` y `administrador` (DEC-142 #3). Activar o desactivar es
+        cambiar `activa`. La exclusividad (DEC-142 #4) se revisa también al
+        reactivar. Una unidad con reserva en un viaje no terminal no se edita ni
+        se desactiva: primero se reasigna la escolta de ese viaje (DEC-142 #5).
+       
+        Responde 400 si el vehículo o algún custodio no existe o está
+        inactivo en `catalogos`, si hay custodios repetidos o si la cantidad
+        de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31).
+        Otro rol responde 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UnidadModificacion"}
+      responses:
+        "200":
+          description: Unidad modificada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Unidad"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            El cambio choca con el roster (DEC-142 #4 y #5). `codigo` de
+            máquina: `vehiculo_en_otra_unidad` o `custodio_en_otra_unidad` si el
+            vehículo o algún custodio ya está en otra unidad activa (también al
+            reactivar); `unidad_con_reserva_vigente` si la unidad tiene una
+            reserva en un viaje no terminal.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  # ===========================================================================
+  # Vehículos y custodios de `/catalogos` (adelanto de E8-T16 / DEC-142 #6,
+  # tracer.39). Proyección espejo de `catalogos`: mismos `operationId`, rutas y
+  # formas. Solo audiencia Interno. Leen (`listar*`, `obtener*`)
+  # `jefe_operativo` y `administrador`: el Jefe Operativo los necesita para
+  # armar unidades en `/roster`. Escriben (`crear*`, `actualizar*`) solo
+  # `administrador`. `catalogos` no revisa rol, así que la guarda de rol la
+  # aplica el `bff` antes de reenviar. No se proyectan `ids` (lectura por lote
+  # para servicios, no un selector; mismo criterio que `listarClientes`) ni
+  # `a_fecha` (lectura probatoria, P8): la pantalla no los usa y agregarlos
+  # después es aditivo.
+  # ===========================================================================
+  /api/v1/vehiculos:
+    get:
+      operationId: listarVehiculos
+      tags: [recursos]
+      summary: Listar vehículos de la flota (audiencia interna).
+      description: >-
+        Solo audiencia Interno. Reenvía a `catalogos.listarVehiculos`, paginado
+        por cursor, con vehículos activos e inactivos (`catalogos` no filtra por
+        estado). Leen `jefe_operativo` y `administrador`.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de vehículos.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaVehiculos"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    post:
+      operationId: crearVehiculo
+      tags: [recursos]
+      summary: Alta de un vehículo (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Reenvía a `catalogos.crearVehiculo`, que crea la
+        versión 1. Escribe solo `administrador` (DEC-142 #6).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/VehiculoEntrada"}
+      responses:
+        "201":
+          description: Vehículo creado (versión 1).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Vehiculo"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/vehiculos/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerVehiculo
+      tags: [recursos]
+      summary: Vehículo vigente (audiencia interna).
+      description: >-
+        Solo audiencia Interno. Reenvía a `catalogos.obtenerVehiculo` y devuelve
+        la versión vigente. Leen `jefe_operativo` y `administrador`.
+      responses:
+        "200":
+          description: Vehículo.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Vehiculo"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: actualizarVehiculo
+      tags: [recursos]
+      summary: Modifica un vehículo creando una nueva versión (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Reenvía a `catalogos.actualizarVehiculo`, que no
+        sobrescribe: crea la versión siguiente. Activar o desactivar es cambiar
+        `estado`. Escribe solo `administrador` (DEC-142 #6).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/VehiculoCambios"}
+      responses:
+        "200":
+          description: Vehículo con su nueva versión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Vehiculo"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/custodios:
+    get:
+      operationId: listarCustodios
+      tags: [recursos]
+      summary: Listar custodios (audiencia interna).
+      description: >-
+        Solo audiencia Interno. Reenvía a `catalogos.listarCustodios`, paginado
+        por cursor, con custodios activos e inactivos (`catalogos` no filtra por
+        estado). Leen `jefe_operativo` y `administrador`.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de custodios.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaCustodios"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    post:
+      operationId: crearCustodio
+      tags: [recursos]
+      summary: Alta de un custodio (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Reenvía a `catalogos.crearCustodio`, que crea la
+        versión 1. Escribe solo `administrador` (DEC-142 #6).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CustodioEntrada"}
+      responses:
+        "201":
+          description: Custodio creado (versión 1).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Custodio"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/custodios/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerCustodio
+      tags: [recursos]
+      summary: Custodio vigente (audiencia interna).
+      description: >-
+        Solo audiencia Interno. Reenvía a `catalogos.obtenerCustodio` y devuelve
+        la versión vigente. Leen `jefe_operativo` y `administrador`.
+      responses:
+        "200":
+          description: Custodio.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Custodio"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: actualizarCustodio
+      tags: [recursos]
+      summary: Modifica un custodio creando una nueva versión (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Reenvía a `catalogos.actualizarCustodio`, que no
+        sobrescribe: crea la versión siguiente. Activar o desactivar es cambiar
+        `estado`. Escribe solo `administrador` (DEC-142 #6).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CustodioCambios"}
+      responses:
+        "200":
+          description: Custodio con su nueva versión.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Custodio"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
 
   # ===========================================================================
   # Histórico operativo del viaje (E8-T13 / DEC-105). Siete reenvíos a
@@ -2735,6 +3048,223 @@ components:
         items:
           type: array
           items: {$ref: "#/components/schemas/Unidad"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    # --- Alta y edición de unidades del roster (E8-T21 / DEC-142, tracer.39).
+    #     Espejo de `UnidadEntrada` y `UnidadModificacion` de `operacion`. ---
+    UnidadEntrada:
+      type: object
+      additionalProperties: false
+      required: [vehiculo_id, custodios_ids]
+      description: >-
+        Alta de unidad. El `tipo` NO se envía: se deriva del vehículo. `activa`
+        es opcional al crear (el servidor decide el valor por defecto). Espejo
+        de `UnidadEntrada` de `operacion`.
+      properties:
+        vehiculo_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        custodios_ids:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        activa:
+          type: boolean
+          description: Opcional al crear. Si se omite, el servidor fija el valor por defecto.
+
+    UnidadModificacion:
+      type: object
+      additionalProperties: false
+      description: >-
+        Modificación de unidad. Todos los campos son opcionales; activar o
+        desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado).
+        Espejo de `UnidadModificacion` de `operacion`.
+      properties:
+        vehiculo_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        custodios_ids:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        activa:
+          type: boolean
+
+    # --- Vehículos y custodios de `/catalogos` (adelanto de E8-T16 / DEC-142
+    #     #6, tracer.39). Espejo de las formas de `catalogos` (Vehiculo,
+    #     VehiculoEntrada, VehiculoCambios, PaginaVehiculos y sus pares de
+    #     custodio): mismos nombres y formas. Vehículo usa `activa|inactiva` y
+    #     custodio `activo|inactivo`, como en `catalogos`. ---
+    Vehiculo:
+      type: object
+      additionalProperties: false
+      required: [id, tipo, estado]
+      description: >-
+        Vehículo de la flota de AI27 (átomo de `catalogos`). Espejo de
+        `Vehiculo` de `catalogos`.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version:
+          type: integer
+          minimum: 1
+          description: Versión de la entidad. Opcional como en `catalogos`, que la llena siempre.
+        tipo:
+          type: string
+          enum: [coche, moto]
+          description: >-
+            Tipo de vehículo. Un coche lleva uno o dos custodios; una moto, uno
+            (ADR 31). El `tipo` de la unidad (patrulla|moto) se deriva de este
+            valor en `operacion`.
+        economico:
+          type: string
+          description: Número económico del vehículo.
+        placas: {type: string}
+        estado:
+          type: string
+          enum: [activa, inactiva]
+        vigencia_desde:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          description: Inicio de vigencia de esta versión.
+        vigencia_hasta:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+
+    VehiculoEntrada:
+      type: object
+      additionalProperties: false
+      required: [tipo, estado, cliente_id]
+      description: >-
+        Cuerpo de alta de un vehículo (POST). El servicio asigna id y versión.
+        Espejo de `VehiculoEntrada` de `catalogos`.
+      properties:
+        tipo:
+          type: string
+          enum: [coche, moto]
+        economico: {type: string}
+        placas: {type: string}
+        estado:
+          type: string
+          enum: [activa, inactiva]
+        cliente_id:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/Id"}]
+          description: >-
+            Cliente contra cuyo contrato/SLA `catalogos` evalúa la aptitud
+            informativa del vehículo (DEC-055). Requerido en `catalogos`.
+
+    VehiculoCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de modificación de un vehículo (PATCH). Todos los campos son
+        opcionales; los presentes forman la nueva versión. Espejo de
+        `VehiculoCambios` de `catalogos`.
+      properties:
+        tipo:
+          type: string
+          enum: [coche, moto]
+        economico: {type: string}
+        placas: {type: string}
+        estado:
+          type: string
+          enum: [activa, inactiva]
+
+    PaginaVehiculos:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Vehiculo"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    Custodio:
+      type: object
+      additionalProperties: false
+      required: [id, nombre, estado]
+      description: >-
+        Custodio de AI27 (átomo de `catalogos`, persona). Espejo de `Custodio`
+        de `catalogos`. Datos personales (nombre, teléfono).
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        version:
+          type: integer
+          minimum: 1
+          description: Versión de la entidad. Opcional como en `catalogos`, que la llena siempre.
+        nombre: {type: string}
+        telefono: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Referencia opcional al usuario de `identidad` cuando el custodio
+            también tiene acceso al sistema. Identificador, no FK. null si el
+            custodio no es usuario.
+        vigencia_desde:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}]
+          description: Inicio de vigencia de esta versión.
+        vigencia_hasta:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fin de vigencia de esta versión, o null si es la vigente. Mismo formato que `MarcaTiempo`.
+
+    CustodioEntrada:
+      type: object
+      additionalProperties: false
+      required: [nombre, estado]
+      description: >-
+        Cuerpo de alta de un custodio (POST). El servicio asigna id y versión.
+        Espejo de `CustodioEntrada` de `catalogos`.
+      properties:
+        nombre: {type: string}
+        telefono: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Referencia opcional al usuario de `identidad` (identificador, no FK).
+
+    CustodioCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo de modificación de un custodio (PATCH). Todos los campos son
+        opcionales; los presentes forman la nueva versión. Espejo de
+        `CustodioCambios` de `catalogos`.
+      properties:
+        nombre: {type: string}
+        telefono: {type: string}
+        estado:
+          type: string
+          enum: [activo, inactivo]
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Referencia opcional al usuario de `identidad` (identificador, no FK).
+
+    PaginaCustodios:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Custodio"}
         cursor_siguiente:
           type: string
           nullable: true
