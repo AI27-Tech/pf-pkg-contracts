@@ -22,7 +22,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — catalogos
-  version: 0.1.0-tracer.39
+  version: 0.1.0-tracer.40
   description: Registro maestro. Lectura para el tracer y afirmación de aptitud.
   x-ai27-servicio: catalogos
   x-ai27-capa: catalogo
@@ -100,6 +100,63 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Cliente"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    put:
+      operationId: crearCliente
+      tags: [clientes]
+      summary: Alta del expediente de una organización cliente, idempotente por id.
+      description: >-
+        Crea el cliente, en estado `activo`, con el id de la ruta: el mismo que
+        su tenant en `identidad` (DEC-112, DEC-144 #2). Nombre, correo y
+        teléfono son obligatorios (DEC-139 #2). Si ya existe un cliente con ese
+        id, no lo modifica y responde 200 con el cliente guardado: así un alta
+        de organización que falló a la mitad se completa reintentando con el
+        mismo id. Emite `catalogo.actualizado` (`entidad` `cliente`) en la misma
+        transacción (P17). `catalogos` no revisa rol: la guarda (solo
+        `administrador`) la aplica el `bff`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ClienteEntrada"}
+      responses:
+        "200":
+          description: El cliente ya existía; se devuelve sin cambios.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Cliente"}
+        "201":
+          description: Cliente creado.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Cliente"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    patch:
+      operationId: actualizarCliente
+      tags: [clientes]
+      summary: Modificar el expediente de un cliente, incluido su estado.
+      description: >-
+        Cambia los campos presentes (nombre, correo, teléfono, `estado`).
+        Desactivar es cambiar `estado` a `inactivo`. Emite
+        `catalogo.actualizado` (`entidad` `cliente`) en la misma transacción
+        (P17). `catalogos` no revisa rol ni la regla de organización terminal
+        (DEC-139 #4): las dos las aplica el `bff`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ClienteCambios"}
+      responses:
+        "200":
+          description: Cliente modificado.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Cliente"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
   /api/v1/contratos:
@@ -687,6 +744,57 @@ components:
           format: uuid
           nullable: true
           description: Opcional; mismo formato que `Id`. null si no aplica.
+        correo:
+          type: string
+          description: >-
+            Correo de contacto de la organización (DEC-139 #2). Opcional en la
+            respuesta: un cliente dado de alta antes de tracer.40 no lo tiene.
+        telefono:
+          type: string
+          description: >-
+            Teléfono de contacto de la organización (DEC-139 #2). Opcional en
+            la respuesta por la misma razón que `correo`.
+
+    ClienteEntrada:
+      type: object
+      additionalProperties: false
+      required: [nombre, correo, telefono]
+      description: >-
+        Alta de un cliente (PUT con id en la ruta). Los tres datos de contacto
+        son obligatorios en V1 (DEC-139 #2).
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+        correo:
+          type: string
+          pattern: "@"
+          description: Validación mínima de V1, debe contener `@` (DEC-139 #2).
+        telefono:
+          type: string
+          minLength: 1
+
+    ClienteCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Modificación de un cliente (PATCH). Todos los campos son opcionales; se
+        cambian los presentes. No incluye `id`.
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+        correo:
+          type: string
+          pattern: "@"
+          description: Validación mínima de V1, debe contener `@` (DEC-139 #2).
+        telefono:
+          type: string
+          minLength: 1
+        estado:
+          type: string
+          enum: [activo, inactivo]
+
     PaginaClientes:
       type: object
       additionalProperties: false

@@ -28,6 +28,12 @@ const (
 	ClienteEstadoInactivo ClienteEstado = "inactivo"
 )
 
+// Defines values for ClienteCambiosEstado.
+const (
+	ClienteCambiosEstadoActivo   ClienteCambiosEstado = "activo"
+	ClienteCambiosEstadoInactivo ClienteCambiosEstado = "inactivo"
+)
+
 // Defines values for CustodioEstado.
 const (
 	CustodioEstadoActivo   CustodioEstado = "activo"
@@ -69,8 +75,8 @@ const (
 
 // Defines values for ValorCatalogoEntradaEstado.
 const (
-	Activo   ValorCatalogoEntradaEstado = "activo"
-	Inactivo ValorCatalogoEntradaEstado = "inactivo"
+	ValorCatalogoEntradaEstadoActivo   ValorCatalogoEntradaEstado = "activo"
+	ValorCatalogoEntradaEstadoInactivo ValorCatalogoEntradaEstado = "inactivo"
 )
 
 // Defines values for VehiculoEstado.
@@ -124,15 +130,41 @@ type Aptitud struct {
 type Cliente struct {
 	// ContratoVigenteId Opcional; mismo formato que `Id`. null si no aplica.
 	ContratoVigenteId *openapi_types.UUID `json:"contrato_vigente_id"`
-	Estado            ClienteEstado       `json:"estado"`
+
+	// Correo Correo de contacto de la organización (DEC-139 #2). Opcional en la respuesta: un cliente dado de alta antes de tracer.40 no lo tiene.
+	Correo *string       `json:"correo,omitempty"`
+	Estado ClienteEstado `json:"estado"`
 
 	// Id Identificador único (UUID). Nunca un correlativo expuesto.
 	Id     Id     `json:"id"`
 	Nombre string `json:"nombre"`
+
+	// Telefono Teléfono de contacto de la organización (DEC-139 #2). Opcional en la respuesta por la misma razón que `correo`.
+	Telefono *string `json:"telefono,omitempty"`
 }
 
 // ClienteEstado defines model for Cliente.Estado.
 type ClienteEstado string
+
+// ClienteCambios Modificación de un cliente (PATCH). Todos los campos son opcionales; se cambian los presentes. No incluye `id`.
+type ClienteCambios struct {
+	// Correo Validación mínima de V1, debe contener `@` (DEC-139
+	Correo   *string               `json:"correo,omitempty"`
+	Estado   *ClienteCambiosEstado `json:"estado,omitempty"`
+	Nombre   *string               `json:"nombre,omitempty"`
+	Telefono *string               `json:"telefono,omitempty"`
+}
+
+// ClienteCambiosEstado defines model for ClienteCambios.Estado.
+type ClienteCambiosEstado string
+
+// ClienteEntrada Alta de un cliente (PUT con id en la ruta). Los tres datos de contacto son obligatorios en V1 (DEC-139 #2).
+type ClienteEntrada struct {
+	// Correo Validación mínima de V1, debe contener `@` (DEC-139
+	Correo   string `json:"correo"`
+	Nombre   string `json:"nombre"`
+	Telefono string `json:"telefono"`
+}
 
 // Contrato defines model for Contrato.
 type Contrato struct {
@@ -509,6 +541,12 @@ type CrearValorCatalogoJSONRequestBody = ValorCatalogoEntrada
 // ActualizarValorCatalogoJSONRequestBody defines body for ActualizarValorCatalogo for application/json ContentType.
 type ActualizarValorCatalogoJSONRequestBody = ValorCatalogoCambios
 
+// ActualizarClienteJSONRequestBody defines body for ActualizarCliente for application/json ContentType.
+type ActualizarClienteJSONRequestBody = ClienteCambios
+
+// CrearClienteJSONRequestBody defines body for CrearCliente for application/json ContentType.
+type CrearClienteJSONRequestBody = ClienteEntrada
+
 // CrearContratoJSONRequestBody defines body for CrearContrato for application/json ContentType.
 type CrearContratoJSONRequestBody = ContratoEntrada
 
@@ -624,6 +662,16 @@ type ClientInterface interface {
 
 	// ObtenerCliente request
 	ObtenerCliente(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActualizarClienteWithBody request with any body
+	ActualizarClienteWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ActualizarCliente(ctx context.Context, id Id, body ActualizarClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CrearClienteWithBody request with any body
+	CrearClienteWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearCliente(ctx context.Context, id Id, body CrearClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CrearContratoWithBody request with any body
 	CrearContratoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -767,6 +815,54 @@ func (c *Client) ListarClientes(ctx context.Context, params *ListarClientesParam
 
 func (c *Client) ObtenerCliente(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewObtenerClienteRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarClienteWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarClienteRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarCliente(ctx context.Context, id Id, body ActualizarClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarClienteRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearClienteWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearClienteRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearCliente(ctx context.Context, id Id, body CrearClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearClienteRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1329,6 +1425,100 @@ func NewObtenerClienteRequest(server string, id Id) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewActualizarClienteRequest calls the generic ActualizarCliente builder with application/json body
+func NewActualizarClienteRequest(server string, id Id, body ActualizarClienteJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewActualizarClienteRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewActualizarClienteRequestWithBody generates requests for ActualizarCliente with any type of body
+func NewActualizarClienteRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clientes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewCrearClienteRequest calls the generic CrearCliente builder with application/json body
+func NewCrearClienteRequest(server string, id Id, body CrearClienteJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearClienteRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewCrearClienteRequestWithBody generates requests for CrearCliente with any type of body
+func NewCrearClienteRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clientes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -2250,6 +2440,16 @@ type ClientWithResponsesInterface interface {
 	// ObtenerClienteWithResponse request
 	ObtenerClienteWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerClienteResponse, error)
 
+	// ActualizarClienteWithBodyWithResponse request with any body
+	ActualizarClienteWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarClienteResponse, error)
+
+	ActualizarClienteWithResponse(ctx context.Context, id Id, body ActualizarClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarClienteResponse, error)
+
+	// CrearClienteWithBodyWithResponse request with any body
+	CrearClienteWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearClienteResponse, error)
+
+	CrearClienteWithResponse(ctx context.Context, id Id, body CrearClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearClienteResponse, error)
+
 	// CrearContratoWithBodyWithResponse request with any body
 	CrearContratoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearContratoResponse, error)
 
@@ -2440,6 +2640,58 @@ func (r ObtenerClienteResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ObtenerClienteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ActualizarClienteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Cliente
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ActualizarClienteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActualizarClienteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearClienteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Cliente
+	JSON201      *Cliente
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearClienteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearClienteResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2933,6 +3185,40 @@ func (c *ClientWithResponses) ObtenerClienteWithResponse(ctx context.Context, id
 	return ParseObtenerClienteResponse(rsp)
 }
 
+// ActualizarClienteWithBodyWithResponse request with arbitrary body returning *ActualizarClienteResponse
+func (c *ClientWithResponses) ActualizarClienteWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarClienteResponse, error) {
+	rsp, err := c.ActualizarClienteWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarClienteResponse(rsp)
+}
+
+func (c *ClientWithResponses) ActualizarClienteWithResponse(ctx context.Context, id Id, body ActualizarClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarClienteResponse, error) {
+	rsp, err := c.ActualizarCliente(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarClienteResponse(rsp)
+}
+
+// CrearClienteWithBodyWithResponse request with arbitrary body returning *CrearClienteResponse
+func (c *ClientWithResponses) CrearClienteWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearClienteResponse, error) {
+	rsp, err := c.CrearClienteWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearClienteResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearClienteWithResponse(ctx context.Context, id Id, body CrearClienteJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearClienteResponse, error) {
+	rsp, err := c.CrearCliente(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearClienteResponse(rsp)
+}
+
 // CrearContratoWithBodyWithResponse request with arbitrary body returning *CrearContratoResponse
 func (c *ClientWithResponses) CrearContratoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearContratoResponse, error) {
 	rsp, err := c.CrearContratoWithBody(ctx, contentType, body, reqEditors...)
@@ -3400,6 +3686,114 @@ func ParseObtenerClienteResponse(rsp *http.Response) (*ObtenerClienteResponse, e
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActualizarClienteResponse parses an HTTP response from a ActualizarClienteWithResponse call
+func ParseActualizarClienteResponse(rsp *http.Response) (*ActualizarClienteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActualizarClienteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Cliente
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearClienteResponse parses an HTTP response from a CrearClienteWithResponse call
+func ParseCrearClienteResponse(rsp *http.Response) (*CrearClienteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearClienteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Cliente
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Cliente
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	}
 

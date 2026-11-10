@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.39
+  version: 0.1.0-tracer.40
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -83,6 +83,14 @@ tags:
     Vehículos y custodios para `/catalogos` (adelanto de E8-T16 / DEC-142 #6).
     Proyección espejo de `catalogos`; leen `jefe_operativo` y `administrador`,
     escribe solo `administrador`.
+- name: administracion
+  description: >-
+    Usuarios, alcance de monitoreo y organizaciones para `/administracion`
+    (E8-T19) y la tarjeta "mis unidades" de `/roster` (DEC-142 #2). Solo
+    audiencia Interno. Escribe solo `administrador`, salvo
+    `fijarUnidadesSujeto`, que también escribe `jefe_operativo`. El
+    `jefe_operativo` lee `listarSujetos` solo con `rol=monitorista` y
+    `obtenerAlcanceSujeto` solo de Monitoristas. Otro rol responde 403.
 
 paths:
   /api/v1/sesion:
@@ -1933,6 +1941,482 @@ paths:
         "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
 
   # ===========================================================================
+  # Administración de usuarios, alcance y organizaciones (E8-T19, tracer.40;
+  # DEC-139, DEC-140, DEC-141, DEC-144, DEC-145). Solo audiencia Interno.
+  # Usuarios y alcance son proyección espejo de `identidad` (gobierno): mismos
+  # `operationId`, rutas y cuerpos de entrada, y mismos 400/403/404/409 con su
+  # `codigo`. La respuesta de usuario es `UsuarioAdmin`, que el `bff` compone
+  # con la organización legible y `es_propio`. Las organizaciones son
+  # operaciones propias del `bff`: escriben en `catalogos` (expediente) y en
+  # `identidad` (tenant) con el mismo id (DEC-144 #2). Escribe solo
+  # `administrador`, salvo `fijarUnidadesSujeto`, que también escribe
+  # `jefe_operativo` (DEC-140 #1, DEC-142 #2). No se proyecta
+  # `listarHistorialSujeto` (nadie lo pidió; B-6 no tiene vista en V1).
+  # ===========================================================================
+  /api/v1/sujetos:
+    get:
+      operationId: listarSujetos
+      tags: [administracion]
+      summary: Listar y buscar usuarios (audiencia interna, B-2).
+      description: >-
+        Solo audiencia Interno. Reenvía a `identidad.listarSujetos` y compone
+        cada usuario como `UsuarioAdmin`. Filtros combinables; `q` busca por
+        coincidencia parcial en nombre e identificador de usuario. Lee
+        `administrador`. El `jefe_operativo` lee solo con `rol=monitorista`
+        (elige Monitoristas en `/roster`); sin ese filtro, o con otro rol, le
+        responde 403. Otro rol responde 403.
+      parameters:
+      - name: q
+        in: query
+        required: false
+        description: Texto a buscar en nombre e identificador de usuario.
+        schema: {type: string}
+      - name: rol
+        in: query
+        required: false
+        description: Solo usuarios cuyo rol activo es este.
+        schema: {$ref: "_comunes.yaml#/components/schemas/Rol"}
+      - name: tenant_id
+        in: query
+        required: false
+        description: >-
+          Solo usuarios de esta organización (su id, que es su tenant, DEC-112).
+        schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+      - name: activo
+        in: query
+        required: false
+        description: true para solo activos, false para solo desactivados; ausente, ambos.
+        schema: {type: boolean}
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de usuarios.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaUsuariosAdmin"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    post:
+      operationId: altaSujeto
+      tags: [administracion]
+      summary: Alta de un usuario con su rol inicial (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Reenvía a `identidad.altaSujeto`. Escribe solo
+        `administrador`; otro rol responde 403. El `bff` traduce
+        `organizacion_id` al `tenant_id` de `identidad`: la organización es el
+        tenant del cliente (DEC-112) y un rol interno va al tenant interno de
+        AI27 (B-7). Los `codigo` de `identidad` se preservan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AltaSujetoEntrada"}
+      responses:
+        "201":
+          description: Usuario creado con su rol inicial.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/UsuarioAdmin"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409": {$ref: "_comunes.yaml#/components/responses/Conflicto"}
+
+  /api/v1/sujetos/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerSujeto
+      tags: [administracion]
+      summary: Detalle de un usuario (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Reenvía a `identidad.obtenerSujeto` y compone el
+        `UsuarioAdmin`. Lee solo `administrador`; otro rol responde 403.
+      responses:
+        "200":
+          description: Usuario.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/UsuarioAdmin"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    patch:
+      operationId: editarSujeto
+      tags: [administracion]
+      summary: Editar el nombre de un usuario (audiencia interna, solo administrador, B-8).
+      description: >-
+        Solo audiencia Interno. Reenvía a `identidad.editarSujeto`. Solo cambia
+        el nombre; el identificador de acceso no se edita en V1 (DEC-139 #5).
+        Escribe solo `administrador`; otro rol responde 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/EdicionSujetoEntrada"}
+      responses:
+        "200":
+          description: Usuario con su nombre nuevo.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/UsuarioAdmin"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+    delete:
+      operationId: desactivarSujeto
+      tags: [administracion]
+      summary: Desactivar un usuario (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Reenvía a `identidad.desactivarSujeto`, que
+        marca el usuario inactivo y revoca su sesión viva en la misma operación
+        (si la revocación falla, la desactivación falla). Un administrador puede
+        desactivarse a sí mismo mientras quede otro administrador activo
+        (DEC-139 #3). Sin reautenticación en V1 (DEC-141 #5). Escribe solo
+        `administrador`; otro rol responde 403.
+      responses:
+        "204": {description: Usuario desactivado.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            `codigo` de máquina `ultimo_administrador` si dejaría al sistema
+            sin administrador activo (DEC-139 #3).
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/sujetos/{id}/reactivacion:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: reactivarSujeto
+      tags: [administracion]
+      summary: Reactivar un usuario desactivado (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Reenvía a `identidad.reactivarSujeto`. Escribe
+        solo `administrador`; otro rol responde 403.
+      responses:
+        "204": {description: Usuario reactivado.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/sujetos/{id}/rol:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    put:
+      operationId: fijarRolSujeto
+      tags: [administracion]
+      summary: Asignar o reemplazar el rol de un usuario (audiencia interna, solo administrador, B-1).
+      description: >-
+        Solo audiencia Interno. Reenvía a `identidad.fijarRolSujeto`. Al cambiar
+        de rol se retira el alcance del rol anterior (DEC-140 #3); el rol nuevo
+        aplica en el siguiente refresco (DEC-091). Ninguna cuenta cruza entre
+        `cliente` y un rol interno (DEC-141 #1). Escribe solo `administrador`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AsignacionRolEntrada"}
+      responses:
+        "204": {description: Rol fijado.}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403":
+          description: >-
+            `codigo` de máquina `autoescalamiento` si el actor intenta cambiar
+            su propio rol (E4-HU-018). Un actor que no es `administrador`
+            también recibe 403.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            `codigo` de máquina: `rol_igual` si el rol nuevo es igual al
+            activo; `sujeto_desactivado` si el usuario está desactivado;
+            `ultimo_administrador` si dejaría al sistema sin administrador
+            activo; `rol_cruza_audiencia` si el cambio va de `cliente` a un rol
+            interno o al revés (DEC-141 #1).
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/sujetos/{id}/revocaciones:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: revocarSesionesSujeto
+      tags: [administracion]
+      summary: Revocar las sesiones de un usuario, con motivo (audiencia interna, solo administrador, B-5).
+      description: >-
+        Solo audiencia Interno. Reenvía a `identidad.revocarSesionesSujeto`.
+        Revoca las sesiones vivas del usuario sin desactivarlo. El `motivo` es
+        obligatorio y texto libre (DEC-139 #1); sin él, o vacío, responde 400.
+        Sin reautenticación en V1 (DEC-141 #5). Escribe solo `administrador`;
+        otro rol responde 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/RevocacionSesionesEntrada"}
+      responses:
+        "200":
+          description: Revocación hecha; cuántas sesiones se revocaron.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/RevocacionSesionesResultado"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/sujetos/{id}/alcance:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerAlcanceSujeto
+      tags: [administracion]
+      summary: Alcance de monitoreo de un usuario (audiencia interna, B-4).
+      description: >-
+        Solo audiencia Interno. Reenvía a `identidad.obtenerAlcanceSujeto`:
+        unidades propias, subordinados directos y unidades efectivas (la unión
+        por jerarquía, DEC-140 #2). Lee `administrador`. El `jefe_operativo` lee
+        solo el alcance de un Monitorista; el de un usuario con otro rol le
+        responde 403. Otro rol responde 403.
+      responses:
+        "200":
+          description: Alcance del usuario.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AlcanceSujeto"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/sujetos/{id}/alcance/unidades:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    put:
+      operationId: fijarUnidadesSujeto
+      tags: [administracion]
+      summary: Fijar "mis unidades" de un Monitorista (audiencia interna).
+      description: >-
+        Solo audiencia Interno. Valida contra `operacion` que cada unidad
+        exista en el roster y reenvía a `identidad.fijarUnidadesSujeto`.
+        Reemplaza el conjunto completo (idempotente); una unidad puede estar en
+        la lista de varios Monitoristas (DEC-145 #1). Escriben `administrador` y
+        `jefe_operativo` (DEC-140 #1, DEC-142 #2); otro rol responde 403.
+        Responde 400 si alguna unidad no existe en el roster.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/UnidadesSujetoEntrada"}
+      responses:
+        "204": {description: Unidades fijadas.}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            `codigo` de máquina `rol_sin_alcance` si el usuario no tiene rol
+            activo `monitorista`.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/sujetos/{id}/alcance/subordinados:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id del superior (Supervisor o Coordinador).
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    put:
+      operationId: fijarSubordinadosSujeto
+      tags: [administracion]
+      summary: Fijar los subordinados de un Supervisor o Coordinador (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Reenvía a `identidad.fijarSubordinadosSujeto`.
+        Reemplaza el conjunto completo (idempotente): Monitoristas de un
+        Supervisor o Supervisores de un Coordinador (DEC-140 #2). Cada
+        subordinado tiene a lo sumo un superior (DEC-145 #2). Un id de
+        subordinado que no existe responde 400. Escribe solo `administrador`;
+        otro rol responde 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SubordinadosSujetoEntrada"}
+      responses:
+        "204": {description: Subordinados fijados.}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            `codigo` de máquina: `rol_sin_alcance` si el superior no tiene rol
+            activo `supervisor` ni `coordinador`; `subordinado_rol_invalido` si
+            algún subordinado no tiene el rol que corresponde (`monitorista`
+            bajo un Supervisor, `supervisor` bajo un Coordinador);
+            `subordinado_con_superior` si algún subordinado ya tiene otro
+            superior (DEC-145 #2).
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/organizaciones:
+    get:
+      operationId: listarOrganizaciones
+      tags: [administracion]
+      summary: Listar organizaciones cliente (audiencia interna, solo administrador, B-3).
+      description: >-
+        Solo audiencia Interno. Compone el expediente de `catalogos` (nombre,
+        correo, teléfono) con el tenant de `identidad` (`activa`,
+        `usuarios_activos`), unidos por el mismo id (DEC-144 #2). Trae
+        organizaciones activas y desactivadas. Paginado por cursor. Lee solo
+        `administrador`; otro rol responde 403.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de organizaciones.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaOrganizaciones"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    post:
+      operationId: crearOrganizacion
+      tags: [administracion]
+      summary: Alta de una organización cliente (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Da de alta la organización en los dos módulos
+        con el mismo id (DEC-144 #2): el expediente en `catalogos`
+        (`crearCliente`) y el tenant en `identidad` (`crearTenant`). Nombre,
+        correo y teléfono son obligatorios (DEC-139 #2). El `id` es opcional:
+        si no llega lo genera el `bff`. Si el alta falla a la mitad, reintentar
+        con el mismo `id` la completa; si ya estaba completa, responde la
+        organización guardada sin cambiarla. Escribe solo `administrador`; otro
+        rol responde 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/OrganizacionEntrada"}
+      responses:
+        "201":
+          description: Organización creada (o completada al reintentar con el mismo id).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Organizacion"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "409":
+          description: >-
+            `codigo` de máquina `organizacion_desactivada` si el `id` es de una
+            organización desactivada: la desactivación es terminal y no se
+            revierte con un alta (DEC-139 #4).
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/organizaciones/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Id de la organización (su tenant y su `cliente_id`, DEC-112).
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    patch:
+      operationId: actualizarOrganizacion
+      tags: [administracion]
+      summary: Editar los datos de una organización (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Cambia los campos presentes (nombre, correo,
+        teléfono) en `catalogos` (`actualizarCliente`). El id no se edita
+        (E4-HU-019). No reactiva: no hay reactivación en V1 (DEC-139 #4).
+        Escribe solo `administrador`; otro rol responde 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/OrganizacionCambios"}
+      responses:
+        "200":
+          description: Organización modificada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Organizacion"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            `codigo` de máquina `organizacion_desactivada` si la organización
+            está desactivada: es terminal y no se edita (DEC-139 #4).
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+    delete:
+      operationId: desactivarOrganizacion
+      tags: [administracion]
+      summary: Desactivar una organización, de forma terminal (audiencia interna, solo administrador).
+      description: >-
+        Solo audiencia Interno. Marca los dos lados (DEC-144 #2): el cliente de
+        `catalogos` pasa a `inactivo` y el tenant de `identidad` a inactivo
+        (`desactivarTenant`). Es terminal: no hay reactivación en V1 (DEC-139
+        #4). Sus usuarios pierden el acceso en el siguiente refresco de su
+        sesión, no en vivo. Desactivar una ya desactivada responde 204
+        (idempotente), así que reintentar completa una desactivación a medias.
+        Escribe solo `administrador`; otro rol responde 403.
+      responses:
+        "204": {description: Organización desactivada.}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  # ===========================================================================
   # Histórico operativo del viaje (E8-T13 / DEC-105). Siete reenvíos a
   # `operacion` (bitácora, incidencias, estadías) con las guardas de alcance/rol
   # del `bff`; sin lógica de dominio. Son superficie INTERNA: la vista curada
@@ -2384,7 +2868,10 @@ components:
           type: string
           nullable: true
           description: >-
-            Código del segundo factor (TOTP). Opcional en V1; requerido en V2+.
+            Código del segundo factor (TOTP). Obligatorio en V1 para todo rol
+            (E4-HU-017): un factor ausente o vacío se rechaza con el mismo 401
+            uniforme que una credencial inválida (DEC-094). El schema lo
+            conserva opcional y nullable por compatibilidad.
             El IdP (Keycloak) lo valida; `bff`/`identidad` sólo lo transportan.
             Espejo de `CredencialesEntrada.segundo_factor` de `identidad`
             (DEC-031/ADR 13, DEC-071).
@@ -3298,6 +3785,269 @@ components:
           type: string
           nullable: true
           description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    # --- Administración de usuarios, alcance y organizaciones (E8-T19,
+    #     tracer.40). Las entradas y el alcance son espejo de `identidad`;
+    #     `UsuarioAdmin` y `Organizacion` son formas propias del `bff`. ---
+    UsuarioAdmin:
+      type: object
+      additionalProperties: false
+      required: [id, activo, es_propio]
+      description: >-
+        Usuario tal como lo muestra `/administracion` (B-15). Lo compone el
+        `bff` desde el sujeto de `identidad` y, para un `cliente`, el nombre de
+        su organización en `catalogos`.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        nombre:
+          type: string
+          description: >-
+            Nombre del usuario. Opcional: un usuario dado de alta antes de
+            tracer.40 puede no tenerlo en `identidad`.
+        identificador_usuario:
+          type: string
+          description: >-
+            Identificador de acceso (correo o usuario). Inmutable en V1
+            (DEC-139 #5). Opcional por la misma razón que `nombre`.
+        rol:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Rol"]
+          description: Rol activo. Ausente si el usuario no tiene rol activo.
+        activo:
+          type: boolean
+          description: false si el usuario está desactivado.
+        organizacion:
+          allOf: [$ref: "#/components/schemas/OrganizacionResumen"]
+          description: >-
+            Organización del usuario. Presente solo para un usuario de tenant
+            cliente; ausente para los internos.
+        es_propio:
+          type: boolean
+          description: >-
+            true si el usuario es el mismo que hace la petición. Lo resuelve el
+            `bff` en servidor contra el `sub` del token (B-14), porque `sub` no
+            es el `id` del sujeto (DEC-072).
+
+    OrganizacionResumen:
+      type: object
+      additionalProperties: false
+      required: [id, nombre]
+      description: Organización legible de un usuario cliente.
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        nombre: {type: string}
+
+    PaginaUsuariosAdmin:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/UsuarioAdmin"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no hay más páginas.
+
+    AltaSujetoEntrada:
+      type: object
+      additionalProperties: false
+      required: [nombre, identificador_usuario, rol]
+      description: >-
+        Alta de un usuario con su rol inicial (E4-HU-018). El actor se resuelve
+        en servidor desde el token. A diferencia de `identidad`, el panel no
+        envía `tenant_id` (B-7): para `cliente` envía `organizacion_id` y para
+        un rol interno no envía organización; el `bff` resuelve el tenant
+        interno de AI27 (G-9) con `identidad.listarTenants`.
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          description: Nombre del usuario.
+        identificador_usuario:
+          type: string
+          minLength: 1
+          description: Identificador de acceso del usuario (correo o usuario).
+        rol: {$ref: "_comunes.yaml#/components/schemas/Rol"}
+        organizacion_id:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
+          description: >-
+            Organización del usuario. Obligatoria si `rol` es `cliente` y
+            prohibida para un rol interno; si no se cumple, 400. Una
+            organización inexistente responde 400 y una desactivada, 409
+            `organizacion_desactivada`.
+
+    EdicionSujetoEntrada:
+      type: object
+      additionalProperties: false
+      required: [nombre]
+      description: >-
+        Solo el nombre: el identificador de acceso no se edita en V1 (DEC-139
+        #5). Espejo de `EdicionSujetoEntrada` de `identidad`.
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+
+    AsignacionRolEntrada:
+      type: object
+      additionalProperties: false
+      required: [rol]
+      description: >-
+        Rol a fijar en el usuario. Espejo de `AsignacionRolEntrada` de
+        `identidad`.
+      properties:
+        rol: {$ref: "_comunes.yaml#/components/schemas/Rol"}
+
+    RevocacionSesionesEntrada:
+      type: object
+      additionalProperties: false
+      required: [motivo]
+      description: Espejo de `RevocacionSesionesEntrada` de `identidad`.
+      properties:
+        motivo:
+          type: string
+          minLength: 1
+          description: Motivo de la revocación, texto libre y obligatorio (DEC-139 #1).
+
+    RevocacionSesionesResultado:
+      type: object
+      additionalProperties: false
+      required: [sesiones_revocadas]
+      description: Espejo de `RevocacionSesionesResultado` de `identidad`.
+      properties:
+        sesiones_revocadas:
+          type: integer
+          minimum: 0
+          description: Cuántas sesiones vivas se revocaron. 0 si no tenía ninguna.
+
+    AlcanceSujeto:
+      type: object
+      additionalProperties: false
+      required: [unidades_ids, subordinados_ids, unidades_efectivas_ids]
+      description: Alcance de monitoreo (DEC-140). Espejo de `AlcanceSujeto` de `identidad`.
+      properties:
+        unidades_ids:
+          type: array
+          description: Unidades asignadas directamente ("mis unidades"); solo un Monitorista tiene.
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        subordinados_ids:
+          type: array
+          description: Subordinados directos (Monitoristas de un Supervisor, Supervisores de un Coordinador).
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        unidades_efectivas_ids:
+          type: array
+          description: Unión, sin repetidos, de las unidades propias y las de los subordinados (DEC-140 #2).
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+
+    UnidadesSujetoEntrada:
+      type: object
+      additionalProperties: false
+      required: [unidades_ids]
+      description: >-
+        Conjunto completo de unidades del Monitorista; reemplaza al anterior.
+        Espejo de `UnidadesSujetoEntrada` de `identidad`.
+      properties:
+        unidades_ids:
+          type: array
+          description: Ids de unidades del roster. Vacía para quitarle todas.
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+
+    SubordinadosSujetoEntrada:
+      type: object
+      additionalProperties: false
+      required: [sujetos_ids]
+      description: >-
+        Conjunto completo de subordinados directos; reemplaza al anterior.
+        Espejo de `SubordinadosSujetoEntrada` de `identidad`.
+      properties:
+        sujetos_ids:
+          type: array
+          description: Ids de los usuarios subordinados. Vacía para quitarle todos.
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+
+    Organizacion:
+      type: object
+      additionalProperties: false
+      required: [id, nombre, activa, usuarios_activos]
+      description: >-
+        Organización cliente (B-3). El `bff` la compone desde `catalogos`
+        (nombre, correo, teléfono) y desde el tenant de `identidad` (`activa`,
+        `usuarios_activos`), con el mismo id (DEC-144 #2).
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        nombre: {type: string}
+        correo:
+          type: string
+          description: >-
+            Correo de contacto (DEC-139 #2). Opcional en la respuesta: una
+            organización dada de alta antes de tracer.40 no lo tiene.
+        telefono:
+          type: string
+          description: Teléfono de contacto (DEC-139 #2). Opcional por la misma razón que `correo`.
+        activa:
+          type: boolean
+          description: false si está desactivada (terminal, DEC-139 #4).
+        usuarios_activos:
+          type: integer
+          minimum: 0
+          description: Usuarios activos de la organización.
+
+    OrganizacionEntrada:
+      type: object
+      additionalProperties: false
+      required: [nombre, correo, telefono]
+      description: >-
+        Alta de una organización. Los tres datos de contacto son obligatorios
+        en V1 (DEC-139 #2).
+      properties:
+        id:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
+          description: >-
+            Opcional. Id que genera el panel para que reintentar el alta con el
+            mismo id complete una a medias (DEC-144 #2). Si no llega, lo genera
+            el `bff`.
+        nombre:
+          type: string
+          minLength: 1
+        correo:
+          type: string
+          pattern: "@"
+          description: Validación mínima de V1, debe contener `@` (DEC-139 #2).
+        telefono:
+          type: string
+          minLength: 1
+
+    OrganizacionCambios:
+      type: object
+      additionalProperties: false
+      description: >-
+        Edición de una organización (PATCH). Todos los campos son opcionales;
+        se cambian los presentes. El id no se edita.
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+        correo:
+          type: string
+          pattern: "@"
+          description: Validación mínima de V1, debe contener `@` (DEC-139 #2).
+        telefono:
+          type: string
+          minLength: 1
+
+    PaginaOrganizaciones:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Organizacion"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no hay más páginas.
 
     # --- Cliente para el selector de creación de viaje (E8-T11). Espejo de
     #     `Cliente`/`PaginaClientes` de `catalogos`. Forma ligera: id + nombre

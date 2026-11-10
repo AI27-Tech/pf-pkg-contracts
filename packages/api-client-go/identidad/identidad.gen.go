@@ -24,15 +24,33 @@ const (
 
 // Defines values for Rol.
 const (
-	Administrador Rol = "administrador"
-	Cliente       Rol = "cliente"
-	Coordinador   Rol = "coordinador"
-	Ejecutivo     Rol = "ejecutivo"
-	JefeOperativo Rol = "jefe_operativo"
-	Monitorista   Rol = "monitorista"
-	Reaccion      Rol = "reaccion"
-	Supervisor    Rol = "supervisor"
+	RolAdministrador Rol = "administrador"
+	RolCliente       Rol = "cliente"
+	RolCoordinador   Rol = "coordinador"
+	RolEjecutivo     Rol = "ejecutivo"
+	RolJefeOperativo Rol = "jefe_operativo"
+	RolMonitorista   Rol = "monitorista"
+	RolReaccion      Rol = "reaccion"
+	RolSupervisor    Rol = "supervisor"
 )
+
+// Defines values for TenantTipo.
+const (
+	TenantTipoCliente TenantTipo = "cliente"
+	TenantTipoInterno TenantTipo = "interno"
+)
+
+// AlcanceSujeto Alcance de monitoreo de un sujeto (DEC-140). El alcance no viaja en el token: se resuelve en servidor (DEC-053).
+type AlcanceSujeto struct {
+	// SubordinadosIds Subordinados directos: Monitoristas de un Supervisor o Supervisores de un Coordinador. Vacía para otro rol.
+	SubordinadosIds []Id `json:"subordinados_ids"`
+
+	// UnidadesEfectivasIds Unión, sin repetidos, de `unidades_ids` y de las unidades de los subordinados por la jerarquía (DEC-140 #2). Para un Monitorista es igual a `unidades_ids`.
+	UnidadesEfectivasIds []Id `json:"unidades_efectivas_ids"`
+
+	// UnidadesIds Unidades asignadas directamente ("mis unidades"). Solo un Monitorista tiene; vacía para otro rol. Ids de `operacion`.
+	UnidadesIds []Id `json:"unidades_ids"`
+}
 
 // AltaSujetoEntrada Alta de un sujeto con su rol inicial (E4-HU-018). El actor y su autorización NO viajan aquí: se resuelven en servidor desde el token.
 type AltaSujetoEntrada struct {
@@ -78,7 +96,7 @@ type CredencialesEntrada struct {
 	// Contrasena Credencial. AI27 no la custodia: se delega a Cognito. No se registra ni se refleja en logs (E0-T3).
 	Contrasena string `json:"contrasena"`
 
-	// SegundoFactor Código del segundo factor (TOTP de 6 dígitos, WebAuthn, SMS, etc.). Opcional en V1; requerido en V2+. El IdP (Keycloak) valida el código; AI27 identidad solo lo transporta. Ver DEC-031 (ADR 13), DEC-065 (A-3) y DEC-087 (A-15).
+	// SegundoFactor Código del segundo factor (TOTP de 6 dígitos). Obligatorio en V1 para todo rol (E4-HU-017): `identidad` rechaza un factor ausente, vacío o solo con espacios con el mismo 401 uniforme que una credencial inválida, sin llamar al IdP (DEC-094). El schema lo conserva opcional y nullable por compatibilidad; la obligatoriedad es de comportamiento. El IdP (Keycloak) valida el código; AI27 identidad solo lo transporta. Ver DEC-031 (ADR 13), DEC-065 (A-3), DEC-087 (A-15) y DEC-094.
 	SegundoFactor *string `json:"segundo_factor"`
 
 	// Usuario Identificador de acceso del sujeto (según Cognito).
@@ -87,6 +105,12 @@ type CredencialesEntrada struct {
 
 // Cursor Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato.
 type Cursor = string
+
+// EdicionSujetoEntrada Datos editables del sujeto. Solo el nombre: el identificador de acceso no se edita en V1 (DEC-139 #5).
+type EdicionSujetoEntrada struct {
+	// Nombre Nombre nuevo del usuario.
+	Nombre string `json:"nombre"`
+}
 
 // Error defines model for Error.
 type Error struct {
@@ -138,6 +162,20 @@ type PaginaRevocaciones struct {
 	Items           []Revocacion `json:"items"`
 }
 
+// PaginaSujetos defines model for PaginaSujetos.
+type PaginaSujetos struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más páginas.
+	CursorSiguiente *string         `json:"cursor_siguiente"`
+	Items           []SujetoDetalle `json:"items"`
+}
+
+// PaginaTenants defines model for PaginaTenants.
+type PaginaTenants struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más páginas.
+	CursorSiguiente *string  `json:"cursor_siguiente"`
+	Items           []Tenant `json:"items"`
+}
+
 // RefrescoEntrada defines model for RefrescoEntrada.
 type RefrescoEntrada struct {
 	// RefreshToken Token de refresco emitido por el proveedor.
@@ -154,6 +192,18 @@ type Revocacion struct {
 
 	// SesionId Identificador único (UUID). Nunca un correlativo expuesto.
 	SesionId Id `json:"sesion_id"`
+}
+
+// RevocacionSesionesEntrada Revocación administrativa de las sesiones de un sujeto (E4-HU-020).
+type RevocacionSesionesEntrada struct {
+	// Motivo Motivo de la revocación, texto libre y obligatorio (DEC-139 #1). Se guarda en la auditoría local; no viaja en `sesion.revocada`.
+	Motivo string `json:"motivo"`
+}
+
+// RevocacionSesionesResultado defines model for RevocacionSesionesResultado.
+type RevocacionSesionesResultado struct {
+	// SesionesRevocadas Cuántas sesiones vivas se revocaron. 0 si no tenía ninguna.
+	SesionesRevocadas int `json:"sesiones_revocadas"`
 }
 
 // Rol Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
@@ -174,6 +224,12 @@ type SesionEmitida struct {
 	SesionId Id `json:"sesion_id"`
 }
 
+// SubordinadosSujetoEntrada Conjunto completo de subordinados directos; reemplaza al anterior.
+type SubordinadosSujetoEntrada struct {
+	// SujetosIds Ids de sujeto de los subordinados. Vacía para quitarle todos.
+	SujetosIds []Id `json:"sujetos_ids"`
+}
+
 // Sujeto Sujeto dentro de un tenant. identidad no custodia credenciales; el `idp_subject` es el subject OIDC opaco del IdP (DEC-072, `sub` ≠ `id`).
 type Sujeto struct {
 	// Activo false si el sujeto está desactivado (retiro de acceso).
@@ -182,8 +238,14 @@ type Sujeto struct {
 	// Id Identificador único (UUID). Nunca un correlativo expuesto.
 	Id Id `json:"id"`
 
+	// IdentificadorUsuario Identificador de acceso (correo o usuario), copia local desde tracer.40 (B-15). Inmutable en V1 (DEC-139 #5). Opcional: un sujeto dado de alta antes no lo tiene.
+	IdentificadorUsuario *string `json:"identificador_usuario,omitempty"`
+
 	// IdpSubject Subject OIDC opaco del IdP. No es la credencial ni el `id`.
 	IdpSubject *string `json:"idp_subject,omitempty"`
+
+	// Nombre Nombre del usuario, copia local desde tracer.40 (B-15). Opcional: un sujeto dado de alta antes no lo tiene.
+	Nombre *string `json:"nombre,omitempty"`
 
 	// TenantId Identificador único (UUID). Nunca un correlativo expuesto.
 	TenantId Id `json:"tenant_id"`
@@ -199,6 +261,36 @@ type SujetoDetalle struct {
 
 	// TieneRol false si el sujeto no tiene rol activo; entonces `rol` se omite.
 	TieneRol bool `json:"tiene_rol"`
+}
+
+// Tenant Espacio de pertenencia de un sujeto. Hay un tenant interno de AI27 y uno por organización cliente, con el id de su `cliente_id` (DEC-112).
+type Tenant struct {
+	// Activa false si la organización está desactivada (terminal, DEC-139 #4). Sus sujetos no pasan el siguiente refresco.
+	Activa bool `json:"activa"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id     Id     `json:"id"`
+	Nombre string `json:"nombre"`
+
+	// Tipo `interno` para el tenant único de AI27; `cliente` para el de una organización cliente.
+	Tipo TenantTipo `json:"tipo"`
+
+	// UsuariosActivos Sujetos activos del tenant.
+	UsuariosActivos int `json:"usuarios_activos"`
+}
+
+// TenantTipo `interno` para el tenant único de AI27; `cliente` para el de una organización cliente.
+type TenantTipo string
+
+// TenantEntrada Alta del tenant de una organización cliente. El id va en la ruta.
+type TenantEntrada struct {
+	Nombre string `json:"nombre"`
+}
+
+// UnidadesSujetoEntrada Conjunto completo de unidades del Monitorista; reemplaza al anterior.
+type UnidadesSujetoEntrada struct {
+	// UnidadesIds Ids de unidades de `operacion`. Vacía para quitarle todas.
+	UnidadesIds []Id `json:"unidades_ids"`
 }
 
 // Conflicto defines model for Conflicto.
@@ -222,8 +314,32 @@ type ListarSesionesRevocadasParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListarSujetosParams defines parameters for ListarSujetos.
+type ListarSujetosParams struct {
+	// Q Texto a buscar en nombre e identificador de usuario.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Rol Solo sujetos cuyo rol activo es este.
+	Rol *Rol `form:"rol,omitempty" json:"rol,omitempty"`
+
+	// TenantId Solo sujetos de este tenant (para un cliente, su organización).
+	TenantId *Id `form:"tenant_id,omitempty" json:"tenant_id,omitempty"`
+
+	// Activo true para solo activos, false para solo desactivados; ausente, ambos.
+	Activo *bool `form:"activo,omitempty" json:"activo,omitempty"`
+
+	// Cursor Cursor de continuación; ausente para la primera página.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListarHistorialSujetoParams defines parameters for ListarHistorialSujeto.
 type ListarHistorialSujetoParams struct {
+	// Cursor Cursor de continuación; ausente para la primera página.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListarTenantsParams defines parameters for ListarTenants.
+type ListarTenantsParams struct {
 	// Cursor Cursor de continuación; ausente para la primera página.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
@@ -237,8 +353,23 @@ type RefrescarSesionJSONRequestBody = RefrescoEntrada
 // AltaSujetoJSONRequestBody defines body for AltaSujeto for application/json ContentType.
 type AltaSujetoJSONRequestBody = AltaSujetoEntrada
 
+// EditarSujetoJSONRequestBody defines body for EditarSujeto for application/json ContentType.
+type EditarSujetoJSONRequestBody = EdicionSujetoEntrada
+
+// FijarSubordinadosSujetoJSONRequestBody defines body for FijarSubordinadosSujeto for application/json ContentType.
+type FijarSubordinadosSujetoJSONRequestBody = SubordinadosSujetoEntrada
+
+// FijarUnidadesSujetoJSONRequestBody defines body for FijarUnidadesSujeto for application/json ContentType.
+type FijarUnidadesSujetoJSONRequestBody = UnidadesSujetoEntrada
+
+// RevocarSesionesSujetoJSONRequestBody defines body for RevocarSesionesSujeto for application/json ContentType.
+type RevocarSesionesSujetoJSONRequestBody = RevocacionSesionesEntrada
+
 // FijarRolSujetoJSONRequestBody defines body for FijarRolSujeto for application/json ContentType.
 type FijarRolSujetoJSONRequestBody = AsignacionRolEntrada
+
+// CrearTenantJSONRequestBody defines body for CrearTenant for application/json ContentType.
+type CrearTenantJSONRequestBody = TenantEntrada
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -332,6 +463,9 @@ type ClientInterface interface {
 	// ObtenerSesion request
 	ObtenerSesion(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListarSujetos request
+	ListarSujetos(ctx context.Context, params *ListarSujetosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AltaSujetoWithBody request with any body
 	AltaSujetoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -343,16 +477,50 @@ type ClientInterface interface {
 	// ObtenerSujeto request
 	ObtenerSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// EditarSujetoWithBody request with any body
+	EditarSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	EditarSujeto(ctx context.Context, id Id, body EditarSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerAlcanceSujeto request
+	ObtenerAlcanceSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// FijarSubordinadosSujetoWithBody request with any body
+	FijarSubordinadosSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	FijarSubordinadosSujeto(ctx context.Context, id Id, body FijarSubordinadosSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// FijarUnidadesSujetoWithBody request with any body
+	FijarUnidadesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	FijarUnidadesSujeto(ctx context.Context, id Id, body FijarUnidadesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarHistorialSujeto request
 	ListarHistorialSujeto(ctx context.Context, id Id, params *ListarHistorialSujetoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReactivarSujeto request
 	ReactivarSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// RevocarSesionesSujetoWithBody request with any body
+	RevocarSesionesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	RevocarSesionesSujeto(ctx context.Context, id Id, body RevocarSesionesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// FijarRolSujetoWithBody request with any body
 	FijarRolSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	FijarRolSujeto(ctx context.Context, id Id, body FijarRolSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListarTenants request
+	ListarTenants(ctx context.Context, params *ListarTenantsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DesactivarTenant request
+	DesactivarTenant(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CrearTenantWithBody request with any body
+	CrearTenantWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearTenant(ctx context.Context, id Id, body CrearTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) EmitirSesionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -439,6 +607,18 @@ func (c *Client) ObtenerSesion(ctx context.Context, id Id, reqEditors ...Request
 	return c.Client.Do(req)
 }
 
+func (c *Client) ListarSujetos(ctx context.Context, params *ListarSujetosParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarSujetosRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) AltaSujetoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAltaSujetoRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -487,6 +667,90 @@ func (c *Client) ObtenerSujeto(ctx context.Context, id Id, reqEditors ...Request
 	return c.Client.Do(req)
 }
 
+func (c *Client) EditarSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEditarSujetoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) EditarSujeto(ctx context.Context, id Id, body EditarSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEditarSujetoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerAlcanceSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerAlcanceSujetoRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarSubordinadosSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarSubordinadosSujetoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarSubordinadosSujeto(ctx context.Context, id Id, body FijarSubordinadosSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarSubordinadosSujetoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarUnidadesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarUnidadesSujetoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarUnidadesSujeto(ctx context.Context, id Id, body FijarUnidadesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarUnidadesSujetoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ListarHistorialSujeto(ctx context.Context, id Id, params *ListarHistorialSujetoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarHistorialSujetoRequest(c.Server, id, params)
 	if err != nil {
@@ -511,6 +775,30 @@ func (c *Client) ReactivarSujeto(ctx context.Context, id Id, reqEditors ...Reque
 	return c.Client.Do(req)
 }
 
+func (c *Client) RevocarSesionesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevocarSesionesSujetoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RevocarSesionesSujeto(ctx context.Context, id Id, body RevocarSesionesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevocarSesionesSujetoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) FijarRolSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewFijarRolSujetoRequestWithBody(c.Server, id, contentType, body)
 	if err != nil {
@@ -525,6 +813,54 @@ func (c *Client) FijarRolSujetoWithBody(ctx context.Context, id Id, contentType 
 
 func (c *Client) FijarRolSujeto(ctx context.Context, id Id, body FijarRolSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewFijarRolSujetoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarTenants(ctx context.Context, params *ListarTenantsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarTenantsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DesactivarTenant(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDesactivarTenantRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearTenantWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearTenantRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearTenant(ctx context.Context, id Id, body CrearTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearTenantRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -732,6 +1068,119 @@ func NewObtenerSesionRequest(server string, id Id) (*http.Request, error) {
 	return req, nil
 }
 
+// NewListarSujetosRequest generates requests for ListarSujetos
+func NewListarSujetosRequest(server string, params *ListarSujetosParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "q", runtime.ParamLocationQuery, *params.Q); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Rol != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "rol", runtime.ParamLocationQuery, *params.Rol); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.TenantId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "tenant_id", runtime.ParamLocationQuery, *params.TenantId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Activo != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "activo", runtime.ParamLocationQuery, *params.Activo); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewAltaSujetoRequest calls the generic AltaSujeto builder with application/json body
 func NewAltaSujetoRequest(server string, body AltaSujetoJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -840,6 +1289,181 @@ func NewObtenerSujetoRequest(server string, id Id) (*http.Request, error) {
 	return req, nil
 }
 
+// NewEditarSujetoRequest calls the generic EditarSujeto builder with application/json body
+func NewEditarSujetoRequest(server string, id Id, body EditarSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEditarSujetoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewEditarSujetoRequestWithBody generates requests for EditarSujeto with any type of body
+func NewEditarSujetoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewObtenerAlcanceSujetoRequest generates requests for ObtenerAlcanceSujeto
+func NewObtenerAlcanceSujetoRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/alcance", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewFijarSubordinadosSujetoRequest calls the generic FijarSubordinadosSujeto builder with application/json body
+func NewFijarSubordinadosSujetoRequest(server string, id Id, body FijarSubordinadosSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewFijarSubordinadosSujetoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewFijarSubordinadosSujetoRequestWithBody generates requests for FijarSubordinadosSujeto with any type of body
+func NewFijarSubordinadosSujetoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/alcance/subordinados", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewFijarUnidadesSujetoRequest calls the generic FijarUnidadesSujeto builder with application/json body
+func NewFijarUnidadesSujetoRequest(server string, id Id, body FijarUnidadesSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewFijarUnidadesSujetoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewFijarUnidadesSujetoRequestWithBody generates requests for FijarUnidadesSujeto with any type of body
+func NewFijarUnidadesSujetoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/alcance/unidades", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListarHistorialSujetoRequest generates requests for ListarHistorialSujeto
 func NewListarHistorialSujetoRequest(server string, id Id, params *ListarHistorialSujetoParams) (*http.Request, error) {
 	var err error
@@ -930,6 +1554,53 @@ func NewReactivarSujetoRequest(server string, id Id) (*http.Request, error) {
 	return req, nil
 }
 
+// NewRevocarSesionesSujetoRequest calls the generic RevocarSesionesSujeto builder with application/json body
+func NewRevocarSesionesSujetoRequest(server string, id Id, body RevocarSesionesSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRevocarSesionesSujetoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewRevocarSesionesSujetoRequestWithBody generates requests for RevocarSesionesSujeto with any type of body
+func NewRevocarSesionesSujetoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/revocaciones", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewFijarRolSujetoRequest calls the generic FijarRolSujeto builder with application/json body
 func NewFijarRolSujetoRequest(server string, id Id, body FijarRolSujetoJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -958,6 +1629,136 @@ func NewFijarRolSujetoRequestWithBody(server string, id Id, contentType string, 
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/rol", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListarTenantsRequest generates requests for ListarTenants
+func NewListarTenantsRequest(server string, params *ListarTenantsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tenants")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDesactivarTenantRequest generates requests for DesactivarTenant
+func NewDesactivarTenantRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tenants/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCrearTenantRequest calls the generic CrearTenant builder with application/json body
+func NewCrearTenantRequest(server string, id Id, body CrearTenantJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearTenantRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewCrearTenantRequestWithBody generates requests for CrearTenant with any type of body
+func NewCrearTenantRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tenants/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1039,6 +1840,9 @@ type ClientWithResponsesInterface interface {
 	// ObtenerSesionWithResponse request
 	ObtenerSesionWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerSesionResponse, error)
 
+	// ListarSujetosWithResponse request
+	ListarSujetosWithResponse(ctx context.Context, params *ListarSujetosParams, reqEditors ...RequestEditorFn) (*ListarSujetosResponse, error)
+
 	// AltaSujetoWithBodyWithResponse request with any body
 	AltaSujetoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AltaSujetoResponse, error)
 
@@ -1050,16 +1854,50 @@ type ClientWithResponsesInterface interface {
 	// ObtenerSujetoWithResponse request
 	ObtenerSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerSujetoResponse, error)
 
+	// EditarSujetoWithBodyWithResponse request with any body
+	EditarSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EditarSujetoResponse, error)
+
+	EditarSujetoWithResponse(ctx context.Context, id Id, body EditarSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*EditarSujetoResponse, error)
+
+	// ObtenerAlcanceSujetoWithResponse request
+	ObtenerAlcanceSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerAlcanceSujetoResponse, error)
+
+	// FijarSubordinadosSujetoWithBodyWithResponse request with any body
+	FijarSubordinadosSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarSubordinadosSujetoResponse, error)
+
+	FijarSubordinadosSujetoWithResponse(ctx context.Context, id Id, body FijarSubordinadosSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarSubordinadosSujetoResponse, error)
+
+	// FijarUnidadesSujetoWithBodyWithResponse request with any body
+	FijarUnidadesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarUnidadesSujetoResponse, error)
+
+	FijarUnidadesSujetoWithResponse(ctx context.Context, id Id, body FijarUnidadesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarUnidadesSujetoResponse, error)
+
 	// ListarHistorialSujetoWithResponse request
 	ListarHistorialSujetoWithResponse(ctx context.Context, id Id, params *ListarHistorialSujetoParams, reqEditors ...RequestEditorFn) (*ListarHistorialSujetoResponse, error)
 
 	// ReactivarSujetoWithResponse request
 	ReactivarSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ReactivarSujetoResponse, error)
 
+	// RevocarSesionesSujetoWithBodyWithResponse request with any body
+	RevocarSesionesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RevocarSesionesSujetoResponse, error)
+
+	RevocarSesionesSujetoWithResponse(ctx context.Context, id Id, body RevocarSesionesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*RevocarSesionesSujetoResponse, error)
+
 	// FijarRolSujetoWithBodyWithResponse request with any body
 	FijarRolSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarRolSujetoResponse, error)
 
 	FijarRolSujetoWithResponse(ctx context.Context, id Id, body FijarRolSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarRolSujetoResponse, error)
+
+	// ListarTenantsWithResponse request
+	ListarTenantsWithResponse(ctx context.Context, params *ListarTenantsParams, reqEditors ...RequestEditorFn) (*ListarTenantsResponse, error)
+
+	// DesactivarTenantWithResponse request
+	DesactivarTenantWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*DesactivarTenantResponse, error)
+
+	// CrearTenantWithBodyWithResponse request with any body
+	CrearTenantWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearTenantResponse, error)
+
+	CrearTenantWithResponse(ctx context.Context, id Id, body CrearTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearTenantResponse, error)
 }
 
 type EmitirSesionResponse struct {
@@ -1181,6 +2019,31 @@ func (r ObtenerSesionResponse) StatusCode() int {
 	return 0
 }
 
+type ListarSujetosResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaSujetos
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarSujetosResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarSujetosResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type AltaSujetoResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -1213,7 +2076,7 @@ type DesactivarSujetoResponse struct {
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
 	JSON404      *NoEncontrado
-	JSON409      *Conflicto
+	JSON409      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -1251,6 +2114,109 @@ func (r ObtenerSujetoResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ObtenerSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type EditarSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SujetoDetalle
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r EditarSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EditarSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerAlcanceSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlcanceSujeto
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerAlcanceSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerAlcanceSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type FijarSubordinadosSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r FijarSubordinadosSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FijarSubordinadosSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type FijarUnidadesSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r FijarUnidadesSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FijarUnidadesSujetoResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1306,14 +2272,40 @@ func (r ReactivarSujetoResponse) StatusCode() int {
 	return 0
 }
 
+type RevocarSesionesSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RevocacionSesionesResultado
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r RevocarSesionesSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RevocarSesionesSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type FijarRolSujetoResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
-	JSON403      *Prohibido
+	JSON403      *Error
 	JSON404      *NoEncontrado
-	JSON409      *Conflicto
+	JSON409      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -1326,6 +2318,82 @@ func (r FijarRolSujetoResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r FijarRolSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarTenantsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaTenants
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarTenantsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarTenantsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DesactivarTenantResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r DesactivarTenantResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DesactivarTenantResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearTenantResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Tenant
+	JSON201      *Tenant
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearTenantResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearTenantResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1393,6 +2461,15 @@ func (c *ClientWithResponses) ObtenerSesionWithResponse(ctx context.Context, id 
 	return ParseObtenerSesionResponse(rsp)
 }
 
+// ListarSujetosWithResponse request returning *ListarSujetosResponse
+func (c *ClientWithResponses) ListarSujetosWithResponse(ctx context.Context, params *ListarSujetosParams, reqEditors ...RequestEditorFn) (*ListarSujetosResponse, error) {
+	rsp, err := c.ListarSujetos(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarSujetosResponse(rsp)
+}
+
 // AltaSujetoWithBodyWithResponse request with arbitrary body returning *AltaSujetoResponse
 func (c *ClientWithResponses) AltaSujetoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AltaSujetoResponse, error) {
 	rsp, err := c.AltaSujetoWithBody(ctx, contentType, body, reqEditors...)
@@ -1428,6 +2505,66 @@ func (c *ClientWithResponses) ObtenerSujetoWithResponse(ctx context.Context, id 
 	return ParseObtenerSujetoResponse(rsp)
 }
 
+// EditarSujetoWithBodyWithResponse request with arbitrary body returning *EditarSujetoResponse
+func (c *ClientWithResponses) EditarSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EditarSujetoResponse, error) {
+	rsp, err := c.EditarSujetoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEditarSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) EditarSujetoWithResponse(ctx context.Context, id Id, body EditarSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*EditarSujetoResponse, error) {
+	rsp, err := c.EditarSujeto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEditarSujetoResponse(rsp)
+}
+
+// ObtenerAlcanceSujetoWithResponse request returning *ObtenerAlcanceSujetoResponse
+func (c *ClientWithResponses) ObtenerAlcanceSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerAlcanceSujetoResponse, error) {
+	rsp, err := c.ObtenerAlcanceSujeto(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerAlcanceSujetoResponse(rsp)
+}
+
+// FijarSubordinadosSujetoWithBodyWithResponse request with arbitrary body returning *FijarSubordinadosSujetoResponse
+func (c *ClientWithResponses) FijarSubordinadosSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarSubordinadosSujetoResponse, error) {
+	rsp, err := c.FijarSubordinadosSujetoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarSubordinadosSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) FijarSubordinadosSujetoWithResponse(ctx context.Context, id Id, body FijarSubordinadosSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarSubordinadosSujetoResponse, error) {
+	rsp, err := c.FijarSubordinadosSujeto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarSubordinadosSujetoResponse(rsp)
+}
+
+// FijarUnidadesSujetoWithBodyWithResponse request with arbitrary body returning *FijarUnidadesSujetoResponse
+func (c *ClientWithResponses) FijarUnidadesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarUnidadesSujetoResponse, error) {
+	rsp, err := c.FijarUnidadesSujetoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarUnidadesSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) FijarUnidadesSujetoWithResponse(ctx context.Context, id Id, body FijarUnidadesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarUnidadesSujetoResponse, error) {
+	rsp, err := c.FijarUnidadesSujeto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarUnidadesSujetoResponse(rsp)
+}
+
 // ListarHistorialSujetoWithResponse request returning *ListarHistorialSujetoResponse
 func (c *ClientWithResponses) ListarHistorialSujetoWithResponse(ctx context.Context, id Id, params *ListarHistorialSujetoParams, reqEditors ...RequestEditorFn) (*ListarHistorialSujetoResponse, error) {
 	rsp, err := c.ListarHistorialSujeto(ctx, id, params, reqEditors...)
@@ -1446,6 +2583,23 @@ func (c *ClientWithResponses) ReactivarSujetoWithResponse(ctx context.Context, i
 	return ParseReactivarSujetoResponse(rsp)
 }
 
+// RevocarSesionesSujetoWithBodyWithResponse request with arbitrary body returning *RevocarSesionesSujetoResponse
+func (c *ClientWithResponses) RevocarSesionesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RevocarSesionesSujetoResponse, error) {
+	rsp, err := c.RevocarSesionesSujetoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevocarSesionesSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) RevocarSesionesSujetoWithResponse(ctx context.Context, id Id, body RevocarSesionesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*RevocarSesionesSujetoResponse, error) {
+	rsp, err := c.RevocarSesionesSujeto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevocarSesionesSujetoResponse(rsp)
+}
+
 // FijarRolSujetoWithBodyWithResponse request with arbitrary body returning *FijarRolSujetoResponse
 func (c *ClientWithResponses) FijarRolSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarRolSujetoResponse, error) {
 	rsp, err := c.FijarRolSujetoWithBody(ctx, id, contentType, body, reqEditors...)
@@ -1461,6 +2615,41 @@ func (c *ClientWithResponses) FijarRolSujetoWithResponse(ctx context.Context, id
 		return nil, err
 	}
 	return ParseFijarRolSujetoResponse(rsp)
+}
+
+// ListarTenantsWithResponse request returning *ListarTenantsResponse
+func (c *ClientWithResponses) ListarTenantsWithResponse(ctx context.Context, params *ListarTenantsParams, reqEditors ...RequestEditorFn) (*ListarTenantsResponse, error) {
+	rsp, err := c.ListarTenants(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarTenantsResponse(rsp)
+}
+
+// DesactivarTenantWithResponse request returning *DesactivarTenantResponse
+func (c *ClientWithResponses) DesactivarTenantWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*DesactivarTenantResponse, error) {
+	rsp, err := c.DesactivarTenant(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDesactivarTenantResponse(rsp)
+}
+
+// CrearTenantWithBodyWithResponse request with arbitrary body returning *CrearTenantResponse
+func (c *ClientWithResponses) CrearTenantWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearTenantResponse, error) {
+	rsp, err := c.CrearTenantWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearTenantResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearTenantWithResponse(ctx context.Context, id Id, body CrearTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearTenantResponse, error) {
+	rsp, err := c.CrearTenant(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearTenantResponse(rsp)
 }
 
 // ParseEmitirSesionResponse parses an HTTP response from a EmitirSesionWithResponse call
@@ -1656,6 +2845,53 @@ func ParseObtenerSesionResponse(rsp *http.Response) (*ObtenerSesionResponse, err
 	return response, nil
 }
 
+// ParseListarSujetosResponse parses an HTTP response from a ListarSujetosWithResponse call
+func ParseListarSujetosResponse(rsp *http.Response) (*ListarSujetosResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarSujetosResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaSujetos
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseAltaSujetoResponse parses an HTTP response from a AltaSujetoWithResponse call
 func ParseAltaSujetoResponse(rsp *http.Response) (*AltaSujetoResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -1746,7 +2982,7 @@ func ParseDesactivarSujetoResponse(rsp *http.Response) (*DesactivarSujetoRespons
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest Conflicto
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1798,6 +3034,215 @@ func ParseObtenerSujetoResponse(rsp *http.Response) (*ObtenerSujetoResponse, err
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEditarSujetoResponse parses an HTTP response from a EditarSujetoWithResponse call
+func ParseEditarSujetoResponse(rsp *http.Response) (*EditarSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EditarSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SujetoDetalle
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerAlcanceSujetoResponse parses an HTTP response from a ObtenerAlcanceSujetoWithResponse call
+func ParseObtenerAlcanceSujetoResponse(rsp *http.Response) (*ObtenerAlcanceSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerAlcanceSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlcanceSujeto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseFijarSubordinadosSujetoResponse parses an HTTP response from a FijarSubordinadosSujetoWithResponse call
+func ParseFijarSubordinadosSujetoResponse(rsp *http.Response) (*FijarSubordinadosSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FijarSubordinadosSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseFijarUnidadesSujetoResponse parses an HTTP response from a FijarUnidadesSujetoWithResponse call
+func ParseFijarUnidadesSujetoResponse(rsp *http.Response) (*FijarUnidadesSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FijarUnidadesSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
@@ -1891,6 +3336,60 @@ func ParseReactivarSujetoResponse(rsp *http.Response) (*ReactivarSujetoResponse,
 	return response, nil
 }
 
+// ParseRevocarSesionesSujetoResponse parses an HTTP response from a RevocarSesionesSujetoWithResponse call
+func ParseRevocarSesionesSujetoResponse(rsp *http.Response) (*RevocarSesionesSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RevocarSesionesSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RevocacionSesionesResultado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseFijarRolSujetoResponse parses an HTTP response from a FijarRolSujetoWithResponse call
 func ParseFijarRolSujetoResponse(rsp *http.Response) (*FijarRolSujetoResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -1920,6 +3419,93 @@ func ParseFijarRolSujetoResponse(rsp *http.Response) (*FijarRolSujetoResponse, e
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarTenantsResponse parses an HTTP response from a ListarTenantsWithResponse call
+func ParseListarTenantsResponse(rsp *http.Response) (*ListarTenantsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarTenantsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaTenants
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDesactivarTenantResponse parses an HTTP response from a DesactivarTenantWithResponse call
+func ParseDesactivarTenantResponse(rsp *http.Response) (*DesactivarTenantResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DesactivarTenantResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Prohibido
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -1932,6 +3518,67 @@ func ParseFijarRolSujetoResponse(rsp *http.Response) (*FijarRolSujetoResponse, e
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearTenantResponse parses an HTTP response from a CrearTenantWithResponse call
+func ParseCrearTenantResponse(rsp *http.Response) (*CrearTenantResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearTenantResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Tenant
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Tenant
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflicto
