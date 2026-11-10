@@ -35,12 +35,20 @@ export interface paths {
         };
         /** Expediente del cliente y su contrato vigente. */
         get: operations["obtenerCliente"];
-        put?: never;
+        /**
+         * Alta del expediente de una organización cliente, idempotente por id.
+         * @description Crea el cliente, en estado `activo`, con el id de la ruta: el mismo que su tenant en `identidad` (DEC-112, DEC-144 #2). Nombre, correo y teléfono son obligatorios (DEC-139 #2). Si ya existe un cliente con ese id, no lo modifica y responde 200 con el cliente guardado: así un alta de organización que falló a la mitad se completa reintentando con el mismo id. Emite `catalogo.actualizado` (`entidad` `cliente`) en la misma transacción (P17). `catalogos` no revisa rol: la guarda (solo `administrador`) la aplica el `bff`.
+         */
+        put: operations["crearCliente"];
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Modificar el expediente de un cliente, incluido su estado.
+         * @description Cambia los campos presentes (nombre, correo, teléfono, `estado`). Desactivar es cambiar `estado` a `inactivo`. Emite `catalogo.actualizado` (`entidad` `cliente`) en la misma transacción (P17). `catalogos` no revisa rol ni la regla de organización terminal (DEC-139 #4): las dos las aplica el `bff`.
+         */
+        patch: operations["actualizarCliente"];
         trace?: never;
     };
     "/api/v1/contratos": {
@@ -360,6 +368,26 @@ export interface components {
              * @description Opcional; mismo formato que `Id`. null si no aplica.
              */
             contrato_vigente_id?: string | null;
+            /** @description Correo de contacto de la organización (DEC-139 #2). Opcional en la respuesta: un cliente dado de alta antes de tracer.40 no lo tiene. */
+            correo?: string;
+            /** @description Teléfono de contacto de la organización (DEC-139 #2). Opcional en la respuesta por la misma razón que `correo`. */
+            telefono?: string;
+        };
+        /** @description Alta de un cliente (PUT con id en la ruta). Los tres datos de contacto son obligatorios en V1 (DEC-139 #2). */
+        ClienteEntrada: {
+            nombre: string;
+            /** @description Validación mínima de V1, debe contener `@` (DEC-139 */
+            correo: string;
+            telefono: string;
+        };
+        /** @description Modificación de un cliente (PATCH). Todos los campos son opcionales; se cambian los presentes. No incluye `id`. */
+        ClienteCambios: {
+            nombre?: string;
+            /** @description Validación mínima de V1, debe contener `@` (DEC-139 */
+            correo?: string;
+            telefono?: string;
+            /** @enum {string} */
+            estado?: "activo" | "inactivo";
         };
         PaginaClientes: {
             items: components["schemas"]["Cliente"][];
@@ -692,6 +720,74 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    crearCliente: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClienteEntrada"];
+            };
+        };
+        responses: {
+            /** @description El cliente ya existía; se devuelve sin cambios. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cliente"];
+                };
+            };
+            /** @description Cliente creado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cliente"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    actualizarCliente: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClienteCambios"];
+            };
+        };
+        responses: {
+            /** @description Cliente modificado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cliente"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
