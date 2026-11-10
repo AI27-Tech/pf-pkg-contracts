@@ -256,7 +256,7 @@ type AlcanceSujeto struct {
 	UnidadesIds []Id `json:"unidades_ids"`
 }
 
-// AltaSujetoEntrada Alta de un usuario con su rol inicial (E4-HU-018). Espejo de `AltaSujetoEntrada` de `identidad`. El actor se resuelve en servidor desde el token.
+// AltaSujetoEntrada Alta de un usuario con su rol inicial (E4-HU-018). El actor se resuelve en servidor desde el token. A diferencia de `identidad`, el panel no envía `tenant_id` (B-7): para `cliente` envía `organizacion_id` y para un rol interno no envía organización; el `bff` resuelve el tenant interno de AI27 (G-9) con `identidad.listarTenants`.
 type AltaSujetoEntrada struct {
 	// IdentificadorUsuario Identificador de acceso del usuario (correo o usuario).
 	IdentificadorUsuario string `json:"identificador_usuario"`
@@ -264,11 +264,11 @@ type AltaSujetoEntrada struct {
 	// Nombre Nombre del usuario.
 	Nombre string `json:"nombre"`
 
+	// OrganizacionId Organización del usuario. Obligatoria si `rol` es `cliente` y prohibida para un rol interno; si no se cumple, 400. Una organización inexistente responde 400 y una desactivada, 409 `organizacion_desactivada`.
+	OrganizacionId *Id `json:"organizacion_id,omitempty"`
+
 	// Rol Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
 	Rol Rol `json:"rol"`
-
-	// TenantId Tenant del usuario. Para `cliente` es el id de su organización; para los roles internos, el tenant interno de AI27 (G-9).
-	TenantId Id `json:"tenant_id"`
 }
 
 // AptitudRecurso Aptitud informativa por átomo en la respuesta de la asignación (DEC-055). Nunca bloquea la asignación en V1. Espejo de `AptitudRecurso` de `operacion`.

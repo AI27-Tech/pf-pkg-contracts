@@ -1019,7 +1019,7 @@ export interface paths {
         put?: never;
         /**
          * Alta de un usuario con su rol inicial (audiencia interna, solo administrador).
-         * @description Solo audiencia Interno. Reenvía a `identidad.altaSujeto`. Escribe solo `administrador`; otro rol responde 403.
+         * @description Solo audiencia Interno. Reenvía a `identidad.altaSujeto`. Escribe solo `administrador`; otro rol responde 403. El `bff` traduce `organizacion_id` al `tenant_id` de `identidad`: la organización es el tenant del cliente (DEC-112) y un rol interno va al tenant interno de AI27 (B-7). Los `codigo` de `identidad` se preservan.
          */
         post: operations["altaSujeto"];
         delete?: never;
@@ -1978,15 +1978,15 @@ export interface components {
             /** @description Opcional; mismo formato que `Cursor`. null si no hay más páginas. */
             cursor_siguiente: string | null;
         };
-        /** @description Alta de un usuario con su rol inicial (E4-HU-018). Espejo de `AltaSujetoEntrada` de `identidad`. El actor se resuelve en servidor desde el token. */
+        /** @description Alta de un usuario con su rol inicial (E4-HU-018). El actor se resuelve en servidor desde el token. A diferencia de `identidad`, el panel no envía `tenant_id` (B-7): para `cliente` envía `organizacion_id` y para un rol interno no envía organización; el `bff` resuelve el tenant interno de AI27 (G-9) con `identidad.listarTenants`. */
         AltaSujetoEntrada: {
             /** @description Nombre del usuario. */
             nombre: string;
             /** @description Identificador de acceso del usuario (correo o usuario). */
             identificador_usuario: string;
             rol: components["schemas"]["Rol"];
-            /** @description Tenant del usuario. Para `cliente` es el id de su organización; para los roles internos, el tenant interno de AI27 (G-9). */
-            tenant_id: components["schemas"]["Id"];
+            /** @description Organización del usuario. Obligatoria si `rol` es `cliente` y prohibida para un rol interno; si no se cumple, 400. Una organización inexistente responde 400 y una desactivada, 409 `organizacion_desactivada`. */
+            organizacion_id?: components["schemas"]["Id"];
         };
         /** @description Solo el nombre: el identificador de acceso no se edita en V1 (DEC-139 #5). Espejo de `EdicionSujetoEntrada` de `identidad`. */
         EdicionSujetoEntrada: {
