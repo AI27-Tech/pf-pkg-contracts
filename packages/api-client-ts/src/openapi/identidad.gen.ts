@@ -98,11 +98,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Listar y buscar sujetos, con filtros (B-2).
+         * @description Página de sujetos con su rol activo, paginada por cursor opaco. Los filtros se combinan (Y lógico). `q` busca por coincidencia parcial en `nombre` e `identificador_usuario`; un sujeto previo a tracer.40 que no tiene esos datos locales solo aparece sin `q`. Lee `administrador`. El `jefe_operativo` lee solo con `rol=monitorista` (para elegir Monitoristas en `/roster`, DEC-142 #2); sin ese filtro, o con otro rol, responde 403. Otro rol responde 403.
+         */
+        get: operations["listarSujetos"];
         put?: never;
         /**
          * Alta de un sujeto con su rol inicial.
-         * @description Crea el usuario en el IdP y el `sujeto` local con su rol inicial en una sola transacción local, publicando `sujeto.creado` y `rol.asignado`. Restringida a `administrador` (403 si no lo es).
+         * @description Crea el usuario en el IdP y el `sujeto` local con su rol inicial en una sola transacción local, publicando `sujeto.creado` y `rol.asignado`. Desde tracer.40 el `sujeto` guarda además una copia local de `nombre` e `identificador_usuario` para listar y buscar (B-2, B-15); el IdP sigue siendo dueño de la credencial. Restringida a `administrador` (403 si no lo es).
          */
         post: operations["altaSujeto"];
         delete?: never;
@@ -130,12 +134,16 @@ export interface paths {
         post?: never;
         /**
          * Desactivar un sujeto (retiro de acceso).
-         * @description Marca el sujeto inactivo, revoca su sesión viva (corte ≤30 s, G-6) y publica `sujeto.desactivado`. Se rechaza con 409 si dejaría al sistema sin administrador activo (G-7).
+         * @description Marca el sujeto inactivo, revoca su sesión viva (corte ≤30 s, G-6) y publica `sujeto.desactivado`. La revocación de la sesión viva es parte de la operación, no un paso best-effort: si falla, la desactivación falla y el sujeto sigue activo. Un administrador puede desactivarse a sí mismo mientras quede otro administrador activo (DEC-139 #3). Restringida a `administrador` (403 si no lo es).
          */
         delete: operations["desactivarSujeto"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Editar el nombre de un sujeto (B-8).
+         * @description Cambia el `nombre` en el `sujeto` local y en el IdP (este último por la sincronización reintentable de DEC-085). El identificador de acceso no se edita en V1 (DEC-139 #5). Restringida a `administrador` (403 si no lo es).
+         */
+        patch: operations["editarSujeto"];
         trace?: never;
     };
     "/api/v1/sujetos/{id}/reactivacion": {
@@ -197,11 +205,150 @@ export interface paths {
         get?: never;
         /**
          * Asignar el rol inicial o reemplazar el rol activo de un sujeto.
-         * @description Única vía para fijar el rol. Si el sujeto no tiene rol activo, lo asigna (`rol.asignado`); si ya tiene uno, lo reemplaza en una sola transacción (`rol.revocado` + `rol.asignado`). No existe revocar un rol suelto (C2). Se rechaza con 409 si el sujeto está desactivado, si el rol nuevo es igual al activo, o si dejaría al sistema sin administrador (G-7); con 403 si un sujeto intenta cambiar su propio rol (autoescalamiento).
+         * @description Única vía para fijar el rol. Si el sujeto no tiene rol activo, lo asigna (`rol.asignado`); si ya tiene uno, lo reemplaza en una sola transacción (`rol.revocado` + `rol.asignado`). No existe revocar un rol suelto (C2). Al cambiar de rol se retira, en la misma transacción y con su traza, el alcance del rol anterior: unidades, Monitoristas o Supervisores asignados, y su lugar bajo un superior (DEC-140 #3). El retiro aplica de inmediato; el rol nuevo, en el siguiente refresco (DEC-091). Restringida a `administrador` (403 si no lo es).
          */
         put: operations["fijarRolSujeto"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sujetos/{id}/revocaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revocar las sesiones vivas de un sujeto, con motivo (B-5).
+         * @description Revocación administrativa por sujeto (E4-HU-020). Revoca todas las sesiones vivas del sujeto; con DEC-138 hay a lo sumo una. Publica un `sesion.revocada` por sesión revocada, igual que `revocarSesion`. El `motivo` es obligatorio y texto libre (DEC-139 #1): se guarda en la auditoría local de `identidad` y no viaja en el evento. Sin `motivo`, o vacío, responde 400. El sujeto sigue activo; para retirarle el acceso se usa `desactivarSujeto`. Sin sesiones vivas responde 200 con `sesiones_revocadas` en 0. Restringida a `administrador` (403 si no lo es). No reemplaza a `revocarSesion`, que revoca por `sesion_id`.
+         */
+        post: operations["revocarSesionesSujeto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sujetos/{id}/alcance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Alcance de monitoreo de un sujeto (B-4).
+         * @description Devuelve las unidades asignadas al sujeto ("mis unidades", si es Monitorista), sus subordinados directos (Monitoristas de un Supervisor o Supervisores de un Coordinador) y sus unidades efectivas: la unión de las suyas y las de sus subordinados por la jerarquía (DEC-140 #2). Un rol sin alcance devuelve las tres listas vacías. Lee `administrador`. El `jefe_operativo` lee solo el alcance de un Monitorista (DEC-142 #2); el de un sujeto con otro rol le responde 403. Otro rol responde 403.
+         */
+        get: operations["obtenerAlcanceSujeto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sujetos/{id}/alcance/unidades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Fijar las unidades de un Monitorista ("mis unidades").
+         * @description Reemplaza el conjunto completo de unidades del Monitorista por el que llega, así que repetir la misma petición no cambia nada (idempotente); quitar una unidad es enviarla fuera de la lista. Una unidad puede estar a la vez en la lista de varios Monitoristas (DEC-145 #1). `unidad_id` es id de `operacion`: `identidad` no lo valida contra el roster (sin FK entre módulos); la existencia la valida el `bff`. Escriben `administrador` y `jefe_operativo` (DEC-140 #1, DEC-142 #2); otro rol responde 403.
+         */
+        put: operations["fijarUnidadesSujeto"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sujetos/{id}/alcance/subordinados": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id del superior (Supervisor o Coordinador). */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Fijar los subordinados directos de un Supervisor o Coordinador.
+         * @description Reemplaza el conjunto completo de subordinados del superior por el que llega (idempotente); quitar uno es enviarlo fuera de la lista. Un Supervisor tiene Monitoristas y un Coordinador tiene Supervisores (DEC-140 #2). La jerarquía es exclusiva: cada subordinado tiene a lo sumo un superior (DEC-145 #2); para moverlo, primero se quita de su superior actual. Un id de subordinado que no existe responde 400. Escribe solo `administrador` (DEC-140 #2); otro rol responde 403.
+         */
+        put: operations["fijarSubordinadosSujeto"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar tenants con su conteo de usuarios activos (B-3).
+         * @description Página de tenants, internos y de cliente, paginada por cursor opaco. `usuarios_activos` cuenta los sujetos activos del tenant. Restringida a `administrador` (403 si no lo es).
+         */
+        get: operations["listarTenants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenants/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Id del tenant. Para una organización cliente es su `cliente_id` de `catalogos` (DEC-112); lo elige quien llama (DEC-144 #2). */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Crear el tenant de una organización cliente, idempotente por id.
+         * @description Crea un tenant de tipo `cliente`, activo, con el id de la ruta (DEC-144 #2). Si ya existe un tenant `cliente` con ese id, no lo modifica y responde 200 con el tenant guardado: así un alta de organización que falló a la mitad se completa reintentando con el mismo id. Si el id es del tenant interno responde 409. Restringida a `administrador` (403 si no lo es).
+         */
+        put: operations["crearTenant"];
+        post?: never;
+        /**
+         * Desactivar el tenant de una organización cliente (terminal).
+         * @description Marca el tenant inactivo. Es terminal: no hay reactivación en V1 (DEC-139 #4). Sus sujetos pierden el acceso en el siguiente refresco de su sesión, porque la composición de claims rechaza el refresco de un sujeto de tenant inactivo; no hay revocación masiva en vivo (DEC-139 #4, DEC-144 #2). Desactivar uno ya inactivo responde 204 (idempotente), para que el `bff` pueda reintentar. El tenant interno no se desactiva (409). Restringida a `administrador` (403 si no lo es).
+         */
+        delete: operations["desactivarTenant"];
         options?: never;
         head?: never;
         patch?: never;
@@ -219,7 +366,7 @@ export interface components {
              * @description Credencial. AI27 no la custodia: se delega a Cognito. No se registra ni se refleja en logs (E0-T3).
              */
             contrasena: string;
-            /** @description Código del segundo factor (TOTP de 6 dígitos, WebAuthn, SMS, etc.). Opcional en V1; requerido en V2+. El IdP (Keycloak) valida el código; AI27 identidad solo lo transporta. Ver DEC-031 (ADR 13), DEC-065 (A-3) y DEC-087 (A-15). */
+            /** @description Código del segundo factor (TOTP de 6 dígitos). Obligatorio en V1 para todo rol (E4-HU-017): `identidad` rechaza un factor ausente, vacío o solo con espacios con el mismo 401 uniforme que una credencial inválida, sin llamar al IdP (DEC-094). El schema lo conserva opcional y nullable por compatibilidad; la obligatoriedad es de comportamiento. El IdP (Keycloak) valida el código; AI27 identidad solo lo transporta. Ver DEC-031 (ADR 13), DEC-065 (A-3), DEC-087 (A-15) y DEC-094. */
             segundo_factor?: string | null;
         };
         RefrescoEntrada: {
@@ -275,6 +422,10 @@ export interface components {
             tenant_id: components["schemas"]["Id"];
             /** @description false si el sujeto está desactivado (retiro de acceso). */
             activo: boolean;
+            /** @description Nombre del usuario, copia local desde tracer.40 (B-15). Opcional: un sujeto dado de alta antes no lo tiene. */
+            nombre?: string;
+            /** @description Identificador de acceso (correo o usuario), copia local desde tracer.40 (B-15). Inmutable en V1 (DEC-139 #5). Opcional: un sujeto dado de alta antes no lo tiene. */
+            identificador_usuario?: string;
         };
         /** @description Detalle de un sujeto con su rol activo, si tiene uno. */
         SujetoDetalle: {
@@ -287,6 +438,67 @@ export interface components {
         /** @description Rol a fijar en el sujeto. Si no tiene rol activo lo asigna; si ya tiene, lo reemplaza. El actor se resuelve en servidor desde el token. */
         AsignacionRolEntrada: {
             rol: components["schemas"]["Rol"];
+        };
+        PaginaSujetos: {
+            items: components["schemas"]["SujetoDetalle"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no hay más páginas. */
+            cursor_siguiente: string | null;
+        };
+        /** @description Datos editables del sujeto. Solo el nombre: el identificador de acceso no se edita en V1 (DEC-139 #5). */
+        EdicionSujetoEntrada: {
+            /** @description Nombre nuevo del usuario. */
+            nombre: string;
+        };
+        /** @description Revocación administrativa de las sesiones de un sujeto (E4-HU-020). */
+        RevocacionSesionesEntrada: {
+            /** @description Motivo de la revocación, texto libre y obligatorio (DEC-139 #1). Se guarda en la auditoría local; no viaja en `sesion.revocada`. */
+            motivo: string;
+        };
+        RevocacionSesionesResultado: {
+            /** @description Cuántas sesiones vivas se revocaron. 0 si no tenía ninguna. */
+            sesiones_revocadas: number;
+        };
+        /** @description Alcance de monitoreo de un sujeto (DEC-140). El alcance no viaja en el token: se resuelve en servidor (DEC-053). */
+        AlcanceSujeto: {
+            /** @description Unidades asignadas directamente ("mis unidades"). Solo un Monitorista tiene; vacía para otro rol. Ids de `operacion`. */
+            unidades_ids: components["schemas"]["Id"][];
+            /** @description Subordinados directos: Monitoristas de un Supervisor o Supervisores de un Coordinador. Vacía para otro rol. */
+            subordinados_ids: components["schemas"]["Id"][];
+            /** @description Unión, sin repetidos, de `unidades_ids` y de las unidades de los subordinados por la jerarquía (DEC-140 #2). Para un Monitorista es igual a `unidades_ids`. */
+            unidades_efectivas_ids: components["schemas"]["Id"][];
+        };
+        /** @description Conjunto completo de unidades del Monitorista; reemplaza al anterior. */
+        UnidadesSujetoEntrada: {
+            /** @description Ids de unidades de `operacion`. Vacía para quitarle todas. */
+            unidades_ids: components["schemas"]["Id"][];
+        };
+        /** @description Conjunto completo de subordinados directos; reemplaza al anterior. */
+        SubordinadosSujetoEntrada: {
+            /** @description Ids de sujeto de los subordinados. Vacía para quitarle todos. */
+            sujetos_ids: components["schemas"]["Id"][];
+        };
+        /** @description Espacio de pertenencia de un sujeto. Hay un tenant interno de AI27 y uno por organización cliente, con el id de su `cliente_id` (DEC-112). */
+        Tenant: {
+            id: components["schemas"]["Id"];
+            nombre: string;
+            /**
+             * @description `interno` para el tenant único de AI27; `cliente` para el de una organización cliente.
+             * @enum {string}
+             */
+            tipo: "interno" | "cliente";
+            /** @description false si la organización está desactivada (terminal, DEC-139 #4). Sus sujetos no pasan el siguiente refresco. */
+            activa: boolean;
+            /** @description Sujetos activos del tenant. */
+            usuarios_activos: number;
+        };
+        /** @description Alta del tenant de una organización cliente. El id va en la ruta. */
+        TenantEntrada: {
+            nombre: string;
+        };
+        PaginaTenants: {
+            items: components["schemas"]["Tenant"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no hay más páginas. */
+            cursor_siguiente: string | null;
         };
         /** @description Una fila de la traza inmutable `cambio_identidad`. */
         CambioAdministrativo: {
@@ -515,6 +727,40 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
         };
     };
+    listarSujetos: {
+        parameters: {
+            query?: {
+                /** @description Texto a buscar en nombre e identificador de usuario. */
+                q?: string;
+                /** @description Solo sujetos cuyo rol activo es este. */
+                rol?: components["schemas"]["Rol"];
+                /** @description Solo sujetos de este tenant (para un cliente, su organización). */
+                tenant_id?: components["schemas"]["Id"];
+                /** @description true para solo activos, false para solo desactivados; ausente, ambos. */
+                activo?: boolean;
+                /** @description Cursor de continuación; ausente para la primera página. */
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de sujetos y cursor. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaSujetos"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
     altaSujeto: {
         parameters: {
             query?: never;
@@ -591,7 +837,46 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
-            409: components["responses"]["Conflicto"];
+            /** @description `codigo` de máquina `ultimo_administrador` si dejaría al sistema sin administrador activo (G-7, DEC-139 #3). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    editarSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdicionSujetoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Sujeto con su nombre nuevo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SujetoDetalle"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
         };
     };
     reactivarSujeto: {
@@ -671,6 +956,245 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            /** @description `codigo` de máquina `autoescalamiento` si el actor intenta cambiar su propio rol (E4-HU-018). Un actor que no es `administrador` también recibe 403. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina: `rol_igual` si el rol nuevo es igual al activo; `sujeto_desactivado` si el sujeto está desactivado; `ultimo_administrador` si dejaría al sistema sin administrador activo (G-7); `rol_cruza_audiencia` si el cambio va de `cliente` a un rol interno o al revés (DEC-141 #1). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revocarSesionesSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevocacionSesionesEntrada"];
+            };
+        };
+        responses: {
+            /** @description Revocación hecha; cuántas sesiones se revocaron. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevocacionSesionesResultado"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    obtenerAlcanceSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Alcance del sujeto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlcanceSujeto"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    fijarUnidadesSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnidadesSujetoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Unidades fijadas. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina `rol_sin_alcance` si el sujeto no tiene rol activo `monitorista`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    fijarSubordinadosSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id del superior (Supervisor o Coordinador). */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubordinadosSujetoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Subordinados fijados. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina: `rol_sin_alcance` si el superior no tiene rol activo `supervisor` ni `coordinador`; `subordinado_rol_invalido` si algún subordinado no tiene el rol que corresponde (`monitorista` bajo un Supervisor, `supervisor` bajo un Coordinador); `subordinado_con_superior` si algún subordinado ya tiene otro superior (DEC-145 #2). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listarTenants: {
+        parameters: {
+            query?: {
+                /** @description Cursor de continuación; ausente para la primera página. */
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de tenants y cursor. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaTenants"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    crearTenant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Id del tenant. Para una organización cliente es su `cliente_id` de `catalogos` (DEC-112); lo elige quien llama (DEC-144 #2). */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantEntrada"];
+            };
+        };
+        responses: {
+            /** @description El tenant ya existía; se devuelve sin cambios. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tenant"];
+                };
+            };
+            /** @description Tenant creado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tenant"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            409: components["responses"]["Conflicto"];
+        };
+    };
+    desactivarTenant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Id del tenant. Para una organización cliente es su `cliente_id` de `catalogos` (DEC-112); lo elige quien llama (DEC-144 #2). */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant desactivado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];

@@ -244,6 +244,33 @@ type Adjunto struct {
 // AdjuntoEstadoEscaneo Estado del escaneo antivirus del objeto. `pendiente` tras crear la intención; `limpio`/`infectado` cuando el escaneo concluye. Un adjunto no `limpio` no autoriza descarga. Se refresca releyendo `listarAdjuntos` (sondeo; no hay evento de empuje en V1).
 type AdjuntoEstadoEscaneo string
 
+// AlcanceSujeto Alcance de monitoreo (DEC-140). Espejo de `AlcanceSujeto` de `identidad`.
+type AlcanceSujeto struct {
+	// SubordinadosIds Subordinados directos (Monitoristas de un Supervisor, Supervisores de un Coordinador).
+	SubordinadosIds []Id `json:"subordinados_ids"`
+
+	// UnidadesEfectivasIds Unión, sin repetidos, de las unidades propias y las de los subordinados (DEC-140
+	UnidadesEfectivasIds []Id `json:"unidades_efectivas_ids"`
+
+	// UnidadesIds Unidades asignadas directamente ("mis unidades"); solo un Monitorista tiene.
+	UnidadesIds []Id `json:"unidades_ids"`
+}
+
+// AltaSujetoEntrada Alta de un usuario con su rol inicial (E4-HU-018). Espejo de `AltaSujetoEntrada` de `identidad`. El actor se resuelve en servidor desde el token.
+type AltaSujetoEntrada struct {
+	// IdentificadorUsuario Identificador de acceso del usuario (correo o usuario).
+	IdentificadorUsuario string `json:"identificador_usuario"`
+
+	// Nombre Nombre del usuario.
+	Nombre string `json:"nombre"`
+
+	// Rol Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+	Rol Rol `json:"rol"`
+
+	// TenantId Tenant del usuario. Para `cliente` es el id de su organización; para los roles internos, el tenant interno de AI27 (G-9).
+	TenantId Id `json:"tenant_id"`
+}
+
 // AptitudRecurso Aptitud informativa por átomo en la respuesta de la asignación (DEC-055). Nunca bloquea la asignación en V1. Espejo de `AptitudRecurso` de `operacion`.
 type AptitudRecurso struct {
 	// Estado Afirmación informativa (DEC-055). `desconocido` lo calcula `operacion`. Nunca bloquea la asignación en V1.
@@ -281,6 +308,12 @@ type Asignacion struct {
 type AsignacionEntrada struct {
 	// UnidadesIds Identificadores de las unidades del roster que forman la escolta.
 	UnidadesIds []Id `json:"unidades_ids"`
+}
+
+// AsignacionRolEntrada Rol a fijar en el usuario. Espejo de `AsignacionRolEntrada` de `identidad`.
+type AsignacionRolEntrada struct {
+	// Rol Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+	Rol Rol `json:"rol"`
 }
 
 // Audiencia Audiencia de dominio del autor (DEC-054), no el claim `aud`.
@@ -435,7 +468,7 @@ type CrearViajeEntrada struct {
 type CredencialesEntrada struct {
 	Contrasena string `json:"contrasena"`
 
-	// SegundoFactor Código del segundo factor (TOTP). Opcional en V1; requerido en V2+. El IdP (Keycloak) lo valida; `bff`/`identidad` sólo lo transportan. Espejo de `CredencialesEntrada.segundo_factor` de `identidad` (DEC-031/ADR 13, DEC-071).
+	// SegundoFactor Código del segundo factor (TOTP). Obligatorio en V1 para todo rol (E4-HU-017): un factor ausente o vacío se rechaza con el mismo 401 uniforme que una credencial inválida (DEC-094). El schema lo conserva opcional y nullable por compatibilidad. El IdP (Keycloak) lo valida; `bff`/`identidad` sólo lo transportan. Espejo de `CredencialesEntrada.segundo_factor` de `identidad` (DEC-031/ADR 13, DEC-071).
 	SegundoFactor *string `json:"segundo_factor"`
 	Usuario       string  `json:"usuario"`
 }
@@ -560,6 +593,11 @@ type DispositivoGps struct {
 	// Id Identificador único (UUID). Nunca un correlativo expuesto.
 	Id            Id     `json:"id"`
 	Identificador string `json:"identificador"`
+}
+
+// EdicionSujetoEntrada Solo el nombre: el identificador de acceso no se edita en V1 (DEC-139 #5). Espejo de `EdicionSujetoEntrada` de `identidad`.
+type EdicionSujetoEntrada struct {
+	Nombre string `json:"nombre"`
 }
 
 // EjeAutorizacionEstadia Eje de autorización de la estadía. Espejo de `EjeAutorizacionEstadia` de `operacion`.
@@ -967,6 +1005,51 @@ type NotaEmergenciaInternoEntrada struct {
 	Cuerpo string `json:"cuerpo"`
 }
 
+// Organizacion Organización cliente (B-3). El `bff` la compone desde `catalogos` (nombre, correo, teléfono) y desde el tenant de `identidad` (`activa`, `usuarios_activos`), con el mismo id (DEC-144 #2).
+type Organizacion struct {
+	// Activa false si está desactivada (terminal, DEC-139
+	Activa bool `json:"activa"`
+
+	// Correo Correo de contacto (DEC-139 #2). Opcional en la respuesta: una organización dada de alta antes de tracer.40 no lo tiene.
+	Correo *string `json:"correo,omitempty"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id     Id     `json:"id"`
+	Nombre string `json:"nombre"`
+
+	// Telefono Teléfono de contacto (DEC-139
+	Telefono *string `json:"telefono,omitempty"`
+
+	// UsuariosActivos Usuarios activos de la organización.
+	UsuariosActivos int `json:"usuarios_activos"`
+}
+
+// OrganizacionCambios Edición de una organización (PATCH). Todos los campos son opcionales; se cambian los presentes. El id no se edita.
+type OrganizacionCambios struct {
+	// Correo Validación mínima de V1, debe contener `@` (DEC-139
+	Correo   *string `json:"correo,omitempty"`
+	Nombre   *string `json:"nombre,omitempty"`
+	Telefono *string `json:"telefono,omitempty"`
+}
+
+// OrganizacionEntrada Alta de una organización. Los tres datos de contacto son obligatorios en V1 (DEC-139 #2).
+type OrganizacionEntrada struct {
+	// Correo Validación mínima de V1, debe contener `@` (DEC-139
+	Correo string `json:"correo"`
+
+	// Id Opcional. Id que genera el panel para que reintentar el alta con el mismo id complete una a medias (DEC-144 #2). Si no llega, lo genera el `bff`.
+	Id       *Id    `json:"id,omitempty"`
+	Nombre   string `json:"nombre"`
+	Telefono string `json:"telefono"`
+}
+
+// OrganizacionResumen Organización legible de un usuario cliente.
+type OrganizacionResumen struct {
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id     Id     `json:"id"`
+	Nombre string `json:"nombre"`
+}
+
 // OrigenActivacion Quién originó la activación (ADR 21 §3).
 type OrigenActivacion string
 
@@ -1050,6 +1133,13 @@ type PaginaNotasEmergencia struct {
 	Items           []NotaEmergencia `json:"items"`
 }
 
+// PaginaOrganizaciones defines model for PaginaOrganizaciones.
+type PaginaOrganizaciones struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más páginas.
+	CursorSiguiente *string        `json:"cursor_siguiente"`
+	Items           []Organizacion `json:"items"`
+}
+
 // PaginaTiposServicio defines model for PaginaTiposServicio.
 type PaginaTiposServicio struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
@@ -1062,6 +1152,13 @@ type PaginaUnidades struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
 	CursorSiguiente *string  `json:"cursor_siguiente"`
 	Items           []Unidad `json:"items"`
+}
+
+// PaginaUsuariosAdmin defines model for PaginaUsuariosAdmin.
+type PaginaUsuariosAdmin struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no hay más páginas.
+	CursorSiguiente *string        `json:"cursor_siguiente"`
+	Items           []UsuarioAdmin `json:"items"`
 }
 
 // PaginaVehiculos defines model for PaginaVehiculos.
@@ -1157,6 +1254,18 @@ type ResolucionIncidenciaEntrada struct {
 // RevisionBandeja Revisión monotónica de la COLECCIÓN de trabajo de una bandeja (ADR 28 §3): avanza con cada cambio de la colección (alta, baja, reenrutamiento, reclamo, atención). Es el cursor de dominio del bootstrap y el catch-up de bandeja. No es el cursor de paginación, ni una secuencia de mensaje, ni el `seq` de transporte de `realtime`.
 type RevisionBandeja = int64
 
+// RevocacionSesionesEntrada Espejo de `RevocacionSesionesEntrada` de `identidad`.
+type RevocacionSesionesEntrada struct {
+	// Motivo Motivo de la revocación, texto libre y obligatorio (DEC-139
+	Motivo string `json:"motivo"`
+}
+
+// RevocacionSesionesResultado Espejo de `RevocacionSesionesResultado` de `identidad`.
+type RevocacionSesionesResultado struct {
+	// SesionesRevocadas Cuántas sesiones vivas se revocaron. 0 si no tenía ninguna.
+	SesionesRevocadas int `json:"sesiones_revocadas"`
+}
+
 // Rol Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
 type Rol string
 
@@ -1173,6 +1282,12 @@ type Sesion struct {
 
 	// SesionId Identificador único (UUID). Nunca un correlativo expuesto.
 	SesionId Id `json:"sesion_id"`
+}
+
+// SubordinadosSujetoEntrada Conjunto completo de subordinados directos; reemplaza al anterior. Espejo de `SubordinadosSujetoEntrada` de `identidad`.
+type SubordinadosSujetoEntrada struct {
+	// SujetosIds Ids de los usuarios subordinados. Vacía para quitarle todos.
+	SujetosIds []Id `json:"sujetos_ids"`
 }
 
 // TipoServicioCliente Tipo de servicio seleccionable en el wizard de solicitud. Vista mínima del valor de catálogo: `codigo` (el que se manda en `tipo_servicio` al crear) y `etiqueta` (lo que se muestra). Sin `estado` ni `version`: el BFF ya filtró a los `activo`.
@@ -1291,6 +1406,36 @@ type UnidadModificacion struct {
 
 	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
 	VehiculoId *Id `json:"vehiculo_id,omitempty"`
+}
+
+// UnidadesSujetoEntrada Conjunto completo de unidades del Monitorista; reemplaza al anterior. Espejo de `UnidadesSujetoEntrada` de `identidad`.
+type UnidadesSujetoEntrada struct {
+	// UnidadesIds Ids de unidades del roster. Vacía para quitarle todas.
+	UnidadesIds []Id `json:"unidades_ids"`
+}
+
+// UsuarioAdmin Usuario tal como lo muestra `/administracion` (B-15). Lo compone el `bff` desde el sujeto de `identidad` y, para un `cliente`, el nombre de su organización en `catalogos`.
+type UsuarioAdmin struct {
+	// Activo false si el usuario está desactivado.
+	Activo bool `json:"activo"`
+
+	// EsPropio true si el usuario es el mismo que hace la petición. Lo resuelve el `bff` en servidor contra el `sub` del token (B-14), porque `sub` no es el `id` del sujeto (DEC-072).
+	EsPropio bool `json:"es_propio"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// IdentificadorUsuario Identificador de acceso (correo o usuario). Inmutable en V1 (DEC-139 #5). Opcional por la misma razón que `nombre`.
+	IdentificadorUsuario *string `json:"identificador_usuario,omitempty"`
+
+	// Nombre Nombre del usuario. Opcional: un usuario dado de alta antes de tracer.40 puede no tenerlo en `identidad`.
+	Nombre *string `json:"nombre,omitempty"`
+
+	// Organizacion Organización del usuario. Presente solo para un usuario de tenant cliente; ausente para los internos.
+	Organizacion *OrganizacionResumen `json:"organizacion,omitempty"`
+
+	// Rol Rol activo. Ausente si el usuario no tiene rol activo.
+	Rol *Rol `json:"rol,omitempty"`
 }
 
 // Vehiculo Vehículo de la flota de AI27 (átomo de `catalogos`). Espejo de `Vehiculo` de `catalogos`.
@@ -1522,6 +1667,11 @@ type ListarGpsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListarOrganizacionesParams defines parameters for ListarOrganizaciones.
+type ListarOrganizacionesParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListarBandejaEmergenciasParams defines parameters for ListarBandejaEmergencias.
 type ListarBandejaEmergenciasParams struct {
 	// Cursor Cursor de paginación.
@@ -1555,6 +1705,22 @@ type ReporteViajesParams struct {
 
 	// EnCurso true devuelve solo los viajes en estado no terminal (E6-HU-025). Ausente o false no filtra por estado.
 	EnCurso *bool `form:"en_curso,omitempty" json:"en_curso,omitempty"`
+}
+
+// ListarSujetosParams defines parameters for ListarSujetos.
+type ListarSujetosParams struct {
+	// Q Texto a buscar en nombre e identificador de usuario.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Rol Solo usuarios cuyo rol activo es este.
+	Rol *Rol `form:"rol,omitempty" json:"rol,omitempty"`
+
+	// TenantId Solo usuarios de esta organización (su id, que es su tenant, DEC-112).
+	TenantId *Id `form:"tenant_id,omitempty" json:"tenant_id,omitempty"`
+
+	// Activo true para solo activos, false para solo desactivados; ausente, ambos.
+	Activo *bool   `form:"activo,omitempty" json:"activo,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // ListarUnidadesParams defines parameters for ListarUnidades.
@@ -1622,6 +1788,12 @@ type CrearCustodioJSONRequestBody = CustodioEntrada
 // ActualizarCustodioJSONRequestBody defines body for ActualizarCustodio for application/json ContentType.
 type ActualizarCustodioJSONRequestBody = CustodioCambios
 
+// CrearOrganizacionJSONRequestBody defines body for CrearOrganizacion for application/json ContentType.
+type CrearOrganizacionJSONRequestBody = OrganizacionEntrada
+
+// ActualizarOrganizacionJSONRequestBody defines body for ActualizarOrganizacion for application/json ContentType.
+type ActualizarOrganizacionJSONRequestBody = OrganizacionCambios
+
 // ReclamarEmergenciaPorIdJSONRequestBody defines body for ReclamarEmergenciaPorId for application/json ContentType.
 type ReclamarEmergenciaPorIdJSONRequestBody = VersionEsperadaEntrada
 
@@ -1642,6 +1814,24 @@ type IniciarSesionJSONRequestBody = CredencialesEntrada
 
 // RefrescarSesionJSONRequestBody defines body for RefrescarSesion for application/json ContentType.
 type RefrescarSesionJSONRequestBody = RefrescoEntrada
+
+// AltaSujetoJSONRequestBody defines body for AltaSujeto for application/json ContentType.
+type AltaSujetoJSONRequestBody = AltaSujetoEntrada
+
+// EditarSujetoJSONRequestBody defines body for EditarSujeto for application/json ContentType.
+type EditarSujetoJSONRequestBody = EdicionSujetoEntrada
+
+// FijarSubordinadosSujetoJSONRequestBody defines body for FijarSubordinadosSujeto for application/json ContentType.
+type FijarSubordinadosSujetoJSONRequestBody = SubordinadosSujetoEntrada
+
+// FijarUnidadesSujetoJSONRequestBody defines body for FijarUnidadesSujeto for application/json ContentType.
+type FijarUnidadesSujetoJSONRequestBody = UnidadesSujetoEntrada
+
+// RevocarSesionesSujetoJSONRequestBody defines body for RevocarSesionesSujeto for application/json ContentType.
+type RevocarSesionesSujetoJSONRequestBody = RevocacionSesionesEntrada
+
+// FijarRolSujetoJSONRequestBody defines body for FijarRolSujeto for application/json ContentType.
+type FijarRolSujetoJSONRequestBody = AsignacionRolEntrada
 
 // CrearUnidadJSONRequestBody defines body for CrearUnidad for application/json ContentType.
 type CrearUnidadJSONRequestBody = UnidadEntrada
@@ -1843,6 +2033,22 @@ type ClientInterface interface {
 	// ListarGps request
 	ListarGps(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListarOrganizaciones request
+	ListarOrganizaciones(ctx context.Context, params *ListarOrganizacionesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CrearOrganizacionWithBody request with any body
+	CrearOrganizacionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearOrganizacion(ctx context.Context, body CrearOrganizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DesactivarOrganizacion request
+	DesactivarOrganizacion(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActualizarOrganizacionWithBody request with any body
+	ActualizarOrganizacionWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ActualizarOrganizacion(ctx context.Context, id Id, body ActualizarOrganizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarBandejaEmergencias request
 	ListarBandejaEmergencias(ctx context.Context, params *ListarBandejaEmergenciasParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1904,6 +2110,51 @@ type ClientInterface interface {
 	RefrescarSesionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	RefrescarSesion(ctx context.Context, body RefrescarSesionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListarSujetos request
+	ListarSujetos(ctx context.Context, params *ListarSujetosParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AltaSujetoWithBody request with any body
+	AltaSujetoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AltaSujeto(ctx context.Context, body AltaSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DesactivarSujeto request
+	DesactivarSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerSujeto request
+	ObtenerSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EditarSujetoWithBody request with any body
+	EditarSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	EditarSujeto(ctx context.Context, id Id, body EditarSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerAlcanceSujeto request
+	ObtenerAlcanceSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// FijarSubordinadosSujetoWithBody request with any body
+	FijarSubordinadosSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	FijarSubordinadosSujeto(ctx context.Context, id Id, body FijarSubordinadosSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// FijarUnidadesSujetoWithBody request with any body
+	FijarUnidadesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	FijarUnidadesSujeto(ctx context.Context, id Id, body FijarUnidadesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReactivarSujeto request
+	ReactivarSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RevocarSesionesSujetoWithBody request with any body
+	RevocarSesionesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	RevocarSesionesSujeto(ctx context.Context, id Id, body RevocarSesionesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// FijarRolSujetoWithBody request with any body
+	FijarRolSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	FijarRolSujeto(ctx context.Context, id Id, body FijarRolSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListarUnidades request
 	ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2360,6 +2611,78 @@ func (c *Client) ListarGps(ctx context.Context, params *ListarGpsParams, reqEdit
 	return c.Client.Do(req)
 }
 
+func (c *Client) ListarOrganizaciones(ctx context.Context, params *ListarOrganizacionesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarOrganizacionesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearOrganizacionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearOrganizacionRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearOrganizacion(ctx context.Context, body CrearOrganizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearOrganizacionRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DesactivarOrganizacion(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDesactivarOrganizacionRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarOrganizacionWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarOrganizacionRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ActualizarOrganizacion(ctx context.Context, id Id, body ActualizarOrganizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActualizarOrganizacionRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ListarBandejaEmergencias(ctx context.Context, params *ListarBandejaEmergenciasParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarBandejaEmergenciasRequest(c.Server, params)
 	if err != nil {
@@ -2626,6 +2949,210 @@ func (c *Client) RefrescarSesionWithBody(ctx context.Context, contentType string
 
 func (c *Client) RefrescarSesion(ctx context.Context, body RefrescarSesionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRefrescarSesionRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarSujetos(ctx context.Context, params *ListarSujetosParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarSujetosRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AltaSujetoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAltaSujetoRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AltaSujeto(ctx context.Context, body AltaSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAltaSujetoRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DesactivarSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDesactivarSujetoRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerSujetoRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) EditarSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEditarSujetoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) EditarSujeto(ctx context.Context, id Id, body EditarSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEditarSujetoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerAlcanceSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerAlcanceSujetoRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarSubordinadosSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarSubordinadosSujetoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarSubordinadosSujeto(ctx context.Context, id Id, body FijarSubordinadosSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarSubordinadosSujetoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarUnidadesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarUnidadesSujetoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarUnidadesSujeto(ctx context.Context, id Id, body FijarUnidadesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarUnidadesSujetoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReactivarSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReactivarSujetoRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RevocarSesionesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevocarSesionesSujetoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RevocarSesionesSujeto(ctx context.Context, id Id, body RevocarSesionesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevocarSesionesSujetoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarRolSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarRolSujetoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarRolSujeto(ctx context.Context, id Id, body FijarRolSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarRolSujetoRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4177,6 +4704,176 @@ func NewListarGpsRequest(server string, params *ListarGpsParams) (*http.Request,
 	return req, nil
 }
 
+// NewListarOrganizacionesRequest generates requests for ListarOrganizaciones
+func NewListarOrganizacionesRequest(server string, params *ListarOrganizacionesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/organizaciones")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCrearOrganizacionRequest calls the generic CrearOrganizacion builder with application/json body
+func NewCrearOrganizacionRequest(server string, body CrearOrganizacionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearOrganizacionRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCrearOrganizacionRequestWithBody generates requests for CrearOrganizacion with any type of body
+func NewCrearOrganizacionRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/organizaciones")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDesactivarOrganizacionRequest generates requests for DesactivarOrganizacion
+func NewDesactivarOrganizacionRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/organizaciones/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActualizarOrganizacionRequest calls the generic ActualizarOrganizacion builder with application/json body
+func NewActualizarOrganizacionRequest(server string, id Id, body ActualizarOrganizacionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewActualizarOrganizacionRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewActualizarOrganizacionRequestWithBody generates requests for ActualizarOrganizacion with any type of body
+func NewActualizarOrganizacionRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/organizaciones/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListarBandejaEmergenciasRequest generates requests for ListarBandejaEmergencias
 func NewListarBandejaEmergenciasRequest(server string, params *ListarBandejaEmergenciasParams) (*http.Request, error) {
 	var err error
@@ -4921,6 +5618,530 @@ func NewRefrescarSesionRequestWithBody(server string, contentType string, body i
 	}
 
 	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListarSujetosRequest generates requests for ListarSujetos
+func NewListarSujetosRequest(server string, params *ListarSujetosParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "q", runtime.ParamLocationQuery, *params.Q); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Rol != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "rol", runtime.ParamLocationQuery, *params.Rol); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.TenantId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "tenant_id", runtime.ParamLocationQuery, *params.TenantId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Activo != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "activo", runtime.ParamLocationQuery, *params.Activo); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAltaSujetoRequest calls the generic AltaSujeto builder with application/json body
+func NewAltaSujetoRequest(server string, body AltaSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAltaSujetoRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAltaSujetoRequestWithBody generates requests for AltaSujeto with any type of body
+func NewAltaSujetoRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDesactivarSujetoRequest generates requests for DesactivarSujeto
+func NewDesactivarSujetoRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewObtenerSujetoRequest generates requests for ObtenerSujeto
+func NewObtenerSujetoRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEditarSujetoRequest calls the generic EditarSujeto builder with application/json body
+func NewEditarSujetoRequest(server string, id Id, body EditarSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEditarSujetoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewEditarSujetoRequestWithBody generates requests for EditarSujeto with any type of body
+func NewEditarSujetoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewObtenerAlcanceSujetoRequest generates requests for ObtenerAlcanceSujeto
+func NewObtenerAlcanceSujetoRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/alcance", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewFijarSubordinadosSujetoRequest calls the generic FijarSubordinadosSujeto builder with application/json body
+func NewFijarSubordinadosSujetoRequest(server string, id Id, body FijarSubordinadosSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewFijarSubordinadosSujetoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewFijarSubordinadosSujetoRequestWithBody generates requests for FijarSubordinadosSujeto with any type of body
+func NewFijarSubordinadosSujetoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/alcance/subordinados", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewFijarUnidadesSujetoRequest calls the generic FijarUnidadesSujeto builder with application/json body
+func NewFijarUnidadesSujetoRequest(server string, id Id, body FijarUnidadesSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewFijarUnidadesSujetoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewFijarUnidadesSujetoRequestWithBody generates requests for FijarUnidadesSujeto with any type of body
+func NewFijarUnidadesSujetoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/alcance/unidades", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewReactivarSujetoRequest generates requests for ReactivarSujeto
+func NewReactivarSujetoRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/reactivacion", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRevocarSesionesSujetoRequest calls the generic RevocarSesionesSujeto builder with application/json body
+func NewRevocarSesionesSujetoRequest(server string, id Id, body RevocarSesionesSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRevocarSesionesSujetoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewRevocarSesionesSujetoRequestWithBody generates requests for RevocarSesionesSujeto with any type of body
+func NewRevocarSesionesSujetoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/revocaciones", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewFijarRolSujetoRequest calls the generic FijarRolSujeto builder with application/json body
+func NewFijarRolSujetoRequest(server string, id Id, body FijarRolSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewFijarRolSujetoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewFijarRolSujetoRequestWithBody generates requests for FijarRolSujeto with any type of body
+func NewFijarRolSujetoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/rol", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -6780,6 +8001,22 @@ type ClientWithResponsesInterface interface {
 	// ListarGpsWithResponse request
 	ListarGpsWithResponse(ctx context.Context, params *ListarGpsParams, reqEditors ...RequestEditorFn) (*ListarGpsResponse, error)
 
+	// ListarOrganizacionesWithResponse request
+	ListarOrganizacionesWithResponse(ctx context.Context, params *ListarOrganizacionesParams, reqEditors ...RequestEditorFn) (*ListarOrganizacionesResponse, error)
+
+	// CrearOrganizacionWithBodyWithResponse request with any body
+	CrearOrganizacionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearOrganizacionResponse, error)
+
+	CrearOrganizacionWithResponse(ctx context.Context, body CrearOrganizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearOrganizacionResponse, error)
+
+	// DesactivarOrganizacionWithResponse request
+	DesactivarOrganizacionWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*DesactivarOrganizacionResponse, error)
+
+	// ActualizarOrganizacionWithBodyWithResponse request with any body
+	ActualizarOrganizacionWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarOrganizacionResponse, error)
+
+	ActualizarOrganizacionWithResponse(ctx context.Context, id Id, body ActualizarOrganizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarOrganizacionResponse, error)
+
 	// ListarBandejaEmergenciasWithResponse request
 	ListarBandejaEmergenciasWithResponse(ctx context.Context, params *ListarBandejaEmergenciasParams, reqEditors ...RequestEditorFn) (*ListarBandejaEmergenciasResponse, error)
 
@@ -6841,6 +8078,51 @@ type ClientWithResponsesInterface interface {
 	RefrescarSesionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RefrescarSesionResponse, error)
 
 	RefrescarSesionWithResponse(ctx context.Context, body RefrescarSesionJSONRequestBody, reqEditors ...RequestEditorFn) (*RefrescarSesionResponse, error)
+
+	// ListarSujetosWithResponse request
+	ListarSujetosWithResponse(ctx context.Context, params *ListarSujetosParams, reqEditors ...RequestEditorFn) (*ListarSujetosResponse, error)
+
+	// AltaSujetoWithBodyWithResponse request with any body
+	AltaSujetoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AltaSujetoResponse, error)
+
+	AltaSujetoWithResponse(ctx context.Context, body AltaSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*AltaSujetoResponse, error)
+
+	// DesactivarSujetoWithResponse request
+	DesactivarSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*DesactivarSujetoResponse, error)
+
+	// ObtenerSujetoWithResponse request
+	ObtenerSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerSujetoResponse, error)
+
+	// EditarSujetoWithBodyWithResponse request with any body
+	EditarSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EditarSujetoResponse, error)
+
+	EditarSujetoWithResponse(ctx context.Context, id Id, body EditarSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*EditarSujetoResponse, error)
+
+	// ObtenerAlcanceSujetoWithResponse request
+	ObtenerAlcanceSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerAlcanceSujetoResponse, error)
+
+	// FijarSubordinadosSujetoWithBodyWithResponse request with any body
+	FijarSubordinadosSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarSubordinadosSujetoResponse, error)
+
+	FijarSubordinadosSujetoWithResponse(ctx context.Context, id Id, body FijarSubordinadosSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarSubordinadosSujetoResponse, error)
+
+	// FijarUnidadesSujetoWithBodyWithResponse request with any body
+	FijarUnidadesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarUnidadesSujetoResponse, error)
+
+	FijarUnidadesSujetoWithResponse(ctx context.Context, id Id, body FijarUnidadesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarUnidadesSujetoResponse, error)
+
+	// ReactivarSujetoWithResponse request
+	ReactivarSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ReactivarSujetoResponse, error)
+
+	// RevocarSesionesSujetoWithBodyWithResponse request with any body
+	RevocarSesionesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RevocarSesionesSujetoResponse, error)
+
+	RevocarSesionesSujetoWithResponse(ctx context.Context, id Id, body RevocarSesionesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*RevocarSesionesSujetoResponse, error)
+
+	// FijarRolSujetoWithBodyWithResponse request with any body
+	FijarRolSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarRolSujetoResponse, error)
+
+	FijarRolSujetoWithResponse(ctx context.Context, id Id, body FijarRolSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarRolSujetoResponse, error)
 
 	// ListarUnidadesWithResponse request
 	ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error)
@@ -7428,6 +8710,108 @@ func (r ListarGpsResponse) StatusCode() int {
 	return 0
 }
 
+type ListarOrganizacionesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaOrganizaciones
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarOrganizacionesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarOrganizacionesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearOrganizacionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Organizacion
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearOrganizacionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearOrganizacionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DesactivarOrganizacionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r DesactivarOrganizacionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DesactivarOrganizacionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ActualizarOrganizacionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Organizacion
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r ActualizarOrganizacionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActualizarOrganizacionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ListarBandejaEmergenciasResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7826,6 +9210,286 @@ func (r RefrescarSesionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r RefrescarSesionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarSujetosResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaUsuariosAdmin
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarSujetosResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarSujetosResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AltaSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *UsuarioAdmin
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON409      *Conflicto
+}
+
+// Status returns HTTPResponse.Status
+func (r AltaSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AltaSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DesactivarSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r DesactivarSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DesactivarSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *UsuarioAdmin
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type EditarSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *UsuarioAdmin
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r EditarSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EditarSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerAlcanceSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlcanceSujeto
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerAlcanceSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerAlcanceSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type FijarSubordinadosSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r FijarSubordinadosSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FijarSubordinadosSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type FijarUnidadesSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r FijarUnidadesSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FijarUnidadesSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ReactivarSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ReactivarSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReactivarSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RevocarSesionesSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RevocacionSesionesResultado
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r RevocarSesionesSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RevocarSesionesSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type FijarRolSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Error
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r FijarRolSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FijarRolSujetoResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -9017,6 +10681,58 @@ func (c *ClientWithResponses) ListarGpsWithResponse(ctx context.Context, params 
 	return ParseListarGpsResponse(rsp)
 }
 
+// ListarOrganizacionesWithResponse request returning *ListarOrganizacionesResponse
+func (c *ClientWithResponses) ListarOrganizacionesWithResponse(ctx context.Context, params *ListarOrganizacionesParams, reqEditors ...RequestEditorFn) (*ListarOrganizacionesResponse, error) {
+	rsp, err := c.ListarOrganizaciones(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarOrganizacionesResponse(rsp)
+}
+
+// CrearOrganizacionWithBodyWithResponse request with arbitrary body returning *CrearOrganizacionResponse
+func (c *ClientWithResponses) CrearOrganizacionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearOrganizacionResponse, error) {
+	rsp, err := c.CrearOrganizacionWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearOrganizacionResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearOrganizacionWithResponse(ctx context.Context, body CrearOrganizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearOrganizacionResponse, error) {
+	rsp, err := c.CrearOrganizacion(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearOrganizacionResponse(rsp)
+}
+
+// DesactivarOrganizacionWithResponse request returning *DesactivarOrganizacionResponse
+func (c *ClientWithResponses) DesactivarOrganizacionWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*DesactivarOrganizacionResponse, error) {
+	rsp, err := c.DesactivarOrganizacion(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDesactivarOrganizacionResponse(rsp)
+}
+
+// ActualizarOrganizacionWithBodyWithResponse request with arbitrary body returning *ActualizarOrganizacionResponse
+func (c *ClientWithResponses) ActualizarOrganizacionWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActualizarOrganizacionResponse, error) {
+	rsp, err := c.ActualizarOrganizacionWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarOrganizacionResponse(rsp)
+}
+
+func (c *ClientWithResponses) ActualizarOrganizacionWithResponse(ctx context.Context, id Id, body ActualizarOrganizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*ActualizarOrganizacionResponse, error) {
+	rsp, err := c.ActualizarOrganizacion(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActualizarOrganizacionResponse(rsp)
+}
+
 // ListarBandejaEmergenciasWithResponse request returning *ListarBandejaEmergenciasResponse
 func (c *ClientWithResponses) ListarBandejaEmergenciasWithResponse(ctx context.Context, params *ListarBandejaEmergenciasParams, reqEditors ...RequestEditorFn) (*ListarBandejaEmergenciasResponse, error) {
 	rsp, err := c.ListarBandejaEmergencias(ctx, params, reqEditors...)
@@ -9215,6 +10931,153 @@ func (c *ClientWithResponses) RefrescarSesionWithResponse(ctx context.Context, b
 		return nil, err
 	}
 	return ParseRefrescarSesionResponse(rsp)
+}
+
+// ListarSujetosWithResponse request returning *ListarSujetosResponse
+func (c *ClientWithResponses) ListarSujetosWithResponse(ctx context.Context, params *ListarSujetosParams, reqEditors ...RequestEditorFn) (*ListarSujetosResponse, error) {
+	rsp, err := c.ListarSujetos(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarSujetosResponse(rsp)
+}
+
+// AltaSujetoWithBodyWithResponse request with arbitrary body returning *AltaSujetoResponse
+func (c *ClientWithResponses) AltaSujetoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AltaSujetoResponse, error) {
+	rsp, err := c.AltaSujetoWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAltaSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) AltaSujetoWithResponse(ctx context.Context, body AltaSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*AltaSujetoResponse, error) {
+	rsp, err := c.AltaSujeto(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAltaSujetoResponse(rsp)
+}
+
+// DesactivarSujetoWithResponse request returning *DesactivarSujetoResponse
+func (c *ClientWithResponses) DesactivarSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*DesactivarSujetoResponse, error) {
+	rsp, err := c.DesactivarSujeto(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDesactivarSujetoResponse(rsp)
+}
+
+// ObtenerSujetoWithResponse request returning *ObtenerSujetoResponse
+func (c *ClientWithResponses) ObtenerSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerSujetoResponse, error) {
+	rsp, err := c.ObtenerSujeto(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerSujetoResponse(rsp)
+}
+
+// EditarSujetoWithBodyWithResponse request with arbitrary body returning *EditarSujetoResponse
+func (c *ClientWithResponses) EditarSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EditarSujetoResponse, error) {
+	rsp, err := c.EditarSujetoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEditarSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) EditarSujetoWithResponse(ctx context.Context, id Id, body EditarSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*EditarSujetoResponse, error) {
+	rsp, err := c.EditarSujeto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEditarSujetoResponse(rsp)
+}
+
+// ObtenerAlcanceSujetoWithResponse request returning *ObtenerAlcanceSujetoResponse
+func (c *ClientWithResponses) ObtenerAlcanceSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerAlcanceSujetoResponse, error) {
+	rsp, err := c.ObtenerAlcanceSujeto(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerAlcanceSujetoResponse(rsp)
+}
+
+// FijarSubordinadosSujetoWithBodyWithResponse request with arbitrary body returning *FijarSubordinadosSujetoResponse
+func (c *ClientWithResponses) FijarSubordinadosSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarSubordinadosSujetoResponse, error) {
+	rsp, err := c.FijarSubordinadosSujetoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarSubordinadosSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) FijarSubordinadosSujetoWithResponse(ctx context.Context, id Id, body FijarSubordinadosSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarSubordinadosSujetoResponse, error) {
+	rsp, err := c.FijarSubordinadosSujeto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarSubordinadosSujetoResponse(rsp)
+}
+
+// FijarUnidadesSujetoWithBodyWithResponse request with arbitrary body returning *FijarUnidadesSujetoResponse
+func (c *ClientWithResponses) FijarUnidadesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarUnidadesSujetoResponse, error) {
+	rsp, err := c.FijarUnidadesSujetoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarUnidadesSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) FijarUnidadesSujetoWithResponse(ctx context.Context, id Id, body FijarUnidadesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarUnidadesSujetoResponse, error) {
+	rsp, err := c.FijarUnidadesSujeto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarUnidadesSujetoResponse(rsp)
+}
+
+// ReactivarSujetoWithResponse request returning *ReactivarSujetoResponse
+func (c *ClientWithResponses) ReactivarSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ReactivarSujetoResponse, error) {
+	rsp, err := c.ReactivarSujeto(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReactivarSujetoResponse(rsp)
+}
+
+// RevocarSesionesSujetoWithBodyWithResponse request with arbitrary body returning *RevocarSesionesSujetoResponse
+func (c *ClientWithResponses) RevocarSesionesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RevocarSesionesSujetoResponse, error) {
+	rsp, err := c.RevocarSesionesSujetoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevocarSesionesSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) RevocarSesionesSujetoWithResponse(ctx context.Context, id Id, body RevocarSesionesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*RevocarSesionesSujetoResponse, error) {
+	rsp, err := c.RevocarSesionesSujeto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevocarSesionesSujetoResponse(rsp)
+}
+
+// FijarRolSujetoWithBodyWithResponse request with arbitrary body returning *FijarRolSujetoResponse
+func (c *ClientWithResponses) FijarRolSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarRolSujetoResponse, error) {
+	rsp, err := c.FijarRolSujetoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarRolSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) FijarRolSujetoWithResponse(ctx context.Context, id Id, body FijarRolSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarRolSujetoResponse, error) {
+	rsp, err := c.FijarRolSujeto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarRolSujetoResponse(rsp)
 }
 
 // ListarUnidadesWithResponse request returning *ListarUnidadesResponse
@@ -10560,6 +12423,208 @@ func ParseListarGpsResponse(rsp *http.Response) (*ListarGpsResponse, error) {
 	return response, nil
 }
 
+// ParseListarOrganizacionesResponse parses an HTTP response from a ListarOrganizacionesWithResponse call
+func ParseListarOrganizacionesResponse(rsp *http.Response) (*ListarOrganizacionesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarOrganizacionesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaOrganizaciones
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearOrganizacionResponse parses an HTTP response from a CrearOrganizacionWithResponse call
+func ParseCrearOrganizacionResponse(rsp *http.Response) (*CrearOrganizacionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearOrganizacionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Organizacion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDesactivarOrganizacionResponse parses an HTTP response from a DesactivarOrganizacionWithResponse call
+func ParseDesactivarOrganizacionResponse(rsp *http.Response) (*DesactivarOrganizacionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DesactivarOrganizacionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActualizarOrganizacionResponse parses an HTTP response from a ActualizarOrganizacionWithResponse call
+func ParseActualizarOrganizacionResponse(rsp *http.Response) (*ActualizarOrganizacionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActualizarOrganizacionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Organizacion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListarBandejaEmergenciasResponse parses an HTTP response from a ListarBandejaEmergenciasWithResponse call
 func ParseListarBandejaEmergenciasResponse(rsp *http.Response) (*ListarBandejaEmergenciasResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -11334,6 +13399,558 @@ func ParseRefrescarSesionResponse(rsp *http.Response) (*RefrescarSesionResponse,
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarSujetosResponse parses an HTTP response from a ListarSujetosWithResponse call
+func ParseListarSujetosResponse(rsp *http.Response) (*ListarSujetosResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarSujetosResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaUsuariosAdmin
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAltaSujetoResponse parses an HTTP response from a AltaSujetoWithResponse call
+func ParseAltaSujetoResponse(rsp *http.Response) (*AltaSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AltaSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest UsuarioAdmin
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflicto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDesactivarSujetoResponse parses an HTTP response from a DesactivarSujetoWithResponse call
+func ParseDesactivarSujetoResponse(rsp *http.Response) (*DesactivarSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DesactivarSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerSujetoResponse parses an HTTP response from a ObtenerSujetoWithResponse call
+func ParseObtenerSujetoResponse(rsp *http.Response) (*ObtenerSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UsuarioAdmin
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEditarSujetoResponse parses an HTTP response from a EditarSujetoWithResponse call
+func ParseEditarSujetoResponse(rsp *http.Response) (*EditarSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EditarSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UsuarioAdmin
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerAlcanceSujetoResponse parses an HTTP response from a ObtenerAlcanceSujetoWithResponse call
+func ParseObtenerAlcanceSujetoResponse(rsp *http.Response) (*ObtenerAlcanceSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerAlcanceSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlcanceSujeto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseFijarSubordinadosSujetoResponse parses an HTTP response from a FijarSubordinadosSujetoWithResponse call
+func ParseFijarSubordinadosSujetoResponse(rsp *http.Response) (*FijarSubordinadosSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FijarSubordinadosSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseFijarUnidadesSujetoResponse parses an HTTP response from a FijarUnidadesSujetoWithResponse call
+func ParseFijarUnidadesSujetoResponse(rsp *http.Response) (*FijarUnidadesSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FijarUnidadesSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReactivarSujetoResponse parses an HTTP response from a ReactivarSujetoWithResponse call
+func ParseReactivarSujetoResponse(rsp *http.Response) (*ReactivarSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReactivarSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRevocarSesionesSujetoResponse parses an HTTP response from a RevocarSesionesSujetoWithResponse call
+func ParseRevocarSesionesSujetoResponse(rsp *http.Response) (*RevocarSesionesSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RevocarSesionesSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RevocacionSesionesResultado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseFijarRolSujetoResponse parses an HTTP response from a FijarRolSujetoWithResponse call
+func ParseFijarRolSujetoResponse(rsp *http.Response) (*FijarRolSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FijarRolSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

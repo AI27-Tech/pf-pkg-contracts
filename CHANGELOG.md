@@ -3,6 +3,36 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-09 [tracer.40] — administración de usuarios, alcance de monitoreo y organizaciones (E8-T19, DEC-139/140/141/144/145)
+
+**Para quién:** el panel interno, que necesita `/administracion` (usuarios, roles, alcance y organizaciones) y la tarjeta "mis unidades" de `/roster`. También `pf-svc-identidad` (gobierno de sujetos, alcance, jerarquía y tenants), `pf-svc-catalogos` (alta y edición del expediente del cliente), `pf-svc-bff` (proyección, permisos por rol y orquestación de la organización) y `pf-svc-core` (gobierno de identidad en proceso).
+
+**Resumen:** ola aditiva. En `identidad.yaml`, nueve operaciones nuevas: listado y búsqueda de sujetos, edición del nombre, revocación de sesiones por sujeto con motivo, lectura y edición del alcance y la jerarquía, y tenants de organización. `fijarRolSujeto` y `desactivarSujeto` documentan su `codigo` de 403 y 409. `Sujeto` gana `nombre` e `identificador_usuario`, opcionales. En `catalogos.yaml`, alta idempotente y edición del cliente; `Cliente` gana `correo` y `telefono`, opcionales. En `bff.yaml`, tag nuevo `administracion` con once proyecciones espejo de `identidad` y cuatro operaciones propias de organización. No cambia `revocarSesion`.
+
+**Reglas:**
+- Permisos (`bff` e `identidad`): escribe solo `administrador`, salvo `fijarUnidadesSujeto`, que también escribe `jefe_operativo` (DEC-140 #1, DEC-142 #2). El `jefe_operativo` lee `listarSujetos` solo con `rol=monitorista` y `obtenerAlcanceSujeto` solo de Monitoristas. Otro rol, `403`.
+- `fijarRolSujeto`: `403` `autoescalamiento`; `409` `rol_igual`, `sujeto_desactivado`, `ultimo_administrador` y `rol_cruza_audiencia` (DEC-141 #1). Al cambiar de rol se retira el alcance del rol anterior (DEC-140 #3).
+- `desactivarSujeto`: `409` `ultimo_administrador` (DEC-139 #3). Revocar la sesión viva es parte de la operación: si falla, la desactivación falla (G-6).
+- `revocarSesionesSujeto`: `motivo` obligatorio, texto libre; sin él o vacío, `400` (DEC-139 #1). El motivo se queda en la auditoría de `identidad`; no cambia `sesion.revocada`.
+- Alcance: `fijarUnidadesSujeto` y `fijarSubordinadosSujeto` reemplazan el conjunto completo (idempotentes). Una unidad puede estar en varios Monitoristas (DEC-145 #1). La jerarquía es exclusiva (DEC-145 #2). `409` `rol_sin_alcance`, `subordinado_rol_invalido` y `subordinado_con_superior`. El `bff` valida contra `operacion` que las unidades existan (`400`).
+- Organización (DEC-144 #2): el `bff` escribe `catalogos` (`crearCliente`) e `identidad` (`crearTenant`) con el mismo id; las dos altas son idempotentes por id. Nombre, correo y teléfono obligatorios; el correo debe contener `@` (DEC-139 #2). Desactivar es terminal (DEC-139 #4): `409` `organizacion_desactivada` al dar de alta otra vez ese id o al editarla. El acceso de sus usuarios se corta en el siguiente refresco.
+- `es_propio` de `UsuarioAdmin` lo resuelve el `bff` contra el `sub` del token (B-14).
+
+**Cambios:**
+- `contracts/openapi/identidad.yaml`: `listarSujetos` (`GET /api/v1/sujetos`), `editarSujeto` (`PATCH /api/v1/sujetos/{id}`), `revocarSesionesSujeto` (`POST /api/v1/sujetos/{id}/revocaciones`), `obtenerAlcanceSujeto` (`GET /api/v1/sujetos/{id}/alcance`), `fijarUnidadesSujeto` (`PUT .../alcance/unidades`), `fijarSubordinadosSujeto` (`PUT .../alcance/subordinados`), `listarTenants` (`GET /api/v1/tenants`), `crearTenant` (`PUT /api/v1/tenants/{id}`) y `desactivarTenant` (`DELETE /api/v1/tenants/{id}`). Schemas `PaginaSujetos`, `EdicionSujetoEntrada`, `RevocacionSesionesEntrada`, `RevocacionSesionesResultado`, `AlcanceSujeto`, `UnidadesSujetoEntrada`, `SubordinadosSujetoEntrada`, `Tenant`, `TenantEntrada` y `PaginaTenants`. Tag nuevo `tenants`. Descripción de `CredencialesEntrada.segundo_factor`: el MFA es obligatorio en V1 (E4-HU-017, DEC-094); el schema no cambia.
+- `contracts/openapi/catalogos.yaml`: `crearCliente` (`PUT /api/v1/clientes/{id}`) y `actualizarCliente` (`PATCH /api/v1/clientes/{id}`); schemas `ClienteEntrada` y `ClienteCambios`; `Cliente.correo` y `Cliente.telefono`.
+- `contracts/openapi/bff.yaml`: `listarSujetos`, `altaSujeto`, `obtenerSujeto`, `editarSujeto`, `desactivarSujeto`, `reactivarSujeto`, `fijarRolSujeto`, `revocarSesionesSujeto`, `obtenerAlcanceSujeto`, `fijarUnidadesSujeto` y `fijarSubordinadosSujeto` bajo `/api/v1/sujetos`, con las rutas de `identidad`; `listarOrganizaciones`, `crearOrganizacion`, `actualizarOrganizacion` y `desactivarOrganizacion` bajo `/api/v1/organizaciones`. Schemas `UsuarioAdmin`, `OrganizacionResumen`, `PaginaUsuariosAdmin`, `Organizacion`, `OrganizacionEntrada`, `OrganizacionCambios`, `PaginaOrganizaciones` y los espejos de entrada y alcance de `identidad`. Misma corrección de texto en `segundo_factor`.
+- No se proyecta `listarHistorialSujeto` (nadie lo pidió).
+- `info.version`, `VERSION`, `INVENTARIO.md` y `packages/api-client-ts/package.json` a `0.1.0-tracer.40`.
+- Regenerados `packages/api-client-go/{identidad,catalogos,bff}` y `packages/api-client-ts/src/openapi/{identidad,catalogos,bff}.gen.ts`.
+
+**Aviso al subir el pin del cliente Go (git-workflow §8):** el valor en el cable no cambia; solo el identificador Go.
+- `identidad`: el enum nuevo `TenantTipo` (`interno`, `cliente`) comparte `cliente` con `Rol`, así que las ocho constantes de `Rol` se prefijan: `Administrador`, `Cliente`, `Coordinador`, `Ejecutivo`, `JefeOperativo`, `Monitorista`, `Reaccion` y `Supervisor` pasan a `RolAdministrador`, `RolCliente`, etc. Hoy ningún consumidor (`bff`, `core`, `identidad`) usa las constantes cortas.
+- `catalogos`: con `ClienteCambiosEstado`, `Activo` e `Inactivo` (de `ValorCatalogoEntradaEstado`) pasan a `ValorCatalogoEntradaEstadoActivo` y `ValorCatalogoEntradaEstadoInactivo`. Las usan las pruebas de integración de `pf-svc-catalogos` (`internal/tipos/tipos_integracion_test.go`, `consultas_integration_test.go`).
+- `bff`: sin constantes renombradas.
+
+**Verificación:** `make generate`, `make verify`, `make check-version-ts`, `make check-reproducible`, `make breaking-openapi` (compatible con `v0.1.0-tracer.39`) y `make contract-tests` en verde.
+
 ## 2026-11-09 [tracer.39] — `/roster` del Jefe Operativo y vehículos y custodios de `/catalogos` en el `bff` (E8-T21, DEC-142)
 
 **Para quién:** el panel interno, que necesita armar el roster (alta y edición de unidades) en `/roster` y dar de alta vehículos y custodios en `/catalogos` (adelanto de E8-T16). También `pf-svc-operacion`, que implementa las reglas del roster, y `pf-svc-bff`, que reenvía. Hoy las unidades se siembran por SQL.
