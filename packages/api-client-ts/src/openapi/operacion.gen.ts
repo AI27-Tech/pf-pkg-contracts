@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Listar viajes por alcance.
-         * @description Para audiencia interna, alcance de flota; para cliente, alcance de tenant (P9, P10). El alcance se deriva del token.
+         * @description Solo los viajes del alcance del llamante (ver la descripción del spec, DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los de sus clientes efectivos ("mis clientes", DEC-149 #18) desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). El rol se deriva del token; el alcance se resuelve en servidor (DEC-053).
          */
         get: operations["listarViajes"];
         put?: never;
@@ -39,7 +39,7 @@ export interface paths {
         };
         /**
          * Detalle del viaje.
-         * @description Estado de progreso MÁS condiciones activas como dato separado (§C.2): un viaje puede estar `EN_TRANSITO` y con `INCIDENCIA` abierta a la vez.
+         * @description Estado de progreso MÁS condiciones activas como dato separado (§C.2): un viaje puede estar `EN_TRANSITO` y con `INCIDENCIA` abierta a la vez. Fuera del alcance del llamante (DEC-149) responde `404`. `ejecutivo` recibe `403` (DEC-149 #16). `reaccion` lo lee sin filtro por cliente porque el `bff` compone con su token el detalle de su caso (`obtenerEmergencia`, DEC-121 #2); el `403` de Reacción en el detalle interno lo aplica el `bff` en `obtenerViajeInterno`.
          */
         get: operations["obtenerViaje"];
         put?: never;
@@ -184,7 +184,7 @@ export interface paths {
         put?: never;
         /**
          * Crear una unidad del roster (jefe_operativo).
-         * @description Arma una `unidad` emparejando un vehículo con uno o dos custodios (coche: uno o dos; moto: uno — ADR 31). El `tipo` NO se envía: se deriva del vehículo en el servidor. Crean `jefe_operativo` y `administrador` (DEC-142 #3). El vehículo y los custodios no pueden estar en otra unidad activa (DEC-142 #4). Responde 400 si el vehículo o algún custodio no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
+         * @description Arma una `unidad` emparejando un vehículo con uno o dos custodios (coche: uno o dos; moto: uno — ADR 31). El `tipo` NO se envía: se deriva del vehículo en el servidor. Crean `jefe_operativo` y `administrador` (DEC-142 #3). El vehículo y los custodios no pueden estar en otra unidad activa (DEC-142 #4). `cliente_id` es opcional: el cliente al que sirve la unidad, dato del roster que no define el alcance (DEC-149 #2, #13 y #18). Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
          */
         post: operations["crearUnidad"];
         delete?: never;
@@ -214,7 +214,7 @@ export interface paths {
         head?: never;
         /**
          * Modificar una unidad del roster, incluido activar/desactivar.
-         * @description Cambia el vehículo, los custodios o el estado `activa` de la unidad. Activar/desactivar es un cambio de `activa` por esta misma ruta. El `tipo` nunca se escribe: se deriva del vehículo. Modifican `jefe_operativo` y `administrador` (DEC-142 #3). La exclusividad (DEC-142 #4) se revisa sobre el resultado del cambio, también al reactivar. Una unidad con reserva en un viaje no terminal no se edita ni se desactiva: primero se reasigna la escolta de ese viaje (`PATCH /api/v1/viajes/{id}/asignacion`, DEC-142 #5). Responde 400 si el vehículo o algún custodio no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
+         * @description Cambia el vehículo, los custodios, el cliente al que sirve (`cliente_id`, DEC-149 #2) o el estado `activa` de la unidad. Activar/desactivar es un cambio de `activa` por esta misma ruta. Ninguno de los dos cambia el alcance del monitoreo (DEC-149 #18). El `tipo` nunca se escribe: se deriva del vehículo. Modifican `jefe_operativo` y `administrador` (DEC-142 #3). La exclusividad (DEC-142 #4) se revisa sobre el resultado del cambio, también al reactivar. Una unidad con reserva en un viaje no terminal no se edita ni se desactiva: primero se reasigna la escolta de ese viaje (`PATCH /api/v1/viajes/{id}/asignacion`, DEC-142 #5); la regla no distingue el campo, así que también aplica a `cliente_id`. Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
          */
         patch: operations["modificarUnidad"];
         trace?: never;
@@ -367,7 +367,7 @@ export interface paths {
         };
         /**
          * Listar los adjuntos de un viaje con sus metadatos.
-         * @description Lista los metadatos de los adjuntos del viaje. No devuelve bytes: la descarga se pide por separado con autorización de vida corta. Un usuario fuera del alcance del viaje recibe 403 antes de listar nada.
+         * @description Lista los metadatos de los adjuntos del viaje. No devuelve bytes: la descarga se pide por separado con autorización de vida corta. Un viaje fuera del alcance del llamante responde 404 antes de listar nada (DEC-149).
          */
         get: operations["listarAdjuntos"];
         put?: never;
@@ -391,7 +391,7 @@ export interface paths {
         put?: never;
         /**
          * Intención de subida de un adjunto con autorización de vida corta.
-         * @description Los bytes NO pasan por el servicio: el cliente los sube al almacenamiento de objetos con la URL devuelta. La clave del objeto queda alcanzada por tenant/viaje. Un usuario fuera del alcance del viaje recibe 403 antes de emitir la intención.
+         * @description Los bytes NO pasan por el servicio: el cliente los sube al almacenamiento de objetos con la URL devuelta. La clave del objeto queda alcanzada por tenant/viaje. Un viaje fuera del alcance del llamante responde 404 antes de emitir la intención (DEC-149).
          */
         post: operations["crearIntencionSubidaAdjunto"];
         delete?: never;
@@ -412,7 +412,7 @@ export interface paths {
         };
         /**
          * Autorización de vida corta para descargar un adjunto.
-         * @description Devuelve una URL de descarga de vida corta del almacenamiento de objetos tras reverificar tenant y alcance del viaje. Los bytes NO pasan por el servicio. Cada descarga queda auditada (actor, adjunto, momento; E1-T7). Un usuario fuera del alcance recibe 403 antes de autorizar nada.
+         * @description Devuelve una URL de descarga de vida corta del almacenamiento de objetos tras reverificar tenant y alcance del viaje. Los bytes NO pasan por el servicio. Cada descarga queda auditada (actor, adjunto, momento; E1-T7). Un viaje fuera del alcance del llamante responde 404 antes de autorizar nada (DEC-149).
          */
         get: operations["descargarAdjunto"];
         put?: never;
@@ -436,7 +436,7 @@ export interface paths {
         put?: never;
         /**
          * Registrar una descarga del expediente del viaje (deja auditoría).
-         * @description Registra que el expediente del viaje se descargó, dejando su rastro de auditoría en la misma transacción (interceptor, `op_auditoria`; E1-T7). La invoca `bff` al servir `descargarViaje`; la composición del expediente la arma `bff` con las lecturas existentes. Un usuario fuera del alcance del viaje recibe 403 antes de registrar nada.
+         * @description Registra que el expediente del viaje se descargó, dejando su rastro de auditoría en la misma transacción (interceptor, `op_auditoria`; E1-T7). La invoca `bff` al servir `descargarViaje`; la composición del expediente la arma `bff` con las lecturas existentes. Un viaje fuera del alcance del llamante responde 404 antes de registrar nada (DEC-149).
          */
         post: operations["registrarDescargaViaje"];
         delete?: never;
@@ -614,6 +614,11 @@ export interface components {
             readonly tipo: "patrulla" | "moto";
             /** @description Si la unidad está activa (disponible para asignarse). */
             activa: boolean;
+            /**
+             * Format: uuid
+             * @description Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Referencia, no FK. Dato del roster para asignar la escolta y reconocer el préstamo; no define el alcance del monitoreo (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
+             */
+            cliente_id?: string | null;
         };
         /** @description Alta de unidad. El `tipo` NO se envía: se deriva del vehículo. `activa` es opcional al crear (el servidor decide el valor por defecto). */
         UnidadEntrada: {
@@ -621,12 +626,22 @@ export interface components {
             custodios_ids: components["schemas"]["Id"][];
             /** @description Opcional al crear. Si se omite, el servidor fija el valor por defecto. */
             activa?: boolean;
+            /**
+             * Format: uuid
+             * @description Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2), dato del roster que no define el alcance (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
+             */
+            cliente_id?: string | null;
         };
-        /** @description Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). */
+        /** @description Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). Propiedad ausente = no se toca. */
         UnidadModificacion: {
             vehiculo_id?: components["schemas"]["Id"];
             custodios_ids?: components["schemas"]["Id"][];
             activa?: boolean;
+            /**
+             * Format: uuid
+             * @description Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13). Dato del roster: no cambia el alcance del monitoreo (DEC-149 #18).
+             */
+            cliente_id?: string | null;
         };
         PaginaUnidades: {
             items: components["schemas"]["Unidad"][];
@@ -839,8 +854,8 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description La petición no cumple el contrato (validación de cuerpo o parámetros). */
-        SolicitudInvalida: {
+        /** @description Autenticado pero fuera de alcance/rol para la acción o el recurso. */
+        Prohibido: {
             headers: {
                 [name: string]: unknown;
             };
@@ -848,8 +863,8 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Autenticado pero fuera de alcance/rol para la acción o el recurso. */
-        Prohibido: {
+        /** @description La petición no cumple el contrato (validación de cuerpo o parámetros). */
+        SolicitudInvalida: {
             headers: {
                 [name: string]: unknown;
             };
@@ -906,6 +921,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
         };
     };
     crearViaje: {
@@ -957,6 +973,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -981,6 +998,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -1041,6 +1059,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
             /** @description Transición no permitida. `codigo` de máquina en el cuerpo: `transicion_no_permitida` (la arista no existe, p. ej. el viaje ya es terminal o hay carrera); `cierre_anticipado_solo_por_incidencia` (se pidió cerrar desde `EN_TRANSITO` con un motivo distinto de `por_incidencia`); `cierre_anticipado_requiere_incidencia` (cierre anticipado sin una condición `INCIDENCIA` abierta). DEC-020 #6 / DEC-113. */
             409: {
                 headers: {
@@ -1073,6 +1092,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -1103,6 +1123,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
             /** @description Alguna unidad no está disponible en la ventana del viaje; sin reserva parcial. Único código de rechazo: `recurso_no_disponible` (la reserva falló, el "no hay gente" de DEC-043). La aptitud nunca rechaza en V1 (DEC-055): no existe `recurso_no_apto`. */
             409: {
                 headers: {
@@ -1141,6 +1162,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
             409: components["responses"]["Conflicto"];
         };
     };
@@ -1171,6 +1193,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
             /** @description El viaje está en un estado terminal y no admite fijar ETA. `codigo` de máquina `viaje_en_estado_terminal`. */
             409: {
                 headers: {
@@ -1368,6 +1391,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -1398,6 +1422,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
         };
     };
     listarIncidencias: {
@@ -1423,6 +1448,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -1453,6 +1479,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
             /** @description Ya existe una condición `INCIDENCIA` abierta para este viaje (índice único parcial). `codigo` `condicion_ya_abierta`. */
             409: {
                 headers: {
@@ -1518,6 +1545,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
@@ -1548,6 +1576,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
         };
     };
     cerrarEstadia: {

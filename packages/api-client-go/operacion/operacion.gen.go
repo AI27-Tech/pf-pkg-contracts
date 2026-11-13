@@ -540,6 +540,9 @@ type Unidad struct {
 	// Activa Si la unidad está activa (disponible para asignarse).
 	Activa bool `json:"activa"`
 
+	// ClienteId Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Referencia, no FK. Dato del roster para asignar la escolta y reconocer el préstamo; no define el alcance del monitoreo (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
+	ClienteId *openapi_types.UUID `json:"cliente_id"`
+
 	// CustodiosIds Custodios de la unidad, por identificador de `catalogos`. Un coche lleva uno o dos; una moto, uno (ADR 31).
 	CustodiosIds []Id `json:"custodios_ids"`
 
@@ -568,17 +571,23 @@ type UnidadAsignada struct {
 // UnidadEntrada Alta de unidad. El `tipo` NO se envía: se deriva del vehículo. `activa` es opcional al crear (el servidor decide el valor por defecto).
 type UnidadEntrada struct {
 	// Activa Opcional al crear. Si se omite, el servidor fija el valor por defecto.
-	Activa       *bool `json:"activa,omitempty"`
-	CustodiosIds []Id  `json:"custodios_ids"`
+	Activa *bool `json:"activa,omitempty"`
+
+	// ClienteId Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2), dato del roster que no define el alcance (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
+	ClienteId    *openapi_types.UUID `json:"cliente_id"`
+	CustodiosIds []Id                `json:"custodios_ids"`
 
 	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
 	VehiculoId Id `json:"vehiculo_id"`
 }
 
-// UnidadModificacion Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado).
+// UnidadModificacion Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). Propiedad ausente = no se toca.
 type UnidadModificacion struct {
-	Activa       *bool `json:"activa,omitempty"`
-	CustodiosIds *[]Id `json:"custodios_ids,omitempty"`
+	Activa *bool `json:"activa,omitempty"`
+
+	// ClienteId Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13). Dato del roster: no cambia el alcance del monitoreo (DEC-149 #18).
+	ClienteId    *openapi_types.UUID `json:"cliente_id"`
+	CustodiosIds *[]Id               `json:"custodios_ids,omitempty"`
 
 	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
 	VehiculoId *Id `json:"vehiculo_id,omitempty"`
@@ -2969,6 +2978,7 @@ type ListarViajesResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaViajes
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 }
 
 // Status returns HTTPResponse.Status
@@ -3018,6 +3028,7 @@ type ObtenerViajeResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *ViajeDetalle
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3118,6 +3129,7 @@ type ObtenerAsignacionResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *EscoltaVigente
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3144,6 +3156,7 @@ type ReasignarRecursosResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Conflicto
 }
 
@@ -3170,6 +3183,7 @@ type AsignarRecursosResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -3218,6 +3232,7 @@ type ListarBitacoraResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaBitacora
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3244,6 +3259,7 @@ type RegistrarEntradaBitacoraResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 }
 
 // Status returns HTTPResponse.Status
@@ -3292,6 +3308,7 @@ type ListarEstadiasResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaEstadias
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3318,6 +3335,7 @@ type AbrirEstadiaResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 }
 
 // Status returns HTTPResponse.Status
@@ -3370,6 +3388,7 @@ type FijarEtaResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -3421,6 +3440,7 @@ type ObtenerFichaResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *FichaTecnica
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3471,6 +3491,7 @@ type ListarIncidenciasResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaIncidencias
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3497,6 +3518,7 @@ type AbrirIncidenciaResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -3549,6 +3571,7 @@ type TransicionarViajeResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -4170,6 +4193,13 @@ func ParseListarViajesResponse(rsp *http.Response) (*ListarViajesResponse, error
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	}
 
 	return response, nil
@@ -4256,6 +4286,13 @@ func ParseObtenerViajeResponse(rsp *http.Response) (*ObtenerViajeResponse, error
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
@@ -4445,6 +4482,13 @@ func ParseObtenerAsignacionResponse(rsp *http.Response) (*ObtenerAsignacionRespo
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4499,6 +4543,13 @@ func ParseReasignarRecursosResponse(rsp *http.Response) (*ReasignarRecursosRespo
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflicto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4552,6 +4603,13 @@ func ParseAsignarRecursosResponse(rsp *http.Response) (*AsignarRecursosResponse,
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error
@@ -4633,6 +4691,13 @@ func ParseListarBitacoraResponse(rsp *http.Response) (*ListarBitacoraResponse, e
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4686,6 +4751,13 @@ func ParseRegistrarEntradaBitacoraResponse(rsp *http.Response) (*RegistrarEntrad
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -4767,6 +4839,13 @@ func ParseListarEstadiasResponse(rsp *http.Response) (*ListarEstadiasResponse, e
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4820,6 +4899,13 @@ func ParseAbrirEstadiaResponse(rsp *http.Response) (*AbrirEstadiaResponse, error
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -4929,6 +5015,13 @@ func ParseFijarEtaResponse(rsp *http.Response) (*FijarEtaResponse, error) {
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -5030,6 +5123,13 @@ func ParseObtenerFichaResponse(rsp *http.Response) (*ObtenerFichaResponse, error
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -5124,6 +5224,13 @@ func ParseListarIncidenciasResponse(rsp *http.Response) (*ListarIncidenciasRespo
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -5177,6 +5284,13 @@ func ParseAbrirIncidenciaResponse(rsp *http.Response) (*AbrirIncidenciaResponse,
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error
@@ -5285,6 +5399,13 @@ func ParseTransicionarViajeResponse(rsp *http.Response) (*TransicionarViajeRespo
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error

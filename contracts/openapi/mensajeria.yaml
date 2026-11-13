@@ -31,7 +31,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — mensajeria
-  version: 0.1.0-tracer.40
+  version: 0.1.0-tracer.41
   description: >-
     Conversación de negocio entre el cliente y la bandeja compartida de AI27:
     enrutamiento, reclamo versionado, orden canónico de mensajes, recibos,
@@ -51,6 +51,19 @@ info:
     notas y liberan o transfieren (DEC-126), pero no reclaman ni resuelven; en
     conversaciones solo leen, y las escrituras siguen con las reglas del
     `ejecutivo` (DEC-118, DEC-127).
+
+
+    Alcance de monitoreo en las emergencias del viaje (DEC-149 #6): en
+    `/api/v1/viajes/{id}/emergencias...` y en `cerrarEmergenciaPorId`,
+    `monitorista`, `supervisor` y `coordinador` solo operan sobre viajes de sus
+    clientes efectivos ("mis clientes" y, por la jerarquía, los de sus
+    subordinados; DEC-149 #18), desde `APROBADO`; `administrador`, todos. Los
+    clientes de cada sujeto vienen de la proyección local de
+    `alcance.cambiado` de `identidad`, reconstruible con
+    `identidad.listarAlcances` (DEC-149 #20, ADR 26). Un viaje fuera
+    de alcance responde `404`; `403` es para el rol sin la acción. La
+    conversación sigue con su alcance por cliente del `ejecutivo` (DEC-046,
+    DEC-103) y la bandeja de Reacción no cambia.
   x-ai27-servicio: mensajeria
   x-ai27-capa: soporte
   x-ai27-tracer: false
@@ -503,8 +516,8 @@ paths:
         Interno, el caso completo de cualquier tenant (DEC-129): lo ven
         `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-135);
         otro rol interno responde `403`. Reacción trabaja desde la bandeja y el
-        detalle por id. El alcance por unidad del monitoreo aún no se aplica
-        (DT-07).
+        detalle por id. El monitoreo solo ve los casos de viajes de su alcance
+        por cliente (DEC-149 #6); fuera de alcance, `404`.
       responses:
         "200":
           description: Casos de emergencia del viaje, proyectados por audiencia.
@@ -520,8 +533,9 @@ paths:
       summary: Activar una emergencia sobre el viaje (idempotente por activacion_id).
       description: >-
         Cliente dentro de su organización, o usuario de monitoreo
-        (Monitorista/Supervisor/Coordinador), activan el caso (ADR 21 §1,
-        DEC-045 #9); otro rol interno responde `403`. Habilitada desde
+        (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por
+        cliente (DEC-149 #6), activan el caso (ADR 21 §1, DEC-045 #9); otro rol
+        interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde
         `SOLICITADO` en estados no terminales; denegada en `CERRADO`,
         `CANCELADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE` con 409
         `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de
@@ -725,8 +739,9 @@ paths:
       tags: [emergencias]
       summary: Cerrar administrativamente el caso (resuelta -> cerrada).
       description: >-
-        Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje, o
-        Administrator global (ADR 21 §5). No exige texto. Reacción no cierra y
+        Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje
+        (alcance por cliente, DEC-149 #6), o Administrator global (ADR 21 §5).
+        Un viaje fuera de alcance responde `404`. No exige texto. Reacción no cierra y
         el Cliente no resuelve ni cierra. `cerrada` es irreversible.
       responses:
         "200":
@@ -995,8 +1010,9 @@ paths:
       description: >-
         Gemela de `cerrarEmergencia` sin `{id}` de viaje; `mensajeria` resuelve
         el viaje del caso para evaluar el alcance. Solo
-        Monitorista/Supervisor/Coordinador dentro del alcance del viaje (eje de
-        monitoreo por unidad), o Administrator global (ADR 21 §5). NUNCA
+        Monitorista/Supervisor/Coordinador dentro del alcance del viaje
+        (alcance por cliente, DEC-149 #6), o Administrator global (ADR 21 §5).
+        Un caso de un viaje fuera de alcance responde `404`. NUNCA
         Reacción ni Ejecutivo (E8-T18, DEC-045 #9, DEC-121 #5), tampoco por el
         mando de DEC-099: responden `403`. No exige texto. `cerrada` es
         irreversible.

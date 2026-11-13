@@ -40,15 +40,35 @@ const (
 	TenantTipoInterno TenantTipo = "interno"
 )
 
-// AlcanceSujeto Alcance de monitoreo de un sujeto (DEC-140). El alcance no viaja en el token: se resuelve en servidor (DEC-053).
+// AlcanceEfectivo Clientes efectivos de un sujeto. Coincide en forma con el payload del evento `alcance.cambiado` (contracts/events, DEC-149 #20).
+type AlcanceEfectivo struct {
+	// CambiadoEn Momento del último cambio del conjunto.
+	CambiadoEn MarcaTiempo `json:"cambiado_en"`
+
+	// ClientesEfectivosIds Igual que `AlcanceSujeto.clientes_efectivos_ids`: unión, sin repetidos, de los clientes del sujeto y los de sus subordinados. Ids de `catalogos`.
+	ClientesEfectivosIds []Id `json:"clientes_efectivos_ids"`
+
+	// SujetoId Identificador único (UUID). Nunca un correlativo expuesto.
+	SujetoId Id `json:"sujeto_id"`
+}
+
+// AlcanceSujeto Alcance de monitoreo de un sujeto (DEC-140, DEC-149 #18). El alcance son los clientes efectivos (`clientes_efectivos_ids`). No viaja en el token: se resuelve en servidor (DEC-053).
 type AlcanceSujeto struct {
+	// ClientesEfectivosIds Unión, sin repetidos, de `clientes_ids` y de los clientes de los subordinados por la jerarquía (DEC-140 #2). Para un Monitorista es igual a `clientes_ids`. Es el alcance del monitoreo y la misma lista que lleva `alcance.cambiado`.
+	ClientesEfectivosIds []Id `json:"clientes_efectivos_ids"`
+
+	// ClientesIds Clientes asignados directamente ("mis clientes", DEC-149 #18). Solo un Monitorista tiene; vacía para otro rol. Ids de `catalogos`.
+	ClientesIds []Id `json:"clientes_ids"`
+
 	// SubordinadosIds Subordinados directos: Monitoristas de un Supervisor o Supervisores de un Coordinador. Vacía para otro rol.
 	SubordinadosIds []Id `json:"subordinados_ids"`
 
-	// UnidadesEfectivasIds Unión, sin repetidos, de `unidades_ids` y de las unidades de los subordinados por la jerarquía (DEC-140 #2). Para un Monitorista es igual a `unidades_ids`.
+	// UnidadesEfectivasIds Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'. Se elimina en una ola posterior. Unión de `unidades_ids` y de las unidades de los subordinados; ya no define el alcance.
+	// Deprecated:
 	UnidadesEfectivasIds []Id `json:"unidades_efectivas_ids"`
 
-	// UnidadesIds Unidades asignadas directamente ("mis unidades"). Solo un Monitorista tiene; vacía para otro rol. Ids de `operacion`.
+	// UnidadesIds Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'. Se elimina en una ola posterior. Unidades asignadas directamente ("mis unidades"); ya no definen el alcance. Ids de `operacion`.
+	// Deprecated:
 	UnidadesIds []Id `json:"unidades_ids"`
 }
 
@@ -89,6 +109,12 @@ type CambioAdministrativo struct {
 
 	// Tipo Nombre canónico del hecho registrado: `sujeto.creado`, `sujeto.desactivado`, `sujeto.reactivado`, `rol.asignado`, `rol.revocado`.
 	Tipo string `json:"tipo"`
+}
+
+// ClientesSujetoEntrada Conjunto completo de clientes del Monitorista ("mis clientes"); reemplaza al anterior.
+type ClientesSujetoEntrada struct {
+	// ClientesIds Ids de cliente de `catalogos`. Vacía para quitarle todos.
+	ClientesIds []Id `json:"clientes_ids"`
 }
 
 // CredencialesEntrada defines model for CredencialesEntrada.
@@ -147,6 +173,13 @@ type Id = openapi_types.UUID
 
 // MarcaTiempo Instante en UTC, RFC 3339.
 type MarcaTiempo = time.Time
+
+// PaginaAlcances defines model for PaginaAlcances.
+type PaginaAlcances struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string           `json:"cursor_siguiente"`
+	Items           []AlcanceEfectivo `json:"items"`
+}
 
 // PaginaHistorial defines model for PaginaHistorial.
 type PaginaHistorial struct {
@@ -287,7 +320,7 @@ type TenantEntrada struct {
 	Nombre string `json:"nombre"`
 }
 
-// UnidadesSujetoEntrada Conjunto completo de unidades del Monitorista; reemplaza al anterior.
+// UnidadesSujetoEntrada Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes' (`ClientesSujetoEntrada`). Se elimina en una ola posterior. Conjunto completo de unidades del Monitorista; reemplaza al anterior.
 type UnidadesSujetoEntrada struct {
 	// UnidadesIds Ids de unidades de `operacion`. Vacía para quitarle todas.
 	UnidadesIds []Id `json:"unidades_ids"`
@@ -307,6 +340,12 @@ type Prohibido = Error
 
 // SolicitudInvalida defines model for SolicitudInvalida.
 type SolicitudInvalida = Error
+
+// ListarAlcancesParams defines parameters for ListarAlcances.
+type ListarAlcancesParams struct {
+	// Cursor Cursor de continuación; ausente para el snapshot inicial.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
 
 // ListarSesionesRevocadasParams defines parameters for ListarSesionesRevocadas.
 type ListarSesionesRevocadasParams struct {
@@ -355,6 +394,9 @@ type AltaSujetoJSONRequestBody = AltaSujetoEntrada
 
 // EditarSujetoJSONRequestBody defines body for EditarSujeto for application/json ContentType.
 type EditarSujetoJSONRequestBody = EdicionSujetoEntrada
+
+// FijarClientesSujetoJSONRequestBody defines body for FijarClientesSujeto for application/json ContentType.
+type FijarClientesSujetoJSONRequestBody = ClientesSujetoEntrada
 
 // FijarSubordinadosSujetoJSONRequestBody defines body for FijarSubordinadosSujeto for application/json ContentType.
 type FijarSubordinadosSujetoJSONRequestBody = SubordinadosSujetoEntrada
@@ -444,6 +486,9 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// ListarAlcances request
+	ListarAlcances(ctx context.Context, params *ListarAlcancesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// EmitirSesionWithBody request with any body
 	EmitirSesionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -485,6 +530,11 @@ type ClientInterface interface {
 	// ObtenerAlcanceSujeto request
 	ObtenerAlcanceSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// FijarClientesSujetoWithBody request with any body
+	FijarClientesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	FijarClientesSujeto(ctx context.Context, id Id, body FijarClientesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// FijarSubordinadosSujetoWithBody request with any body
 	FijarSubordinadosSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -521,6 +571,18 @@ type ClientInterface interface {
 	CrearTenantWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	CrearTenant(ctx context.Context, id Id, body CrearTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) ListarAlcances(ctx context.Context, params *ListarAlcancesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarAlcancesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) EmitirSesionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -703,6 +765,30 @@ func (c *Client) ObtenerAlcanceSujeto(ctx context.Context, id Id, reqEditors ...
 	return c.Client.Do(req)
 }
 
+func (c *Client) FijarClientesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarClientesSujetoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarClientesSujeto(ctx context.Context, id Id, body FijarClientesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarClientesSujetoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) FijarSubordinadosSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewFijarSubordinadosSujetoRequestWithBody(c.Server, id, contentType, body)
 	if err != nil {
@@ -869,6 +955,55 @@ func (c *Client) CrearTenant(ctx context.Context, id Id, body CrearTenantJSONReq
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewListarAlcancesRequest generates requests for ListarAlcances
+func NewListarAlcancesRequest(server string, params *ListarAlcancesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alcances")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewEmitirSesionRequest calls the generic EmitirSesion builder with application/json body
@@ -1370,6 +1505,53 @@ func NewObtenerAlcanceSujetoRequest(server string, id Id) (*http.Request, error)
 	return req, nil
 }
 
+// NewFijarClientesSujetoRequest calls the generic FijarClientesSujeto builder with application/json body
+func NewFijarClientesSujetoRequest(server string, id Id, body FijarClientesSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewFijarClientesSujetoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewFijarClientesSujetoRequestWithBody generates requests for FijarClientesSujeto with any type of body
+func NewFijarClientesSujetoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/alcance/clientes", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewFijarSubordinadosSujetoRequest calls the generic FijarSubordinadosSujeto builder with application/json body
 func NewFijarSubordinadosSujetoRequest(server string, id Id, body FijarSubordinadosSujetoJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1821,6 +2003,9 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// ListarAlcancesWithResponse request
+	ListarAlcancesWithResponse(ctx context.Context, params *ListarAlcancesParams, reqEditors ...RequestEditorFn) (*ListarAlcancesResponse, error)
+
 	// EmitirSesionWithBodyWithResponse request with any body
 	EmitirSesionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EmitirSesionResponse, error)
 
@@ -1862,6 +2047,11 @@ type ClientWithResponsesInterface interface {
 	// ObtenerAlcanceSujetoWithResponse request
 	ObtenerAlcanceSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerAlcanceSujetoResponse, error)
 
+	// FijarClientesSujetoWithBodyWithResponse request with any body
+	FijarClientesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarClientesSujetoResponse, error)
+
+	FijarClientesSujetoWithResponse(ctx context.Context, id Id, body FijarClientesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarClientesSujetoResponse, error)
+
 	// FijarSubordinadosSujetoWithBodyWithResponse request with any body
 	FijarSubordinadosSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarSubordinadosSujetoResponse, error)
 
@@ -1898,6 +2088,29 @@ type ClientWithResponsesInterface interface {
 	CrearTenantWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearTenantResponse, error)
 
 	CrearTenantWithResponse(ctx context.Context, id Id, body CrearTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearTenantResponse, error)
+}
+
+type ListarAlcancesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaAlcances
+	JSON401      *NoAutorizado
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarAlcancesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarAlcancesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type EmitirSesionResponse struct {
@@ -2171,6 +2384,32 @@ func (r ObtenerAlcanceSujetoResponse) StatusCode() int {
 	return 0
 }
 
+type FijarClientesSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r FijarClientesSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FijarClientesSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type FijarSubordinadosSujetoResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2400,6 +2639,15 @@ func (r CrearTenantResponse) StatusCode() int {
 	return 0
 }
 
+// ListarAlcancesWithResponse request returning *ListarAlcancesResponse
+func (c *ClientWithResponses) ListarAlcancesWithResponse(ctx context.Context, params *ListarAlcancesParams, reqEditors ...RequestEditorFn) (*ListarAlcancesResponse, error) {
+	rsp, err := c.ListarAlcances(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarAlcancesResponse(rsp)
+}
+
 // EmitirSesionWithBodyWithResponse request with arbitrary body returning *EmitirSesionResponse
 func (c *ClientWithResponses) EmitirSesionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EmitirSesionResponse, error) {
 	rsp, err := c.EmitirSesionWithBody(ctx, contentType, body, reqEditors...)
@@ -2531,6 +2779,23 @@ func (c *ClientWithResponses) ObtenerAlcanceSujetoWithResponse(ctx context.Conte
 	return ParseObtenerAlcanceSujetoResponse(rsp)
 }
 
+// FijarClientesSujetoWithBodyWithResponse request with arbitrary body returning *FijarClientesSujetoResponse
+func (c *ClientWithResponses) FijarClientesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarClientesSujetoResponse, error) {
+	rsp, err := c.FijarClientesSujetoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarClientesSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) FijarClientesSujetoWithResponse(ctx context.Context, id Id, body FijarClientesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarClientesSujetoResponse, error) {
+	rsp, err := c.FijarClientesSujeto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarClientesSujetoResponse(rsp)
+}
+
 // FijarSubordinadosSujetoWithBodyWithResponse request with arbitrary body returning *FijarSubordinadosSujetoResponse
 func (c *ClientWithResponses) FijarSubordinadosSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarSubordinadosSujetoResponse, error) {
 	rsp, err := c.FijarSubordinadosSujetoWithBody(ctx, id, contentType, body, reqEditors...)
@@ -2650,6 +2915,39 @@ func (c *ClientWithResponses) CrearTenantWithResponse(ctx context.Context, id Id
 		return nil, err
 	}
 	return ParseCrearTenantResponse(rsp)
+}
+
+// ParseListarAlcancesResponse parses an HTTP response from a ListarAlcancesWithResponse call
+func ParseListarAlcancesResponse(rsp *http.Response) (*ListarAlcancesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarAlcancesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaAlcances
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseEmitirSesionResponse parses an HTTP response from a EmitirSesionWithResponse call
@@ -3135,6 +3433,60 @@ func ParseObtenerAlcanceSujetoResponse(rsp *http.Response) (*ObtenerAlcanceSujet
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseFijarClientesSujetoResponse parses an HTTP response from a FijarClientesSujetoWithResponse call
+func ParseFijarClientesSujetoResponse(rsp *http.Response) (*FijarClientesSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FijarClientesSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
