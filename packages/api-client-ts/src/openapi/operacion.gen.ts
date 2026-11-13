@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Listar viajes por alcance.
-         * @description Solo los viajes del alcance del llamante (ver la descripción del spec, DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los de los clientes de sus unidades efectivas desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). El rol se deriva del token; el alcance se resuelve en servidor (DEC-053).
+         * @description Solo los viajes del alcance del llamante (ver la descripción del spec, DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los de sus clientes efectivos ("mis clientes", DEC-149 #18) desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). El rol se deriva del token; el alcance se resuelve en servidor (DEC-053).
          */
         get: operations["listarViajes"];
         put?: never;
@@ -169,26 +169,6 @@ export interface paths {
         patch: operations["completarFechaHora"];
         trace?: never;
     };
-    "/api/v1/alcances-monitoreo": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Snapshot de clientes por sujeto + cursor.
-         * @description Snapshot de los clientes que alcanza el monitoreo de cada sujeto más un cursor consistente, para que `reportes` y `mensajeria` reconstruyan su proyección de `alcance_monitoreo.cambiado` y hagan catch-up sin ventana (DEC-149 #15, ADR 26). Cada item tiene la forma del payload de `alcance_monitoreo.cambiado`. Solo trae sujetos con al menos un cliente: un sujeto ausente no ve viajes por alcance de monitoreo. Consumido por los servicios protegidos, no por el navegador.
-         */
-        get: operations["listarAlcancesMonitoreo"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/unidades": {
         parameters: {
             query?: never;
@@ -204,7 +184,7 @@ export interface paths {
         put?: never;
         /**
          * Crear una unidad del roster (jefe_operativo).
-         * @description Arma una `unidad` emparejando un vehículo con uno o dos custodios (coche: uno o dos; moto: uno — ADR 31). El `tipo` NO se envía: se deriva del vehículo en el servidor. Crean `jefe_operativo` y `administrador` (DEC-142 #3). El vehículo y los custodios no pueden estar en otra unidad activa (DEC-142 #4). `cliente_id` es opcional: el cliente al que sirve la unidad (DEC-149 #2 y #13). Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
+         * @description Arma una `unidad` emparejando un vehículo con uno o dos custodios (coche: uno o dos; moto: uno — ADR 31). El `tipo` NO se envía: se deriva del vehículo en el servidor. Crean `jefe_operativo` y `administrador` (DEC-142 #3). El vehículo y los custodios no pueden estar en otra unidad activa (DEC-142 #4). `cliente_id` es opcional: el cliente al que sirve la unidad, dato del roster que no define el alcance (DEC-149 #2, #13 y #18). Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
          */
         post: operations["crearUnidad"];
         delete?: never;
@@ -234,7 +214,7 @@ export interface paths {
         head?: never;
         /**
          * Modificar una unidad del roster, incluido activar/desactivar.
-         * @description Cambia el vehículo, los custodios, el cliente al que sirve (`cliente_id`, DEC-149 #2) o el estado `activa` de la unidad. Activar/desactivar es un cambio de `activa` por esta misma ruta. Al cambiar `cliente_id` o `activa`, `operacion` recalcula y publica `alcance_monitoreo.cambiado` para cada sujeto que tiene la unidad entre sus unidades efectivas (DEC-149 #15). El `tipo` nunca se escribe: se deriva del vehículo. Modifican `jefe_operativo` y `administrador` (DEC-142 #3). La exclusividad (DEC-142 #4) se revisa sobre el resultado del cambio, también al reactivar. Una unidad con reserva en un viaje no terminal no se edita ni se desactiva: primero se reasigna la escolta de ese viaje (`PATCH /api/v1/viajes/{id}/asignacion`, DEC-142 #5); la regla no distingue el campo, así que también aplica a `cliente_id`. Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
+         * @description Cambia el vehículo, los custodios, el cliente al que sirve (`cliente_id`, DEC-149 #2) o el estado `activa` de la unidad. Activar/desactivar es un cambio de `activa` por esta misma ruta. Ninguno de los dos cambia el alcance del monitoreo (DEC-149 #18). El `tipo` nunca se escribe: se deriva del vehículo. Modifican `jefe_operativo` y `administrador` (DEC-142 #3). La exclusividad (DEC-142 #4) se revisa sobre el resultado del cambio, también al reactivar. Una unidad con reserva en un viaje no terminal no se edita ni se desactiva: primero se reasigna la escolta de ese viaje (`PATCH /api/v1/viajes/{id}/asignacion`, DEC-142 #5); la regla no distingue el campo, así que también aplica a `cliente_id`. Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
          */
         patch: operations["modificarUnidad"];
         trace?: never;
@@ -636,7 +616,7 @@ export interface components {
             activa: boolean;
             /**
              * Format: uuid
-             * @description Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Referencia, no FK. null o ausente = no sirve a ningún cliente y no da alcance de monitoreo a nadie (DEC-149 #13).
+             * @description Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Referencia, no FK. Dato del roster para asignar la escolta y reconocer el préstamo; no define el alcance del monitoreo (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
              */
             cliente_id?: string | null;
         };
@@ -648,7 +628,7 @@ export interface components {
             activa?: boolean;
             /**
              * Format: uuid
-             * @description Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2). null o ausente = sin cliente (DEC-149 #13).
+             * @description Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2), dato del roster que no define el alcance (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
              */
             cliente_id?: string | null;
         };
@@ -659,22 +639,9 @@ export interface components {
             activa?: boolean;
             /**
              * Format: uuid
-             * @description Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13).
+             * @description Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13). Dato del roster: no cambia el alcance del monitoreo (DEC-149 #18).
              */
             cliente_id?: string | null;
-        };
-        /** @description Clientes que alcanza el monitoreo de un sujeto: los `cliente_id` no nulos de sus unidades efectivas activas (DEC-149 #4 y #17). Coincide en forma con el payload del evento `alcance_monitoreo.cambiado` (contracts/events). */
-        AlcanceMonitoreo: {
-            sujeto_id: components["schemas"]["Id"];
-            /** @description Ids de cliente de `catalogos`, sin repetidos. */
-            clientes_ids: components["schemas"]["Id"][];
-            /** @description Momento del último cambio del conjunto. */
-            cambiado_en: components["schemas"]["MarcaTiempo"];
-        };
-        PaginaAlcancesMonitoreo: {
-            items: components["schemas"]["AlcanceMonitoreo"][];
-            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
-            cursor_siguiente: string | null;
         };
         PaginaUnidades: {
             items: components["schemas"]["Unidad"][];
@@ -1275,30 +1242,6 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-        };
-    };
-    listarAlcancesMonitoreo: {
-        parameters: {
-            query?: {
-                /** @description Cursor de continuación; ausente para el snapshot inicial. */
-                cursor?: components["schemas"]["Cursor"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Página de alcances de monitoreo y cursor. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaginaAlcancesMonitoreo"];
-                };
-            };
-            401: components["responses"]["NoAutorizado"];
         };
     };
     listarUnidades: {

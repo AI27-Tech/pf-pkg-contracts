@@ -25,13 +25,15 @@ info:
     Alcance sobre los viajes (DEC-149). Audiencia Cliente: los viajes de su
     tenant (sin cambio). `jefe_operativo` y `administrador`: todos.
     `monitorista`, `supervisor` y `coordinador`: los viajes cuyo `cliente_id`
-    está entre los clientes de sus unidades efectivas activas (proyección de
-    `alcance.cambiado` cruzada con el `cliente_id` de cada unidad activa; una
-    unidad desactivada no da alcance, DEC-149 #17; ver
-    `listarAlcancesMonitoreo`), solo desde `APROBADO`: nunca un viaje en
-    `SOLICITADO` ni en `RECHAZADO_POR_AI27`, ni uno que no pasó por `APROBADO`.
-    El monitoreo sigue al cliente del viaje, no al de la unidad prestada
-    (DEC-149 #5). `ejecutivo` no lista ni lee viajes (`403`, DEC-149 #16);
+    está entre los clientes efectivos del sujeto según `identidad` ("mis
+    clientes" y, por la jerarquía, los de sus subordinados; DEC-149 #18),
+    que `operacion` mantiene como proyección local de `alcance.cambiado`
+    (reconstruible con `identidad.listarAlcances`, DEC-149 #20, ADR 26); solo
+    desde `APROBADO`: nunca un viaje en `SOLICITADO` ni en
+    `RECHAZADO_POR_AI27`, ni uno que no pasó por `APROBADO`. No hay cruce con
+    unidades: el `cliente_id` y el estado `activa` de las unidades no
+    intervienen. El monitoreo sigue al cliente del viaje, no al de la unidad
+    prestada (DEC-149 #5). `ejecutivo` no lista ni lee viajes (`403`, DEC-149 #16);
     `reaccion` recibe `403` en `listarViajes` (ver `obtenerViaje`).
 
     Fuera de alcance, el viaje no aparece en `listarViajes` y toda operación
@@ -61,10 +63,6 @@ tags:
     Estadías del viaje (paradas durante EN_TRANSITO). Condición con datos
     propios, NO un valor de condicion_viaje ni un estado (DEC-013/DEC-038).
 - name: auditoria
-- name: alcances
-  description: >-
-    Snapshot del alcance de monitoreo por cliente para reconstruir
-    proyecciones (DEC-149 #15, patrón de ADR 26). Solo servicio interno.
 - name: adjuntos
   description: >-
     Adjuntos/evidencia del viaje (E6-T4). Metadatos en `bitacora`; bytes en el
@@ -103,10 +101,11 @@ paths:
       description: >-
         Solo los viajes del alcance del llamante (ver la descripción del spec,
         DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`,
-        todos; `monitorista`, `supervisor` y `coordinador`, los de los clientes
-        de sus unidades efectivas desde `APROBADO`. Un viaje fuera de alcance
-        no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). El
-        rol se deriva del token; el alcance se resuelve en servidor (DEC-053).
+        todos; `monitorista`, `supervisor` y `coordinador`, los de sus
+        clientes efectivos ("mis clientes", DEC-149 #18) desde `APROBADO`. Un
+        viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben
+        `403` (DEC-149 #16). El rol se deriva del token; el alcance se resuelve
+        en servidor (DEC-053).
       parameters:
       - name: estado
         in: query
@@ -417,33 +416,6 @@ paths:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
 
-  /api/v1/alcances-monitoreo:
-    get:
-      operationId: listarAlcancesMonitoreo
-      tags: [alcances]
-      summary: Snapshot de clientes por sujeto + cursor.
-      description: >-
-        Snapshot de los clientes que alcanza el monitoreo de cada sujeto más un
-        cursor consistente, para que `reportes` y `mensajeria` reconstruyan su
-        proyección de `alcance_monitoreo.cambiado` y hagan catch-up sin ventana
-        (DEC-149 #15, ADR 26). Cada item tiene la forma del payload de
-        `alcance_monitoreo.cambiado`. Solo trae sujetos con al menos un
-        cliente: un sujeto ausente no ve viajes por alcance de monitoreo.
-        Consumido por los servicios protegidos, no por el navegador.
-      parameters:
-      - name: cursor
-        in: query
-        required: false
-        description: Cursor de continuación; ausente para el snapshot inicial.
-        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
-      responses:
-        "200":
-          description: Página de alcances de monitoreo y cursor.
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/PaginaAlcancesMonitoreo"}
-        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
-
   /api/v1/unidades:
     get:
       operationId: listarUnidades
@@ -478,7 +450,8 @@ paths:
         del vehículo en el servidor. Crean `jefe_operativo` y `administrador`
         (DEC-142 #3). El vehículo y los custodios no pueden estar en otra unidad
         activa (DEC-142 #4). `cliente_id` es opcional: el cliente al que sirve
-        la unidad (DEC-149 #2 y #13).
+        la unidad, dato del roster que no define el alcance (DEC-149 #2, #13 y
+        #18).
         Responde 400 si el vehículo, algún custodio o el cliente no existe o
         está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad
         de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31).
@@ -533,10 +506,8 @@ paths:
       description: >-
         Cambia el vehículo, los custodios, el cliente al que sirve
         (`cliente_id`, DEC-149 #2) o el estado `activa` de la unidad.
-        Activar/desactivar es un cambio de `activa` por esta misma ruta. Al
-        cambiar `cliente_id` o `activa`, `operacion` recalcula y publica
-        `alcance_monitoreo.cambiado` para cada sujeto que tiene la unidad entre
-        sus unidades efectivas (DEC-149 #15). El
+        Activar/desactivar es un cambio de `activa` por esta misma ruta.
+        Ninguno de los dos cambia el alcance del monitoreo (DEC-149 #18). El
         `tipo` nunca se escribe: se deriva del vehículo. Modifican
         `jefe_operativo` y `administrador` (DEC-142 #3). La exclusividad
         (DEC-142 #4) se revisa sobre el resultado del cambio, también al
@@ -1355,8 +1326,9 @@ components:
           nullable: true
           description: >-
             Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`.
-            Referencia, no FK. null o ausente = no sirve a ningún cliente y no
-            da alcance de monitoreo a nadie (DEC-149 #13).
+            Referencia, no FK. Dato del roster para asignar la escolta y
+            reconocer el préstamo; no define el alcance del monitoreo (DEC-149
+            #18). null o ausente = sin cliente (DEC-149 #13).
 
     UnidadEntrada:
       type: object
@@ -1381,7 +1353,8 @@ components:
           nullable: true
           description: >-
             Opcional; mismo formato que `Id`. Cliente al que sirve la unidad
-            (DEC-149 #2). null o ausente = sin cliente (DEC-149 #13).
+            (DEC-149 #2), dato del roster que no define el alcance (DEC-149
+            #18). null o ausente = sin cliente (DEC-149 #13).
 
     UnidadModificacion:
       type: object
@@ -1405,38 +1378,8 @@ components:
           nullable: true
           description: >-
             Id de `catalogos` para fijar o cambiar el cliente al que sirve la
-            unidad; `null` para quitarlo (DEC-149 #2 y #13).
-
-    AlcanceMonitoreo:
-      type: object
-      additionalProperties: false
-      required: [sujeto_id, clientes_ids, cambiado_en]
-      description: >-
-        Clientes que alcanza el monitoreo de un sujeto: los `cliente_id` no
-        nulos de sus unidades efectivas activas (DEC-149 #4 y #17). Coincide en forma con el
-        payload del evento `alcance_monitoreo.cambiado` (contracts/events).
-      properties:
-        sujeto_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
-        clientes_ids:
-          type: array
-          description: Ids de cliente de `catalogos`, sin repetidos.
-          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
-        cambiado_en:
-          allOf: [$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"]
-          description: Momento del último cambio del conjunto.
-
-    PaginaAlcancesMonitoreo:
-      type: object
-      additionalProperties: false
-      required: [items, cursor_siguiente]
-      properties:
-        items:
-          type: array
-          items: {$ref: "#/components/schemas/AlcanceMonitoreo"}
-        cursor_siguiente:
-          type: string
-          nullable: true
-          description: Opcional; mismo formato que `Cursor`. null si no aplica.
+            unidad; `null` para quitarlo (DEC-149 #2 y #13). Dato del roster:
+            no cambia el alcance del monitoreo (DEC-149 #18).
 
     PaginaUnidades:
       type: object

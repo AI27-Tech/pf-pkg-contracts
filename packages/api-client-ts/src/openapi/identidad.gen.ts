@@ -99,8 +99,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Snapshot de unidades efectivas por sujeto + cursor.
-         * @description Snapshot de las unidades efectivas de cada sujeto más un cursor consistente, para que `operacion` reconstruya su proyección de `alcance.cambiado` y haga catch-up sin ventana (DEC-149 #15, ADR 26). Cada item tiene la forma del payload de `alcance.cambiado`. Solo trae sujetos con al menos una unidad efectiva: un sujeto ausente no tiene alcance de monitoreo. Consumido por los servicios protegidos, no por el navegador.
+         * Snapshot de clientes efectivos por sujeto + cursor.
+         * @description Snapshot de los clientes efectivos de cada sujeto más un cursor consistente, para que `operacion`, `reportes` y `mensajeria` reconstruyan su proyección de `alcance.cambiado` y hagan catch-up sin ventana (DEC-149 #20, ADR 26). Cada item tiene la forma del payload de `alcance.cambiado`. Solo trae sujetos con al menos un cliente efectivo: un sujeto ausente no ve viajes por alcance de monitoreo. Consumido por los servicios protegidos, no por el navegador.
          */
         get: operations["listarAlcances"];
         put?: never;
@@ -225,7 +225,7 @@ export interface paths {
         get?: never;
         /**
          * Asignar el rol inicial o reemplazar el rol activo de un sujeto.
-         * @description Única vía para fijar el rol. Si el sujeto no tiene rol activo, lo asigna (`rol.asignado`); si ya tiene uno, lo reemplaza en una sola transacción (`rol.revocado` + `rol.asignado`). No existe revocar un rol suelto (C2). Al cambiar de rol se retira, en la misma transacción y con su traza, el alcance del rol anterior: unidades, Monitoristas o Supervisores asignados, y su lugar bajo un superior (DEC-140 #3). El retiro aplica de inmediato; el rol nuevo, en el siguiente refresco (DEC-091). Restringida a `administrador` (403 si no lo es).
+         * @description Única vía para fijar el rol. Si el sujeto no tiene rol activo, lo asigna (`rol.asignado`); si ya tiene uno, lo reemplaza en una sola transacción (`rol.revocado` + `rol.asignado`). No existe revocar un rol suelto (C2). Al cambiar de rol se retira, en la misma transacción y con su traza, el alcance del rol anterior: clientes ("mis clientes", DEC-149 #18) y unidades (deprecadas) asignados, Monitoristas o Supervisores, y su lugar bajo un superior (DEC-140 #3). El retiro aplica de inmediato; el rol nuevo, en el siguiente refresco (DEC-091). Restringida a `administrador` (403 si no lo es).
          */
         put: operations["fijarRolSujeto"];
         post?: never;
@@ -270,7 +270,7 @@ export interface paths {
         };
         /**
          * Alcance de monitoreo de un sujeto (B-4).
-         * @description Devuelve las unidades asignadas al sujeto ("mis unidades", si es Monitorista), sus subordinados directos (Monitoristas de un Supervisor o Supervisores de un Coordinador) y sus unidades efectivas: la unión de las suyas y las de sus subordinados por la jerarquía (DEC-140 #2). Un rol sin alcance devuelve las tres listas vacías. Lee `administrador`. El `jefe_operativo` lee solo el alcance de un Monitorista (DEC-142 #2); el de un sujeto con otro rol le responde 403. Otro rol responde 403.
+         * @description Devuelve los clientes asignados al sujeto ("mis clientes", si es Monitorista; DEC-149 #18), sus subordinados directos (Monitoristas de un Supervisor o Supervisores de un Coordinador) y sus clientes efectivos: la unión de los suyos y los de sus subordinados por la jerarquía (DEC-140 #2). Los clientes efectivos son el alcance del monitoreo. Un rol sin alcance devuelve las listas vacías. Los campos de unidades están deprecados (DEC-149 #18). Lee `administrador`. El `jefe_operativo` lee solo el alcance de un Monitorista (DEC-142 #2); el de un sujeto con otro rol le responde 403. Otro rol responde 403.
          */
         get: operations["obtenerAlcanceSujeto"];
         put?: never;
@@ -293,10 +293,34 @@ export interface paths {
         };
         get?: never;
         /**
-         * Fijar las unidades de un Monitorista ("mis unidades").
-         * @description Reemplaza el conjunto completo de unidades del Monitorista por el que llega, así que repetir la misma petición no cambia nada (idempotente); quitar una unidad es enviarla fuera de la lista. Una unidad puede estar a la vez en la lista de varios Monitoristas (DEC-145 #1). `unidad_id` es id de `operacion`: `identidad` no lo valida contra el roster (sin FK entre módulos); la existencia la valida el `bff`. Escriben `administrador` y `jefe_operativo` (DEC-140 #1, DEC-142 #2); otro rol responde 403.
+         * Fijar las unidades de un Monitorista ("mis unidades"). Deprecada.
+         * @deprecated
+         * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes' (`fijarClientesSujeto`). Se elimina en una ola posterior. Ya no define el alcance ni publica `alcance.cambiado`. Reemplaza el conjunto completo de unidades del Monitorista por el que llega, así que repetir la misma petición no cambia nada (idempotente); quitar una unidad es enviarla fuera de la lista. Una unidad puede estar a la vez en la lista de varios Monitoristas (DEC-145 #1). `unidad_id` es id de `operacion`: `identidad` no lo valida contra el roster (sin FK entre módulos); la existencia la valida el `bff`. Escriben `administrador` y `jefe_operativo` (DEC-140 #1, DEC-142 #2); otro rol responde 403.
          */
         put: operations["fijarUnidadesSujeto"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sujetos/{id}/alcance/clientes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Fijar los clientes de un Monitorista ("mis clientes").
+         * @description Reemplaza el conjunto completo de clientes del Monitorista por el que llega, así que repetir la misma petición no cambia nada (idempotente); quitar un cliente es enviarlo fuera de la lista. Un cliente puede estar a la vez en la lista de varios Monitoristas (DEC-149 #18). Estos clientes son el alcance del Monitorista: ve todos los viajes de esos clientes que pasaron por `APROBADO`. `cliente_id` es id de `catalogos`: `identidad` no lo valida contra el catálogo (sin FK entre módulos); la existencia la valida el `bff`. Publica `alcance.cambiado` para el Monitorista, su Supervisor y su Coordinador si su conjunto efectivo cambia (DEC-149 #20). Escriben `administrador` y `jefe_operativo` (DEC-149 #18); otro rol responde 403.
+         */
+        put: operations["fijarClientesSujeto"];
         post?: never;
         delete?: never;
         options?: never;
@@ -478,20 +502,30 @@ export interface components {
             /** @description Cuántas sesiones vivas se revocaron. 0 si no tenía ninguna. */
             sesiones_revocadas: number;
         };
-        /** @description Alcance de monitoreo de un sujeto (DEC-140). El alcance no viaja en el token: se resuelve en servidor (DEC-053). */
+        /** @description Alcance de monitoreo de un sujeto (DEC-140, DEC-149 #18). El alcance son los clientes efectivos (`clientes_efectivos_ids`). No viaja en el token: se resuelve en servidor (DEC-053). */
         AlcanceSujeto: {
-            /** @description Unidades asignadas directamente ("mis unidades"). Solo un Monitorista tiene; vacía para otro rol. Ids de `operacion`. */
+            /** @description Clientes asignados directamente ("mis clientes", DEC-149 #18). Solo un Monitorista tiene; vacía para otro rol. Ids de `catalogos`. */
+            clientes_ids: components["schemas"]["Id"][];
+            /** @description Unión, sin repetidos, de `clientes_ids` y de los clientes de los subordinados por la jerarquía (DEC-140 #2). Para un Monitorista es igual a `clientes_ids`. Es el alcance del monitoreo y la misma lista que lleva `alcance.cambiado`. */
+            clientes_efectivos_ids: components["schemas"]["Id"][];
+            /**
+             * @deprecated
+             * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'. Se elimina en una ola posterior. Unidades asignadas directamente ("mis unidades"); ya no definen el alcance. Ids de `operacion`.
+             */
             unidades_ids: components["schemas"]["Id"][];
             /** @description Subordinados directos: Monitoristas de un Supervisor o Supervisores de un Coordinador. Vacía para otro rol. */
             subordinados_ids: components["schemas"]["Id"][];
-            /** @description Unión, sin repetidos, de `unidades_ids` y de las unidades de los subordinados por la jerarquía (DEC-140 #2). Para un Monitorista es igual a `unidades_ids`. */
+            /**
+             * @deprecated
+             * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'. Se elimina en una ola posterior. Unión de `unidades_ids` y de las unidades de los subordinados; ya no define el alcance.
+             */
             unidades_efectivas_ids: components["schemas"]["Id"][];
         };
-        /** @description Unidades efectivas de un sujeto. Coincide en forma con el payload del evento `alcance.cambiado` (contracts/events, DEC-149 #15). */
+        /** @description Clientes efectivos de un sujeto. Coincide en forma con el payload del evento `alcance.cambiado` (contracts/events, DEC-149 #20). */
         AlcanceEfectivo: {
             sujeto_id: components["schemas"]["Id"];
-            /** @description Igual que `AlcanceSujeto.unidades_efectivas_ids`: unión, sin repetidos, de las unidades del sujeto y las de sus subordinados. Ids de `operacion`. */
-            unidades_efectivas_ids: components["schemas"]["Id"][];
+            /** @description Igual que `AlcanceSujeto.clientes_efectivos_ids`: unión, sin repetidos, de los clientes del sujeto y los de sus subordinados. Ids de `catalogos`. */
+            clientes_efectivos_ids: components["schemas"]["Id"][];
             /** @description Momento del último cambio del conjunto. */
             cambiado_en: components["schemas"]["MarcaTiempo"];
         };
@@ -500,10 +534,18 @@ export interface components {
             /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
             cursor_siguiente: string | null;
         };
-        /** @description Conjunto completo de unidades del Monitorista; reemplaza al anterior. */
+        /**
+         * @deprecated
+         * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes' (`ClientesSujetoEntrada`). Se elimina en una ola posterior. Conjunto completo de unidades del Monitorista; reemplaza al anterior.
+         */
         UnidadesSujetoEntrada: {
             /** @description Ids de unidades de `operacion`. Vacía para quitarle todas. */
             unidades_ids: components["schemas"]["Id"][];
+        };
+        /** @description Conjunto completo de clientes del Monitorista ("mis clientes"); reemplaza al anterior. */
+        ClientesSujetoEntrada: {
+            /** @description Ids de cliente de `catalogos`. Vacía para quitarle todos. */
+            clientes_ids: components["schemas"]["Id"][];
         };
         /** @description Conjunto completo de subordinados directos; reemplaza al anterior. */
         SubordinadosSujetoEntrada: {
@@ -1109,6 +1151,44 @@ export interface operations {
         };
         responses: {
             /** @description Unidades fijadas. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina `rol_sin_alcance` si el sujeto no tiene rol activo `monitorista`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    fijarClientesSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientesSujetoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Clientes fijados. */
             204: {
                 headers: {
                     [name: string]: unknown;

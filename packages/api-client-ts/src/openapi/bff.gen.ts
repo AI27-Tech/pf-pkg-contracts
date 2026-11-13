@@ -57,7 +57,7 @@ export interface paths {
         };
         /**
          * Listar viajes con filtros, por alcance.
-         * @description Reenvía a `operacion.listarViajes`, que filtra por el alcance del llamante (DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los viajes de los clientes de sus unidades efectivas desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). Para la audiencia Interno el `bff` agrega a cada fila `cliente` y `unidades`; para el Cliente los omite (DEC-149 #14).
+         * @description Reenvía a `operacion.listarViajes`, que filtra por el alcance del llamante (DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los viajes de sus clientes efectivos ("mis clientes") desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). Para la audiencia Interno el `bff` agrega a cada fila `cliente` y `unidades`; para el Cliente los omite (DEC-149 #14).
          */
         get: operations["listarViajes"];
         put?: never;
@@ -868,7 +868,7 @@ export interface paths {
         put?: never;
         /**
          * Crear una unidad del roster (audiencia interna).
-         * @description Solo audiencia Interno. Reenvía a `operacion.crearUnidad`. Crean `jefe_operativo` y `administrador` (DEC-142 #3). El `tipo` no se envía: se deriva del vehículo. El vehículo y los custodios no pueden estar en otra unidad activa (DEC-142 #4). `cliente_id` es opcional: el cliente al que sirve la unidad (DEC-149 #2 y #13). Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
+         * @description Solo audiencia Interno. Reenvía a `operacion.crearUnidad`. Crean `jefe_operativo` y `administrador` (DEC-142 #3). El `tipo` no se envía: se deriva del vehículo. El vehículo y los custodios no pueden estar en otra unidad activa (DEC-142 #4). `cliente_id` es opcional: el cliente al que sirve la unidad, dato del roster que no define el alcance (DEC-149 #2, #13 y #18). Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
          */
         post: operations["crearUnidad"];
         delete?: never;
@@ -1140,7 +1140,7 @@ export interface paths {
         };
         /**
          * Alcance de monitoreo de un usuario (audiencia interna, B-4).
-         * @description Solo audiencia Interno. Reenvía a `identidad.obtenerAlcanceSujeto`: unidades propias, subordinados directos y unidades efectivas (la unión por jerarquía, DEC-140 #2). Lee `administrador`. El `jefe_operativo` lee solo el alcance de un Monitorista; el de un usuario con otro rol le responde 403. Otro rol responde 403.
+         * @description Solo audiencia Interno. Reenvía a `identidad.obtenerAlcanceSujeto`: clientes propios ("mis clientes"), subordinados directos y clientes efectivos (la unión por jerarquía, DEC-140 #2, DEC-149 #18). Los campos de unidades están deprecados. Lee `administrador`. El `jefe_operativo` lee solo el alcance de un Monitorista; el de un usuario con otro rol le responde 403. Otro rol responde 403.
          */
         get: operations["obtenerAlcanceSujeto"];
         put?: never;
@@ -1163,10 +1163,34 @@ export interface paths {
         };
         get?: never;
         /**
-         * Fijar "mis unidades" de un Monitorista (audiencia interna).
-         * @description Solo audiencia Interno. Valida contra `operacion` que cada unidad exista en el roster y reenvía a `identidad.fijarUnidadesSujeto`. Reemplaza el conjunto completo (idempotente); una unidad puede estar en la lista de varios Monitoristas (DEC-145 #1). Escriben `administrador` y `jefe_operativo` (DEC-140 #1, DEC-142 #2); otro rol responde 403. Responde 400 si alguna unidad no existe en el roster.
+         * Fijar "mis unidades" de un Monitorista (audiencia interna). Deprecada.
+         * @deprecated
+         * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes' (`fijarClientesSujeto`). Se elimina en una ola posterior. Ya no define el alcance. Solo audiencia Interno. Valida contra `operacion` que cada unidad exista en el roster y reenvía a `identidad.fijarUnidadesSujeto`. Reemplaza el conjunto completo (idempotente); una unidad puede estar en la lista de varios Monitoristas (DEC-145 #1). Escriben `administrador` y `jefe_operativo` (DEC-140 #1, DEC-142 #2); otro rol responde 403. Responde 400 si alguna unidad no existe en el roster.
          */
         put: operations["fijarUnidadesSujeto"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sujetos/{id}/alcance/clientes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Fijar "mis clientes" de un Monitorista (audiencia interna).
+         * @description Solo audiencia Interno. Valida contra `catalogos` que cada cliente exista y reenvía a `identidad.fijarClientesSujeto`. Reemplaza el conjunto completo (idempotente); un cliente puede estar en la lista de varios Monitoristas (DEC-149 #18). El Monitorista ve todos los viajes de esos clientes desde `APROBADO`. Escriben `administrador` y `jefe_operativo` (DEC-149 #18); otro rol responde 403. Responde 400 si algún cliente no existe en `catalogos`.
+         */
+        put: operations["fijarClientesSujeto"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1836,7 +1860,7 @@ export interface components {
             readonly custodios?: components["schemas"]["CustodioUnidad"][];
             /**
              * Format: uuid
-             * @description Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Espejo de `operacion`. null o ausente = no sirve a ningún cliente y no da alcance de monitoreo a nadie (DEC-149 #13).
+             * @description Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Espejo de `operacion`. Dato del roster para asignar la escolta y reconocer el préstamo; no define el alcance del monitoreo (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
              */
             cliente_id?: string | null;
         };
@@ -1869,7 +1893,7 @@ export interface components {
             activa?: boolean;
             /**
              * Format: uuid
-             * @description Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2). null o ausente = sin cliente (DEC-149 #13).
+             * @description Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2), dato del roster que no define el alcance (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
              */
             cliente_id?: string | null;
         };
@@ -1880,7 +1904,7 @@ export interface components {
             activa?: boolean;
             /**
              * Format: uuid
-             * @description Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13).
+             * @description Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13). Dato del roster: no cambia el alcance del monitoreo (DEC-149 #18).
              */
             cliente_id?: string | null;
         };
@@ -2035,19 +2059,37 @@ export interface components {
             /** @description Cuántas sesiones vivas se revocaron. 0 si no tenía ninguna. */
             sesiones_revocadas: number;
         };
-        /** @description Alcance de monitoreo (DEC-140). Espejo de `AlcanceSujeto` de `identidad`. */
+        /** @description Alcance de monitoreo (DEC-140, DEC-149 #18): los clientes efectivos. Espejo de `AlcanceSujeto` de `identidad`. */
         AlcanceSujeto: {
-            /** @description Unidades asignadas directamente ("mis unidades"); solo un Monitorista tiene. */
+            /** @description Clientes asignados directamente ("mis clientes"); solo un Monitorista tiene. Ids de `catalogos`. */
+            clientes_ids: components["schemas"]["Id"][];
+            /** @description Unión, sin repetidos, de los clientes propios y los de los subordinados (DEC-140 #2). Es el alcance del monitoreo. */
+            clientes_efectivos_ids: components["schemas"]["Id"][];
+            /**
+             * @deprecated
+             * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'. Se elimina en una ola posterior. Unidades asignadas directamente ("mis unidades"); ya no definen el alcance.
+             */
             unidades_ids: components["schemas"]["Id"][];
             /** @description Subordinados directos (Monitoristas de un Supervisor, Supervisores de un Coordinador). */
             subordinados_ids: components["schemas"]["Id"][];
-            /** @description Unión, sin repetidos, de las unidades propias y las de los subordinados (DEC-140 */
+            /**
+             * @deprecated
+             * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'. Se elimina en una ola posterior. Unión de las unidades propias y las de los subordinados; ya no define el alcance.
+             */
             unidades_efectivas_ids: components["schemas"]["Id"][];
         };
-        /** @description Conjunto completo de unidades del Monitorista; reemplaza al anterior. Espejo de `UnidadesSujetoEntrada` de `identidad`. */
+        /**
+         * @deprecated
+         * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes' (`ClientesSujetoEntrada`). Se elimina en una ola posterior. Conjunto completo de unidades del Monitorista; reemplaza al anterior. Espejo de `UnidadesSujetoEntrada` de `identidad`.
+         */
         UnidadesSujetoEntrada: {
             /** @description Ids de unidades del roster. Vacía para quitarle todas. */
             unidades_ids: components["schemas"]["Id"][];
+        };
+        /** @description Conjunto completo de clientes del Monitorista ("mis clientes"); reemplaza al anterior. Espejo de `ClientesSujetoEntrada` de `identidad`. */
+        ClientesSujetoEntrada: {
+            /** @description Ids de cliente de `catalogos`. Vacía para quitarle todos. */
+            clientes_ids: components["schemas"]["Id"][];
         };
         /** @description Conjunto completo de subordinados directos; reemplaza al anterior. Espejo de `SubordinadosSujetoEntrada` de `identidad`. */
         SubordinadosSujetoEntrada: {
@@ -4703,6 +4745,44 @@ export interface operations {
         };
         responses: {
             /** @description Unidades fijadas. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina `rol_sin_alcance` si el usuario no tiene rol activo `monitorista`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    fijarClientesSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientesSujetoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Clientes fijados. */
             204: {
                 headers: {
                     [name: string]: unknown;

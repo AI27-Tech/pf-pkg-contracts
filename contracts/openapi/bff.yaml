@@ -32,8 +32,9 @@ info:
 
 
     Alcance de monitoreo por cliente (DEC-149). `monitorista`, `supervisor` y
-    `coordinador` ven los viajes de los clientes de sus unidades efectivas,
-    solo desde `APROBADO`; `jefe_operativo` y `administrador`, todos; el
+    `coordinador` ven los viajes de sus clientes efectivos (la lista "mis
+    clientes" y, por la jerarquía, la de sus subordinados; DEC-149 #18), solo
+    desde `APROBADO`; `jefe_operativo` y `administrador`, todos; el
     Cliente, los de su tenant. Lo aplica `operacion` (y `reportes` y
     `mensajeria` en sus superficies); el `bff` reenvía y preserva el código.
     Un viaje fuera de alcance no aparece en las listas y toda operación sobre
@@ -96,9 +97,10 @@ tags:
 - name: administracion
   description: >-
     Usuarios, alcance de monitoreo y organizaciones para `/administracion`
-    (E8-T19) y la tarjeta "mis unidades" de `/roster` (DEC-142 #2). Solo
+    (E8-T19) y la tarjeta "mis clientes" de `/roster` (DEC-149 #18). Solo
     audiencia Interno. Escribe solo `administrador`, salvo
-    `fijarUnidadesSujeto`, que también escribe `jefe_operativo`. El
+    `fijarClientesSujeto` (y el deprecado `fijarUnidadesSujeto`), que también
+    escribe `jefe_operativo`. El
     `jefe_operativo` lee `listarSujetos` solo con `rol=monitorista` y
     `obtenerAlcanceSujeto` solo de Monitoristas. Otro rol responde 403.
 
@@ -186,7 +188,7 @@ paths:
         Reenvía a `operacion.listarViajes`, que filtra por el alcance del
         llamante (DEC-149): Cliente, su tenant; `jefe_operativo` y
         `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los
-        viajes de los clientes de sus unidades efectivas desde `APROBADO`. Un
+        viajes de sus clientes efectivos ("mis clientes") desde `APROBADO`. Un
         viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben
         `403` (DEC-149 #16). Para la audiencia Interno el `bff` agrega a cada
         fila `cliente` y `unidades`; para el Cliente los omite (DEC-149 #14).
@@ -1106,8 +1108,8 @@ paths:
   # Solo audiencia Interno; el `bff` propaga el Bearer y `mensajeria` autoriza
   # por rol (misma regla que el panel de Reacción). El `bff` recorta el caso a
   # la fila mínima `EmergenciaViaje` y, al activar, rechaza el viaje terminal
-  # antes de reenviar (DEC-135 #5). Alcance por cliente (DEC-149 #6): el
-  # monitoreo solo opera sobre viajes de los clientes de sus unidades efectivas,
+  # antes de reenviar (DEC-135 #5). Alcance por cliente (DEC-149 #6, #18): el
+  # monitoreo solo opera sobre viajes de sus clientes ("mis clientes"),
   # desde `APROBADO`; `administrador`, todos. Fuera de alcance, `404` (lo aplica
   # `mensajeria`, y `operacion` en la lectura previa del viaje). Para cerrar se
   # usa `cerrarEmergenciaPorId` con el id que da esta lista.
@@ -1678,7 +1680,8 @@ paths:
         `jefe_operativo` y `administrador` (DEC-142 #3). El `tipo` no se envía:
         se deriva del vehículo. El vehículo y los custodios no pueden estar en
         otra unidad activa (DEC-142 #4). `cliente_id` es opcional: el cliente
-        al que sirve la unidad (DEC-149 #2 y #13).
+        al que sirve la unidad, dato del roster que no define el alcance
+        (DEC-149 #2, #13 y #18).
         Responde 400 si el vehículo, algún custodio o el cliente no existe o
         está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad
         de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31).
@@ -1978,8 +1981,8 @@ paths:
   # con la organización legible y `es_propio`. Las organizaciones son
   # operaciones propias del `bff`: escriben en `catalogos` (expediente) y en
   # `identidad` (tenant) con el mismo id (DEC-144 #2). Escribe solo
-  # `administrador`, salvo `fijarUnidadesSujeto`, que también escribe
-  # `jefe_operativo` (DEC-140 #1, DEC-142 #2). No se proyecta
+  # `administrador`, salvo `fijarClientesSujeto` (y el deprecado
+  # `fijarUnidadesSujeto`), que también escribe `jefe_operativo` (DEC-149 #18). No se proyecta
   # `listarHistorialSujeto` (nadie lo pidió; B-6 no tiene vista en V1).
   # ===========================================================================
   /api/v1/sujetos:
@@ -2236,8 +2239,9 @@ paths:
       summary: Alcance de monitoreo de un usuario (audiencia interna, B-4).
       description: >-
         Solo audiencia Interno. Reenvía a `identidad.obtenerAlcanceSujeto`:
-        unidades propias, subordinados directos y unidades efectivas (la unión
-        por jerarquía, DEC-140 #2). Lee `administrador`. El `jefe_operativo` lee
+        clientes propios ("mis clientes"), subordinados directos y clientes
+        efectivos (la unión por jerarquía, DEC-140 #2, DEC-149 #18). Los campos
+        de unidades están deprecados. Lee `administrador`. El `jefe_operativo` lee
         solo el alcance de un Monitorista; el de un usuario con otro rol le
         responde 403. Otro rol responde 403.
       responses:
@@ -2260,9 +2264,12 @@ paths:
     put:
       operationId: fijarUnidadesSujeto
       tags: [administracion]
-      summary: Fijar "mis unidades" de un Monitorista (audiencia interna).
+      deprecated: true
+      summary: Fijar "mis unidades" de un Monitorista (audiencia interna). Deprecada.
       description: >-
-        Solo audiencia Interno. Valida contra `operacion` que cada unidad
+        Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'
+        (`fijarClientesSujeto`). Se elimina en una ola posterior. Ya no define
+        el alcance. Solo audiencia Interno. Valida contra `operacion` que cada unidad
         exista en el roster y reenvía a `identidad.fijarUnidadesSujeto`.
         Reemplaza el conjunto completo (idempotente); una unidad puede estar en
         la lista de varios Monitoristas (DEC-145 #1). Escriben `administrador` y
@@ -2275,6 +2282,44 @@ paths:
             schema: {$ref: "#/components/schemas/UnidadesSujetoEntrada"}
       responses:
         "204": {description: Unidades fijadas.}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            `codigo` de máquina `rol_sin_alcance` si el usuario no tiene rol
+            activo `monitorista`.
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/sujetos/{id}/alcance/clientes:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: sujeto_id propio de AI27.
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    put:
+      operationId: fijarClientesSujeto
+      tags: [administracion]
+      summary: Fijar "mis clientes" de un Monitorista (audiencia interna).
+      description: >-
+        Solo audiencia Interno. Valida contra `catalogos` que cada cliente
+        exista y reenvía a `identidad.fijarClientesSujeto`. Reemplaza el
+        conjunto completo (idempotente); un cliente puede estar en la lista de
+        varios Monitoristas (DEC-149 #18). El Monitorista ve todos los viajes
+        de esos clientes desde `APROBADO`. Escriben `administrador` y
+        `jefe_operativo` (DEC-149 #18); otro rol responde 403. Responde 400 si
+        algún cliente no existe en `catalogos`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ClientesSujetoEntrada"}
+      responses:
+        "204": {description: Clientes fijados.}
         "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
@@ -2698,8 +2743,8 @@ paths:
   # #9, DEC-060): 200 para `monitorista`, `supervisor`, `coordinador` y
   # `administrador`; 403 para `jefe_operativo`, `ejecutivo`, `reaccion` y
   # `cliente`. Alcance por cliente (DEC-149): monitorista, supervisor y
-  # coordinador, los viajes de los clientes de sus unidades efectivas desde
-  # `APROBADO` (proyección de `alcance_monitoreo.cambiado` en `reportes`);
+  # coordinador, los viajes de sus clientes efectivos ("mis clientes") desde
+  # `APROBADO` (proyección de `alcance.cambiado` de `identidad` en `reportes`);
   # administrador, global. Un viaje fuera de alcance no aparece en las filas ni
   # en los conteos. Se conservan `proyeccion_al` y `stale`: un tablero atrasado se muestra como
   # atrasado (DEC-033). `reportes` no acota por tenant a la audiencia Interno
@@ -3610,8 +3655,9 @@ components:
           nullable: true
           description: >-
             Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`.
-            Espejo de `operacion`. null o ausente = no sirve a ningún cliente y
-            no da alcance de monitoreo a nadie (DEC-149 #13).
+            Espejo de `operacion`. Dato del roster para asignar la escolta y
+            reconocer el préstamo; no define el alcance del monitoreo (DEC-149
+            #18). null o ausente = sin cliente (DEC-149 #13).
 
     VehiculoUnidad:
       type: object
@@ -3683,7 +3729,8 @@ components:
           nullable: true
           description: >-
             Opcional; mismo formato que `Id`. Cliente al que sirve la unidad
-            (DEC-149 #2). null o ausente = sin cliente (DEC-149 #13).
+            (DEC-149 #2), dato del roster que no define el alcance (DEC-149
+            #18). null o ausente = sin cliente (DEC-149 #13).
 
     UnidadModificacion:
       type: object
@@ -3708,7 +3755,8 @@ components:
           nullable: true
           description: >-
             Id de `catalogos` para fijar o cambiar el cliente al que sirve la
-            unidad; `null` para quitarlo (DEC-149 #2 y #13).
+            unidad; `null` para quitarlo (DEC-149 #2 y #13). Dato del roster:
+            no cambia el alcance del monitoreo (DEC-149 #18).
 
     # --- Vehículos y custodios de `/catalogos` (adelanto de E8-T16 / DEC-142
     #     #6, tracer.39). Espejo de las formas de `catalogos` (Vehiculo,
@@ -4022,12 +4070,28 @@ components:
     AlcanceSujeto:
       type: object
       additionalProperties: false
-      required: [unidades_ids, subordinados_ids, unidades_efectivas_ids]
-      description: Alcance de monitoreo (DEC-140). Espejo de `AlcanceSujeto` de `identidad`.
+      required: [unidades_ids, subordinados_ids, unidades_efectivas_ids, clientes_ids, clientes_efectivos_ids]
+      description: >-
+        Alcance de monitoreo (DEC-140, DEC-149 #18): los clientes efectivos.
+        Espejo de `AlcanceSujeto` de `identidad`.
       properties:
+        clientes_ids:
+          type: array
+          description: Clientes asignados directamente ("mis clientes"); solo un Monitorista tiene. Ids de `catalogos`.
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        clientes_efectivos_ids:
+          type: array
+          description: >-
+            Unión, sin repetidos, de los clientes propios y los de los
+            subordinados (DEC-140 #2). Es el alcance del monitoreo.
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
         unidades_ids:
           type: array
-          description: Unidades asignadas directamente ("mis unidades"); solo un Monitorista tiene.
+          deprecated: true
+          description: >-
+            Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'.
+            Se elimina en una ola posterior. Unidades asignadas directamente
+            ("mis unidades"); ya no definen el alcance.
           items: {$ref: "_comunes.yaml#/components/schemas/Id"}
         subordinados_ids:
           type: array
@@ -4035,20 +4099,41 @@ components:
           items: {$ref: "_comunes.yaml#/components/schemas/Id"}
         unidades_efectivas_ids:
           type: array
-          description: Unión, sin repetidos, de las unidades propias y las de los subordinados (DEC-140 #2).
+          deprecated: true
+          description: >-
+            Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'.
+            Se elimina en una ola posterior. Unión de las unidades propias y
+            las de los subordinados; ya no define el alcance.
           items: {$ref: "_comunes.yaml#/components/schemas/Id"}
 
     UnidadesSujetoEntrada:
       type: object
       additionalProperties: false
+      deprecated: true
       required: [unidades_ids]
       description: >-
-        Conjunto completo de unidades del Monitorista; reemplaza al anterior.
-        Espejo de `UnidadesSujetoEntrada` de `identidad`.
+        Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'
+        (`ClientesSujetoEntrada`). Se elimina en una ola posterior. Conjunto
+        completo de unidades del Monitorista; reemplaza al anterior. Espejo de
+        `UnidadesSujetoEntrada` de `identidad`.
       properties:
         unidades_ids:
           type: array
           description: Ids de unidades del roster. Vacía para quitarle todas.
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+
+    ClientesSujetoEntrada:
+      type: object
+      additionalProperties: false
+      required: [clientes_ids]
+      description: >-
+        Conjunto completo de clientes del Monitorista ("mis clientes");
+        reemplaza al anterior. Espejo de `ClientesSujetoEntrada` de
+        `identidad`.
+      properties:
+        clientes_ids:
+          type: array
+          description: Ids de cliente de `catalogos`. Vacía para quitarle todos.
           items: {$ref: "_comunes.yaml#/components/schemas/Id"}
 
     SubordinadosSujetoEntrada:

@@ -55,11 +55,12 @@ info:
 
     Alcance de monitoreo en las emergencias del viaje (DEC-149 #6): en
     `/api/v1/viajes/{id}/emergencias...` y en `cerrarEmergenciaPorId`,
-    `monitorista`, `supervisor` y `coordinador` solo operan sobre viajes de los
-    clientes de sus unidades efectivas, desde `APROBADO`; `administrador`,
-    todos. Los clientes de cada sujeto vienen de la proyección local de
-    `alcance_monitoreo.cambiado`, reconstruible con
-    `operacion.listarAlcancesMonitoreo` (DEC-149 #15, ADR 26). Un viaje fuera
+    `monitorista`, `supervisor` y `coordinador` solo operan sobre viajes de sus
+    clientes efectivos ("mis clientes" y, por la jerarquía, los de sus
+    subordinados; DEC-149 #18), desde `APROBADO`; `administrador`, todos. Los
+    clientes de cada sujeto vienen de la proyección local de
+    `alcance.cambiado` de `identidad`, reconstruible con
+    `identidad.listarAlcances` (DEC-149 #20, ADR 26). Un viaje fuera
     de alcance responde `404`; `403` es para el rol sin la acción. La
     conversación sigue con su alcance por cliente del `ejecutivo` (DEC-046,
     DEC-103) y la bandeja de Reacción no cambia.

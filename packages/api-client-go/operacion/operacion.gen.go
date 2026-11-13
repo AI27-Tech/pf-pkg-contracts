@@ -136,18 +136,6 @@ type Adjunto struct {
 // AdjuntoEstadoEscaneo Estado del escaneo antivirus del objeto. `pendiente` tras crear la intención; `limpio`/`infectado` cuando el escaneo concluye. Un adjunto no `limpio` no autoriza descarga.
 type AdjuntoEstadoEscaneo string
 
-// AlcanceMonitoreo Clientes que alcanza el monitoreo de un sujeto: los `cliente_id` no nulos de sus unidades efectivas activas (DEC-149 #4 y #17). Coincide en forma con el payload del evento `alcance_monitoreo.cambiado` (contracts/events).
-type AlcanceMonitoreo struct {
-	// CambiadoEn Momento del último cambio del conjunto.
-	CambiadoEn MarcaTiempo `json:"cambiado_en"`
-
-	// ClientesIds Ids de cliente de `catalogos`, sin repetidos.
-	ClientesIds []Id `json:"clientes_ids"`
-
-	// SujetoId Identificador único (UUID). Nunca un correlativo expuesto.
-	SujetoId Id `json:"sujeto_id"`
-}
-
 // AptitudRecurso defines model for AptitudRecurso.
 type AptitudRecurso struct {
 	// Estado Afirmación informativa (DEC-055). `desconocido` lo calcula `operacion`, no `catalogos`. Nunca bloquea la asignación en V1.
@@ -456,13 +444,6 @@ type PaginaAdjuntos struct {
 	Items []Adjunto `json:"items"`
 }
 
-// PaginaAlcancesMonitoreo defines model for PaginaAlcancesMonitoreo.
-type PaginaAlcancesMonitoreo struct {
-	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
-	CursorSiguiente *string            `json:"cursor_siguiente"`
-	Items           []AlcanceMonitoreo `json:"items"`
-}
-
 // PaginaAuditoria defines model for PaginaAuditoria.
 type PaginaAuditoria struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
@@ -559,7 +540,7 @@ type Unidad struct {
 	// Activa Si la unidad está activa (disponible para asignarse).
 	Activa bool `json:"activa"`
 
-	// ClienteId Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Referencia, no FK. null o ausente = no sirve a ningún cliente y no da alcance de monitoreo a nadie (DEC-149 #13).
+	// ClienteId Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Referencia, no FK. Dato del roster para asignar la escolta y reconocer el préstamo; no define el alcance del monitoreo (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
 	ClienteId *openapi_types.UUID `json:"cliente_id"`
 
 	// CustodiosIds Custodios de la unidad, por identificador de `catalogos`. Un coche lleva uno o dos; una moto, uno (ADR 31).
@@ -592,7 +573,7 @@ type UnidadEntrada struct {
 	// Activa Opcional al crear. Si se omite, el servidor fija el valor por defecto.
 	Activa *bool `json:"activa,omitempty"`
 
-	// ClienteId Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2). null o ausente = sin cliente (DEC-149 #13).
+	// ClienteId Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2), dato del roster que no define el alcance (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
 	ClienteId    *openapi_types.UUID `json:"cliente_id"`
 	CustodiosIds []Id                `json:"custodios_ids"`
 
@@ -604,7 +585,7 @@ type UnidadEntrada struct {
 type UnidadModificacion struct {
 	Activa *bool `json:"activa,omitempty"`
 
-	// ClienteId Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13).
+	// ClienteId Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13). Dato del roster: no cambia el alcance del monitoreo (DEC-149 #18).
 	ClienteId    *openapi_types.UUID `json:"cliente_id"`
 	CustodiosIds *[]Id               `json:"custodios_ids,omitempty"`
 
@@ -662,12 +643,6 @@ type Prohibido = Error
 
 // SolicitudInvalida defines model for SolicitudInvalida.
 type SolicitudInvalida = Error
-
-// ListarAlcancesMonitoreoParams defines parameters for ListarAlcancesMonitoreo.
-type ListarAlcancesMonitoreoParams struct {
-	// Cursor Cursor de continuación; ausente para el snapshot inicial.
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-}
 
 // ListarUnidadesParams defines parameters for ListarUnidades.
 type ListarUnidadesParams struct {
@@ -819,9 +794,6 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
-	// ListarAlcancesMonitoreo request
-	ListarAlcancesMonitoreo(ctx context.Context, params *ListarAlcancesMonitoreoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// ListarUnidades request
 	ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -935,18 +907,6 @@ type ClientInterface interface {
 	TransicionarViajeWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	TransicionarViaje(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-}
-
-func (c *Client) ListarAlcancesMonitoreo(ctx context.Context, params *ListarAlcancesMonitoreoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListarAlcancesMonitoreoRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
 }
 
 func (c *Client) ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1463,55 +1423,6 @@ func (c *Client) TransicionarViaje(ctx context.Context, id Id, body Transicionar
 		return nil, err
 	}
 	return c.Client.Do(req)
-}
-
-// NewListarAlcancesMonitoreoRequest generates requests for ListarAlcancesMonitoreo
-func NewListarAlcancesMonitoreoRequest(server string, params *ListarAlcancesMonitoreoParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/alcances-monitoreo")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.Cursor != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
 }
 
 // NewListarUnidadesRequest generates requests for ListarUnidades
@@ -2845,9 +2756,6 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
-	// ListarAlcancesMonitoreoWithResponse request
-	ListarAlcancesMonitoreoWithResponse(ctx context.Context, params *ListarAlcancesMonitoreoParams, reqEditors ...RequestEditorFn) (*ListarAlcancesMonitoreoResponse, error)
-
 	// ListarUnidadesWithResponse request
 	ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error)
 
@@ -2961,29 +2869,6 @@ type ClientWithResponsesInterface interface {
 	TransicionarViajeWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
 
 	TransicionarViajeWithResponse(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
-}
-
-type ListarAlcancesMonitoreoResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *PaginaAlcancesMonitoreo
-	JSON401      *NoAutorizado
-}
-
-// Status returns HTTPResponse.Status
-func (r ListarAlcancesMonitoreoResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListarAlcancesMonitoreoResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
 }
 
 type ListarUnidadesResponse struct {
@@ -3706,15 +3591,6 @@ func (r TransicionarViajeResponse) StatusCode() int {
 	return 0
 }
 
-// ListarAlcancesMonitoreoWithResponse request returning *ListarAlcancesMonitoreoResponse
-func (c *ClientWithResponses) ListarAlcancesMonitoreoWithResponse(ctx context.Context, params *ListarAlcancesMonitoreoParams, reqEditors ...RequestEditorFn) (*ListarAlcancesMonitoreoResponse, error) {
-	rsp, err := c.ListarAlcancesMonitoreo(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListarAlcancesMonitoreoResponse(rsp)
-}
-
 // ListarUnidadesWithResponse request returning *ListarUnidadesResponse
 func (c *ClientWithResponses) ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error) {
 	rsp, err := c.ListarUnidades(ctx, params, reqEditors...)
@@ -4085,39 +3961,6 @@ func (c *ClientWithResponses) TransicionarViajeWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseTransicionarViajeResponse(rsp)
-}
-
-// ParseListarAlcancesMonitoreoResponse parses an HTTP response from a ListarAlcancesMonitoreoWithResponse call
-func ParseListarAlcancesMonitoreoResponse(rsp *http.Response) (*ListarAlcancesMonitoreoResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListarAlcancesMonitoreoResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest PaginaAlcancesMonitoreo
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest NoAutorizado
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
 }
 
 // ParseListarUnidadesResponse parses an HTTP response from a ListarUnidadesWithResponse call

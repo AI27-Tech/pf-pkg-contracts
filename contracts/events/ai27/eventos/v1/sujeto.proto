@@ -5,8 +5,8 @@
 // Su consumidor principal es `mensajeria`, que recalcula la membresía efectiva
 // de pool y publica `membresia.cambiada` si cambia (mensajeria.md (g)).
 //
-// Desde `tracer.41` también viaja aquí `alcance.cambiado`: las unidades
-// efectivas de monitoreo del sujeto (DEC-053 #3, DEC-149 #15).
+// Desde `tracer.41` también viaja aquí `alcance.cambiado`: los clientes
+// efectivos de monitoreo del sujeto (DEC-053 #3, DEC-149 #18 y #20).
 syntax = "proto3";
 
 package ai27.eventos.v1;
@@ -58,23 +58,26 @@ message RolRevocado {
   google.protobuf.Timestamp revocado_en = 4;
 }
 
-// alcance.cambiado — al comprometer un cambio en las unidades efectivas de
-// monitoreo de un sujeto (`tracer.41`, DEC-149 #15). Lo publica `identidad`, en
-// la misma transacción que el cambio. Se emite para CADA sujeto cuyo conjunto
-// efectivo cambie: el Monitorista al fijar "mis unidades", y su Supervisor y su
-// Coordinador cuando cambian las unidades de un subordinado o la jerarquía
+// alcance.cambiado — al comprometer un cambio en los clientes efectivos de
+// monitoreo de un sujeto (`tracer.41`, DEC-149 #18 y #20). Lo publica
+// `identidad`, dueño de "mis clientes" y de la jerarquía, en la misma
+// transacción que el cambio. Se emite para CADA sujeto cuyo conjunto efectivo
+// cambie: el Monitorista al fijar "mis clientes", y su Supervisor y su
+// Coordinador cuando cambian los clientes de un subordinado o la jerarquía
 // (DEC-140 #2). Al cambiar de rol y retirarse el alcance (DEC-140 #3) se emite
 // con el conjunto vacío.
 //
 // SNAPSHOT, no delta: lleva el conjunto completo, así que aplicarlo dos veces
-// deja el mismo estado (idempotente). Lo proyecta `operacion`, que lo cruza con
-// el cliente de cada unidad y publica `alcance_monitoreo.cambiado`. La
-// proyección se reconstruye con `identidad.listarAlcances` (patrón ADR 26).
+// deja el mismo estado (idempotente). Lo proyectan `operacion`, `reportes` y
+// `mensajeria` para filtrar los viajes por su `cliente_id`, sin cruce con
+// unidades. La proyección se reconstruye con `identidad.listarAlcances`
+// (patrón ADR 26).
 message AlcanceCambiado {
   string sujeto_id = 1;
-  // Unidades efectivas del sujeto, sin repetidos: las suyas y las de sus
-  // subordinados por la jerarquía (`AlcanceSujeto.unidades_efectivas_ids`).
-  // Ids de `operacion`. Vacío = el sujeto no tiene alcance de monitoreo.
-  repeated string unidades_efectivas_ids = 2;
+  // Clientes efectivos del sujeto, sin repetidos: los suyos ("mis clientes") y
+  // los de sus subordinados por la jerarquía
+  // (`AlcanceSujeto.clientes_efectivos_ids`). Ids de `catalogos`. Vacío = el
+  // sujeto no ve ningún viaje por alcance de monitoreo.
+  repeated string clientes_efectivos_ids = 2;
   google.protobuf.Timestamp cambiado_en = 3;
 }
