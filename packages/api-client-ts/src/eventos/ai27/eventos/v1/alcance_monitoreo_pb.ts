@@ -16,9 +16,10 @@ import { Message, proto3, Timestamp } from "@bufbuild/protobuf";
 /**
  * alcance_monitoreo.cambiado — al cambiar los clientes que alcanza el monitoreo
  * de un sujeto. `operacion` lo recalcula cuando recibe `alcance.cambiado` de
- * `identidad` y cuando cambia el cliente de una de sus unidades. Los clientes de
- * un sujeto son los `cliente_id` no nulos de sus unidades efectivas (DEC-149 #4
- * y #13).
+ * `identidad` y cuando cambia el cliente o el estado `activa` de una de sus
+ * unidades. Los clientes de un sujeto son los `cliente_id` no nulos de sus
+ * unidades efectivas ACTIVAS: una unidad desactivada no da alcance (DEC-149 #4,
+ * #13 y #17).
  *
  * SNAPSHOT, no delta: lleva el conjunto completo (idempotente). Lo proyectan
  * `reportes` y `mensajeria` para filtrar por cliente. La proyección se

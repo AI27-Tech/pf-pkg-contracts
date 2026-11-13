@@ -234,7 +234,7 @@ export interface paths {
         head?: never;
         /**
          * Modificar una unidad del roster, incluido activar/desactivar.
-         * @description Cambia el vehículo, los custodios, el cliente al que sirve (`cliente_id`, DEC-149 #2) o el estado `activa` de la unidad. Activar/desactivar es un cambio de `activa` por esta misma ruta. Al cambiar `cliente_id`, `operacion` recalcula y publica `alcance_monitoreo.cambiado` para cada sujeto que tiene la unidad entre sus unidades efectivas (DEC-149 #15). El `tipo` nunca se escribe: se deriva del vehículo. Modifican `jefe_operativo` y `administrador` (DEC-142 #3). La exclusividad (DEC-142 #4) se revisa sobre el resultado del cambio, también al reactivar. Una unidad con reserva en un viaje no terminal no se edita ni se desactiva: primero se reasigna la escolta de ese viaje (`PATCH /api/v1/viajes/{id}/asignacion`, DEC-142 #5); la regla no distingue el campo, así que también aplica a `cliente_id`. Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
+         * @description Cambia el vehículo, los custodios, el cliente al que sirve (`cliente_id`, DEC-149 #2) o el estado `activa` de la unidad. Activar/desactivar es un cambio de `activa` por esta misma ruta. Al cambiar `cliente_id` o `activa`, `operacion` recalcula y publica `alcance_monitoreo.cambiado` para cada sujeto que tiene la unidad entre sus unidades efectivas (DEC-149 #15). El `tipo` nunca se escribe: se deriva del vehículo. Modifican `jefe_operativo` y `administrador` (DEC-142 #3). La exclusividad (DEC-142 #4) se revisa sobre el resultado del cambio, también al reactivar. Una unidad con reserva en un viaje no terminal no se edita ni se desactiva: primero se reasigna la escolta de ese viaje (`PATCH /api/v1/viajes/{id}/asignacion`, DEC-142 #5); la regla no distingue el campo, así que también aplica a `cliente_id`. Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
          */
         patch: operations["modificarUnidad"];
         trace?: never;
@@ -663,7 +663,7 @@ export interface components {
              */
             cliente_id?: string | null;
         };
-        /** @description Clientes que alcanza el monitoreo de un sujeto: los `cliente_id` no nulos de sus unidades efectivas (DEC-149 #4). Coincide en forma con el payload del evento `alcance_monitoreo.cambiado` (contracts/events). */
+        /** @description Clientes que alcanza el monitoreo de un sujeto: los `cliente_id` no nulos de sus unidades efectivas activas (DEC-149 #4 y #17). Coincide en forma con el payload del evento `alcance_monitoreo.cambiado` (contracts/events). */
         AlcanceMonitoreo: {
             sujeto_id: components["schemas"]["Id"];
             /** @description Ids de cliente de `catalogos`, sin repetidos. */

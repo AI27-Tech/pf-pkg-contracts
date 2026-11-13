@@ -136,7 +136,7 @@ type Adjunto struct {
 // AdjuntoEstadoEscaneo Estado del escaneo antivirus del objeto. `pendiente` tras crear la intención; `limpio`/`infectado` cuando el escaneo concluye. Un adjunto no `limpio` no autoriza descarga.
 type AdjuntoEstadoEscaneo string
 
-// AlcanceMonitoreo Clientes que alcanza el monitoreo de un sujeto: los `cliente_id` no nulos de sus unidades efectivas (DEC-149 #4). Coincide en forma con el payload del evento `alcance_monitoreo.cambiado` (contracts/events).
+// AlcanceMonitoreo Clientes que alcanza el monitoreo de un sujeto: los `cliente_id` no nulos de sus unidades efectivas activas (DEC-149 #4 y #17). Coincide en forma con el payload del evento `alcance_monitoreo.cambiado` (contracts/events).
 type AlcanceMonitoreo struct {
 	// CambiadoEn Momento del último cambio del conjunto.
 	CambiadoEn MarcaTiempo `json:"cambiado_en"`

@@ -25,8 +25,9 @@ info:
     Alcance sobre los viajes (DEC-149). Audiencia Cliente: los viajes de su
     tenant (sin cambio). `jefe_operativo` y `administrador`: todos.
     `monitorista`, `supervisor` y `coordinador`: los viajes cuyo `cliente_id`
-    está entre los clientes de sus unidades efectivas (proyección de
-    `alcance.cambiado` cruzada con el `cliente_id` de cada unidad; ver
+    está entre los clientes de sus unidades efectivas activas (proyección de
+    `alcance.cambiado` cruzada con el `cliente_id` de cada unidad activa; una
+    unidad desactivada no da alcance, DEC-149 #17; ver
     `listarAlcancesMonitoreo`), solo desde `APROBADO`: nunca un viaje en
     `SOLICITADO` ni en `RECHAZADO_POR_AI27`, ni uno que no pasó por `APROBADO`.
     El monitoreo sigue al cliente del viaje, no al de la unidad prestada
@@ -533,7 +534,7 @@ paths:
         Cambia el vehículo, los custodios, el cliente al que sirve
         (`cliente_id`, DEC-149 #2) o el estado `activa` de la unidad.
         Activar/desactivar es un cambio de `activa` por esta misma ruta. Al
-        cambiar `cliente_id`, `operacion` recalcula y publica
+        cambiar `cliente_id` o `activa`, `operacion` recalcula y publica
         `alcance_monitoreo.cambiado` para cada sujeto que tiene la unidad entre
         sus unidades efectivas (DEC-149 #15). El
         `tipo` nunca se escribe: se deriva del vehículo. Modifican
@@ -1412,7 +1413,7 @@ components:
       required: [sujeto_id, clientes_ids, cambiado_en]
       description: >-
         Clientes que alcanza el monitoreo de un sujeto: los `cliente_id` no
-        nulos de sus unidades efectivas (DEC-149 #4). Coincide en forma con el
+        nulos de sus unidades efectivas activas (DEC-149 #4 y #17). Coincide en forma con el
         payload del evento `alcance_monitoreo.cambiado` (contracts/events).
       properties:
         sujeto_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
