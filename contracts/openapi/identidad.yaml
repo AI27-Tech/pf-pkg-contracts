@@ -17,7 +17,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — identidad
-  version: 0.1.0-tracer.40
+  version: 0.1.0-tracer.41
   description: >-
     Autenticación, sesión y alcance del tracer. Fuente de verdad de la
     revocación (evento `sesion.revocada`, ADR 26).
@@ -45,7 +45,15 @@ tags:
     `fijarUnidadesSujeto`. El cambio se compromete en local (estado + traza +
     outbox) y el IdP se sincroniza después, de forma reintentable (DEC-085);
     por eso el fallo del IdP no revierte la operación ni se refleja como error
-    de esta superficie.
+    de esta superficie. Desde tracer.41, `fijarUnidadesSujeto`,
+    `fijarSubordinadosSujeto` y `fijarRolSujeto` (al retirar el alcance,
+    DEC-140 #3) publican `alcance.cambiado` en ese mismo outbox, uno por cada
+    sujeto cuyas unidades efectivas cambien (DEC-149 #15).
+- name: alcances
+  description: >-
+    Snapshot del alcance de monitoreo para reconstruir proyecciones (DEC-149
+    #15, patrón de ADR 26). Solo servicio interno: lo consume `operacion`, no
+    el navegador ni el `bff`.
 - name: tenants
   description: >-
     Tenants de organización cliente (E8-T19, DEC-144). El tenant de un cliente
@@ -156,6 +164,33 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/PaginaRevocaciones"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+
+  /api/v1/alcances:
+    get:
+      operationId: listarAlcances
+      tags: [alcances]
+      summary: Snapshot de unidades efectivas por sujeto + cursor.
+      description: >-
+        Snapshot de las unidades efectivas de cada sujeto más un cursor
+        consistente, para que `operacion` reconstruya su proyección de
+        `alcance.cambiado` y haga catch-up sin ventana (DEC-149 #15, ADR 26).
+        Cada item tiene la forma del payload de `alcance.cambiado`. Solo trae
+        sujetos con al menos una unidad efectiva: un sujeto ausente no tiene
+        alcance de monitoreo. Consumido por los servicios protegidos, no por el
+        navegador.
+      parameters:
+      - name: cursor
+        in: query
+        required: false
+        description: Cursor de continuación; ausente para el snapshot inicial.
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de alcances y cursor.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaAlcances"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
 
   /api/v1/sujetos:
@@ -875,6 +910,39 @@ components:
             subordinados por la jerarquía (DEC-140 #2). Para un Monitorista es
             igual a `unidades_ids`.
           items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+
+    AlcanceEfectivo:
+      type: object
+      additionalProperties: false
+      required: [sujeto_id, unidades_efectivas_ids, cambiado_en]
+      description: >-
+        Unidades efectivas de un sujeto. Coincide en forma con el payload del
+        evento `alcance.cambiado` (contracts/events, DEC-149 #15).
+      properties:
+        sujeto_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        unidades_efectivas_ids:
+          type: array
+          description: >-
+            Igual que `AlcanceSujeto.unidades_efectivas_ids`: unión, sin
+            repetidos, de las unidades del sujeto y las de sus subordinados.
+            Ids de `operacion`.
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        cambiado_en:
+          allOf: [$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"]
+          description: Momento del último cambio del conjunto.
+
+    PaginaAlcances:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/AlcanceEfectivo"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
 
     UnidadesSujetoEntrada:
       type: object

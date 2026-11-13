@@ -1,0 +1,30 @@
+// Evento `alcance_monitoreo.cambiado`, publicado por `operacion` (`tracer.41`,
+// DEC-149 #15, aplica DEC-053 #3). Superficie AMPLIA: solo identificadores.
+// Orden por agregado = sujeto_id.
+//
+// Archivo propio porque es una familia nueva con su propio agregado (sujeto,
+// no viaje): `viaje.proto` es la familia `viaje.*` con orden por viaje_id.
+syntax = "proto3";
+
+package ai27.eventos.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1;eventosv1";
+
+// alcance_monitoreo.cambiado — al cambiar los clientes que alcanza el monitoreo
+// de un sujeto. `operacion` lo recalcula cuando recibe `alcance.cambiado` de
+// `identidad` y cuando cambia el cliente de una de sus unidades. Los clientes de
+// un sujeto son los `cliente_id` no nulos de sus unidades efectivas (DEC-149 #4
+// y #13).
+//
+// SNAPSHOT, no delta: lleva el conjunto completo (idempotente). Lo proyectan
+// `reportes` y `mensajeria` para filtrar por cliente. La proyección se
+// reconstruye con `operacion.listarAlcancesMonitoreo` (patrón ADR 26).
+message AlcanceMonitoreoCambiado {
+  string sujeto_id = 1;
+  // Clientes que alcanza el sujeto, sin repetidos. Ids de `catalogos`.
+  // Vacío = el sujeto no ve ningún viaje por alcance de monitoreo.
+  repeated string clientes_ids = 2;
+  google.protobuf.Timestamp cambiado_en = 3;
+}

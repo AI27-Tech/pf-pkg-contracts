@@ -370,6 +370,15 @@ type Cliente struct {
 // ClienteEstado Estado del cliente. El BFF devuelve sólo `activo` en este selector; `inactivo` no aparece (un cliente inactivo no es asignable a un viaje nuevo). El campo se conserva por fidelidad al espejo de `catalogos`.
 type ClienteEstado string
 
+// ClienteViajeResumen defines model for ClienteViajeResumen.
+type ClienteViajeResumen struct {
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// Nombre Nombre del cliente en `catalogos`. Ausente si el cliente ya no existe en el catálogo: el consumidor muestra el `id`.
+	Nombre *string `json:"nombre,omitempty"`
+}
+
 // CondicionAbierta Condición ortogonal abierta. Espejo de `CondicionAbierta` de `operacion`.
 type CondicionAbierta struct {
 	// AbiertaEn Instante en UTC, RFC 3339.
@@ -1346,6 +1355,9 @@ type Unidad struct {
 	// Activa Si la unidad está activa (disponible para asignarse).
 	Activa bool `json:"activa"`
 
+	// ClienteId Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Espejo de `operacion`. null o ausente = no sirve a ningún cliente y no da alcance de monitoreo a nadie (DEC-149 #13).
+	ClienteId *openapi_types.UUID `json:"cliente_id"`
+
 	// Custodios Nombre de cada custodio de `custodios_ids`, en el mismo orden (tracer.38, DT-19). Los compone el `bff` desde `catalogos`. Un custodio que ya no existe en el catálogo no aparece.
 	Custodios *[]CustodioUnidad `json:"custodios,omitempty"`
 
@@ -1380,8 +1392,11 @@ type UnidadAsignada struct {
 // UnidadEntrada Alta de unidad. El `tipo` NO se envía: se deriva del vehículo. `activa` es opcional al crear (el servidor decide el valor por defecto). Espejo de `UnidadEntrada` de `operacion`.
 type UnidadEntrada struct {
 	// Activa Opcional al crear. Si se omite, el servidor fija el valor por defecto.
-	Activa       *bool `json:"activa,omitempty"`
-	CustodiosIds []Id  `json:"custodios_ids"`
+	Activa *bool `json:"activa,omitempty"`
+
+	// ClienteId Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2). null o ausente = sin cliente (DEC-149 #13).
+	ClienteId    *openapi_types.UUID `json:"cliente_id"`
+	CustodiosIds []Id                `json:"custodios_ids"`
 
 	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
 	VehiculoId Id `json:"vehiculo_id"`
@@ -1399,13 +1414,25 @@ type UnidadEscoltaEmergencia struct {
 	Tipo string `json:"tipo"`
 }
 
-// UnidadModificacion Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). Espejo de `UnidadModificacion` de `operacion`.
+// UnidadModificacion Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). Espejo de `UnidadModificacion` de `operacion`. Propiedad ausente = no se toca.
 type UnidadModificacion struct {
-	Activa       *bool `json:"activa,omitempty"`
-	CustodiosIds *[]Id `json:"custodios_ids,omitempty"`
+	Activa *bool `json:"activa,omitempty"`
+
+	// ClienteId Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13).
+	ClienteId    *openapi_types.UUID `json:"cliente_id"`
+	CustodiosIds *[]Id               `json:"custodios_ids,omitempty"`
 
 	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
 	VehiculoId *Id `json:"vehiculo_id,omitempty"`
+}
+
+// UnidadViajeResumen defines model for UnidadViajeResumen.
+type UnidadViajeResumen struct {
+	// Economico Número económico del vehículo de la unidad, de `catalogos`. Ausente si el vehículo no lo tiene capturado o ya no existe en el catálogo: el consumidor muestra el `id`.
+	Economico *string `json:"economico,omitempty"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
 }
 
 // UnidadesSujetoEntrada Conjunto completo de unidades del Monitorista; reemplaza al anterior. Espejo de `UnidadesSujetoEntrada` de `identidad`.
@@ -1576,12 +1603,18 @@ type ViajeInterno struct {
 
 // ViajeResumen defines model for ViajeResumen.
 type ViajeResumen struct {
+	// Cliente Cliente del viaje (DEC-149 #11). Solo audiencia Interno: el `bff` lo omite para el Cliente (DEC-149 #14). El `nombre` lo compone el `bff` desde `catalogos`.
+	Cliente *ClienteViajeResumen `json:"cliente,omitempty"`
+
 	// Estado Token de estado tal como lo publica `operacion` (ADR 19).
 	Estado string `json:"estado"`
 
 	// Id Identificador único (UUID). Nunca un correlativo expuesto.
 	Id     Id     `json:"id"`
 	Origen string `json:"origen"`
+
+	// Unidades Unidades de la escolta vigente del viaje (DEC-149 #11), con su número económico legible que compone el `bff` desde `catalogos` (como `vehiculo` en `Unidad`, tracer.38). Vacío o ausente si el viaje no tiene escolta asignada. Solo audiencia Interno: el `bff` lo omite para el Cliente, cuyo portal no muestra la escolta (DEC-001, DEC-149 #14).
+	Unidades *[]UnidadViajeResumen `json:"unidades,omitempty"`
 }
 
 // ViajeSeguimiento defines model for ViajeSeguimiento.
@@ -9025,6 +9058,7 @@ type ListarEmergenciasViajeResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 }
 
 // Status returns HTTPResponse.Status
@@ -9706,6 +9740,7 @@ type ListarViajesResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaViajesResumen
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 }
 
 // Status returns HTTPResponse.Status
@@ -10238,6 +10273,7 @@ type FijarEtaResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -10418,6 +10454,7 @@ type TransicionarViajeResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -13085,6 +13122,13 @@ func ParseListarEmergenciasViajeResponse(rsp *http.Response) (*ListarEmergencias
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	return response, nil
@@ -14396,6 +14440,13 @@ func ParseListarViajesResponse(rsp *http.Response) (*ListarViajesResponse, error
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	}
 
 	return response, nil
@@ -15432,6 +15483,13 @@ func ParseFijarEtaResponse(rsp *http.Response) (*FijarEtaResponse, error) {
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15795,6 +15853,13 @@ func ParseTransicionarViajeResponse(rsp *http.Response) (*TransicionarViajeRespo
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error

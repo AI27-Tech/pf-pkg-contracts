@@ -1,4 +1,4 @@
-# Inventario contractual de eventos — tracer `v0.1.0-tracer.40`
+# Inventario contractual de eventos — tracer `v0.1.0-tracer.41`
 
 > **La tabla de abajo es prosa; el dato legible por máquina es
 > `contracts/events/registro.tipos.yaml`.** Desde `tracer.2` el registro es un
@@ -44,6 +44,8 @@ Reglas que este inventario materializa:
 | `sujeto.reactivado` | 1 | `identidad` | `catalogos`, `mensajeria`, `reportes` | `sujeto_id` | amplia |
 | `rol.asignado` | 1 | `identidad` | `mensajeria`, `reportes` | `sujeto_id` | amplia |
 | `rol.revocado` | 1 | `identidad` | `mensajeria`, `reportes` | `sujeto_id` | amplia |
+| `alcance.cambiado` | 1 | `identidad` | `operacion` | `sujeto_id` | amplia |
+| `alcance_monitoreo.cambiado` | 1 | `operacion` | `reportes`, `mensajeria` | `sujeto_id` | amplia |
 | `conversacion.abierta` | 1 | `mensajeria` | `realtime`, `reportes` | `conversacion_id` | restringida |
 | `conversacion.enrutada` | 1 | `mensajeria` | `realtime`, `reportes` | `conversacion_id` | restringida |
 | `conversacion.reclamada` | 1 | `mensajeria` | `realtime` | `conversacion_id` | restringida |
@@ -79,8 +81,20 @@ Reglas que este inventario materializa:
   agregados después) — Publicados por `identidad` (gobierno E4-T6). `creado` y
   `reactivado` son hechos propios de ciclo de vida del sujeto; el alta publica
   `sujeto.creado` + `rol.asignado` en la misma transacción. Son la fuente de la
-  proyección de pool de `mensajeria`. El alcance por `cliente`/`unidad` NO viaja
-  aquí: su evento sigue pendiente (identidad.md (g), DEC-045).
+  proyección de pool de `mensajeria`. El alcance viaja en `alcance.cambiado`
+  (ver abajo).
+- **`alcance.cambiado`, `alcance_monitoreo.cambiado`** (`tracer.41`, DEC-149
+  #15) — Alcance de monitoreo por cliente. `identidad` publica
+  `alcance.cambiado` (sujeto y sus unidades efectivas) para cada sujeto cuyo
+  conjunto efectivo cambie, incluidos Supervisores y Coordinadores al cambiar
+  la jerarquía o las unidades de un subordinado; al retirarse el alcance por
+  cambio de rol (DEC-140 #3) lo publica con el conjunto vacío. `operacion` lo
+  proyecta, lo cruza con el cliente de cada unidad y publica
+  `alcance_monitoreo.cambiado` (sujeto y sus clientes), que recalcula también
+  al cambiar el cliente de una unidad. Los dos llevan el conjunto completo
+  (snapshot, idempotente). Cada proyección se reconstruye con su lectura de
+  snapshot con cursor, solo para servicio interno (ADR 26):
+  `identidad.listarAlcances` y `operacion.listarAlcancesMonitoreo`.
 - **Conversación (`conversacion.*`, `mensaje.*`, `recibo.*`,
   `membresia.cambiada`)** (`tracer.7`) — Superficie **restringida**. Viajan por
   el tema restringido envueltos en `SobreVivo` (`sobre_vivo.proto`), que lleva

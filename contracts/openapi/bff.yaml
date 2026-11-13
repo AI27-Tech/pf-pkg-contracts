@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.40
+  version: 0.1.0-tracer.41
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -29,6 +29,16 @@ info:
     emergencias por rol `reaccion` (DEC-130). `supervisor` y `coordinador`
     leen conversaciones y, en emergencias, ven bandeja, detalle y notas y
     liberan o transfieren, sin reclamar ni resolver (DEC-131, DEC-126).
+
+
+    Alcance de monitoreo por cliente (DEC-149). `monitorista`, `supervisor` y
+    `coordinador` ven los viajes de los clientes de sus unidades efectivas,
+    solo desde `APROBADO`; `jefe_operativo` y `administrador`, todos; el
+    Cliente, los de su tenant. Lo aplica `operacion` (y `reportes` y
+    `mensajeria` en sus superficies); el `bff` reenvía y preserva el código.
+    Un viaje fuera de alcance no aparece en las listas y toda operación sobre
+    él responde `404`. `403` es para la acción que el rol no tiene (tabla rol ×
+    acción, DEC-149 #8).
   x-ai27-servicio: bff
   x-ai27-capa: borde
   x-ai27-tracer: true
@@ -172,7 +182,14 @@ paths:
       operationId: listarViajes
       tags: [viajes]
       summary: Listar viajes con filtros, por alcance.
-      description: Alcance de flota para interno; alcance de tenant para cliente (P9, P10).
+      description: >-
+        Reenvía a `operacion.listarViajes`, que filtra por el alcance del
+        llamante (DEC-149): Cliente, su tenant; `jefe_operativo` y
+        `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los
+        viajes de los clientes de sus unidades efectivas desde `APROBADO`. Un
+        viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben
+        `403` (DEC-149 #16). Para la audiencia Interno el `bff` agrega a cada
+        fila `cliente` y `unidades`; para el Cliente los omite (DEC-149 #14).
       parameters:
       - name: estado
         in: query
@@ -189,6 +206,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/PaginaViajesResumen"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
 
   /api/v1/viajes/{id}:
     parameters:
@@ -219,8 +237,8 @@ paths:
   # internos en V1 (DEC-022 #7). `bff` compone el expediente leyendo de
   # `operacion` (fuente exacta y actual), NUNCA de `reportes` (analítico y
   # eventualmente consistente). Autorización por mínimo privilegio: un operativo
-  # solo descarga viajes de su alcance; un administrador, más ampliamente — el
-  # rechazo por alcance ocurre antes de componer dato alguno. Cada descarga deja
+  # solo descarga viajes de su alcance por cliente (DEC-149); un administrador,
+  # todos. El rechazo por alcance (404) ocurre antes de componer dato alguno. Cada descarga deja
   # un registro de auditoría (actor, viaje, momento). El expediente SOLO serializa
   # campos contratados de V1: no existe representación para cuenta espejo ni
   # `clave_amago` (DEC-009/DEC-039). Es descarga de UN viaje: la exportación de
@@ -238,9 +256,9 @@ paths:
       summary: Descargar el expediente de un viaje (solo interno).
       description: >-
         Compone ficha técnica, histórico de bitácora y auditoría relevante del
-        viaje en un expediente de exportación. Audiencia interna; un operativo
-        fuera de su alcance recibe 403 antes de componer nada. Un viaje
-        inexistente o fuera de alcance devuelve 404. Cada descarga exitosa deja
+        viaje en un expediente de exportación. Audiencia interna. Un viaje
+        inexistente o fuera del alcance del llamante (DEC-149) devuelve 404
+        antes de componer nada; 403 es para el rol sin la acción. Cada descarga exitosa deja
         un registro de auditoría (actor, viaje, momento; E1-T7): el rastro lo
         escribe `operacion` en su transacción vía `registrarDescargaViaje`, no el
         `bff` (que no tiene base de datos).
@@ -277,8 +295,10 @@ paths:
         Reenvía a `operacion.obtenerViaje`. Devuelve el `estado` canónico (token
         de `EstadoViaje`, ADR 19) y las condiciones activas como dato separado,
         para que el frontend interno derive las acciones ofrecidas desde la
-        máquina de estados generada. Audiencia interna: un usuario fuera del
-        alcance del viaje recibe 403; un viaje inexistente o fuera de alcance, 404.
+        máquina de estados generada. Audiencia interna. Un viaje inexistente o
+        fuera del alcance del llamante (DEC-149) responde 404. `ejecutivo` y
+        `reaccion` reciben 403 (DEC-149 #16): Reacción ve el viaje de su caso
+        por `obtenerEmergencia`.
       responses:
         "200":
           description: Detalle interno del viaje.
@@ -363,6 +383,7 @@ paths:
         "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
         "409":
           description: >-
             Transición no permitida. `codigo` de máquina en el cuerpo:
@@ -476,6 +497,7 @@ paths:
         "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
         "409":
           description: >-
             El viaje está en un estado terminal y no admite fijar ETA. `codigo`
@@ -1084,9 +1106,11 @@ paths:
   # Solo audiencia Interno; el `bff` propaga el Bearer y `mensajeria` autoriza
   # por rol (misma regla que el panel de Reacción). El `bff` recorta el caso a
   # la fila mínima `EmergenciaViaje` y, al activar, rechaza el viaje terminal
-  # antes de reenviar (DEC-135 #5). El alcance por unidad del monitoreo aún no
-  # se aplica (DT-07): hoy el límite es el rol. Para cerrar se usa
-  # `cerrarEmergenciaPorId` con el id que da esta lista.
+  # antes de reenviar (DEC-135 #5). Alcance por cliente (DEC-149 #6): el
+  # monitoreo solo opera sobre viajes de los clientes de sus unidades efectivas,
+  # desde `APROBADO`; `administrador`, todos. Fuera de alcance, `404` (lo aplica
+  # `mensajeria`, y `operacion` en la lectura previa del viaje). Para cerrar se
+  # usa `cerrarEmergenciaPorId` con el id que da esta lista.
   # ===========================================================================
   /api/v1/panel/viajes/{id}/emergencias:
     parameters:
@@ -1114,6 +1138,7 @@ paths:
         "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
     post:
       operationId: activarEmergenciaInterno
       tags: [emergencias]
@@ -1460,7 +1485,8 @@ paths:
       description: >-
         Solo audiencia Interno. Reenvía a `mensajeria.cerrarEmergenciaPorId`.
         Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje del
-        caso (eje de monitoreo por unidad), o Administrator global (ADR 21 §5).
+        caso (alcance por cliente, DEC-149 #6), o Administrator global (ADR 21
+        §5). Un caso de un viaje fuera de alcance responde `404`.
         NUNCA Reacción ni Ejecutivo (E8-T18, DEC-045 #9, DEC-121 #5), tampoco
         por el mando de DEC-099: responden `403`. No exige texto. `cerrada` es
         irreversible.
@@ -1651,9 +1677,10 @@ paths:
         Solo audiencia Interno. Reenvía a `operacion.crearUnidad`. Crean
         `jefe_operativo` y `administrador` (DEC-142 #3). El `tipo` no se envía:
         se deriva del vehículo. El vehículo y los custodios no pueden estar en
-        otra unidad activa (DEC-142 #4).
-        Responde 400 si el vehículo o algún custodio no existe o está
-        inactivo en `catalogos`, si hay custodios repetidos o si la cantidad
+        otra unidad activa (DEC-142 #4). `cliente_id` es opcional: el cliente
+        al que sirve la unidad (DEC-149 #2 y #13).
+        Responde 400 si el vehículo, algún custodio o el cliente no existe o
+        está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad
         de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31).
         Otro rol responde 403.
       requestBody:
@@ -1708,12 +1735,14 @@ paths:
       description: >-
         Solo audiencia Interno. Reenvía a `operacion.modificarUnidad`. Modifican
         `jefe_operativo` y `administrador` (DEC-142 #3). Activar o desactivar es
-        cambiar `activa`. La exclusividad (DEC-142 #4) se revisa también al
+        cambiar `activa`; quitar el cliente es enviar `cliente_id: null`
+        (DEC-149 #2 y #13). La exclusividad (DEC-142 #4) se revisa también al
         reactivar. Una unidad con reserva en un viaje no terminal no se edita ni
-        se desactiva: primero se reasigna la escolta de ese viaje (DEC-142 #5).
-       
-        Responde 400 si el vehículo o algún custodio no existe o está
-        inactivo en `catalogos`, si hay custodios repetidos o si la cantidad
+        se desactiva, tampoco su `cliente_id`: primero se reasigna la escolta de
+        ese viaje (DEC-142 #5).
+
+        Responde 400 si el vehículo, algún custodio o el cliente no existe o
+        está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad
         de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31).
         Otro rol responde 403.
       requestBody:
@@ -2668,10 +2697,11 @@ paths:
   # `operationId`, schemas y errores idénticos a `reportes`. Autorización (DEC-022
   # #9, DEC-060): 200 para `monitorista`, `supervisor`, `coordinador` y
   # `administrador`; 403 para `jefe_operativo`, `ejecutivo`, `reaccion` y
-  # `cliente`. Alcance por unidad (DEC-045): monitorista, sus unidades;
-  # supervisor/coordinador, la unión de su alcance; administrador, global. El
-  # filtro por unidad aún no se aplica de extremo a extremo (deuda DT-07). Se
-  # conservan `proyeccion_al` y `stale`: un tablero atrasado se muestra como
+  # `cliente`. Alcance por cliente (DEC-149): monitorista, supervisor y
+  # coordinador, los viajes de los clientes de sus unidades efectivas desde
+  # `APROBADO` (proyección de `alcance_monitoreo.cambiado` en `reportes`);
+  # administrador, global. Un viaje fuera de alcance no aparece en las filas ni
+  # en los conteos. Se conservan `proyeccion_al` y `stale`: un tablero atrasado se muestra como
   # atrasado (DEC-033). `reportes` no acota por tenant a la audiencia Interno
   # (DEC-129; su implementación en `pf-svc-reportes` va en ola aparte).
   # ===========================================================================
@@ -2744,9 +2774,10 @@ paths:
   # y la descarga usan la URL de vida corta del almacenamiento de objetos. La
   # auditoría de cada acceso la sigue escribiendo `operacion` (el `bff` no tiene
   # base de datos). Autorización (DEC-022 #9, DEC-060): 200 para `monitorista`,
-  # `supervisor`, `coordinador` (en su alcance por unidad) y `administrador`
-  # (global); 403 para `jefe_operativo`, `ejecutivo`, `reaccion` y `cliente`. Un
-  # usuario fuera de alcance recibe 403 antes de emitir ninguna URL.
+  # `supervisor`, `coordinador` (en su alcance por cliente, DEC-149) y
+  # `administrador` (global); 403 para `jefe_operativo`, `ejecutivo`, `reaccion`
+  # y `cliente`. Un viaje fuera de alcance responde 404 antes de emitir ninguna
+  # URL.
   # ===========================================================================
   /api/v1/viajes/{id}/adjuntos:
     parameters:
@@ -2762,7 +2793,8 @@ paths:
         Reenvía a `operacion.listarAdjuntos`. No devuelve bytes. El
         `estado_escaneo` de cada adjunto se refresca releyendo esta lista
         (sondeo HTTP, ADR 27): no hay evento de empuje para el fin del escaneo.
-        Un usuario fuera del alcance del viaje recibe 403 antes de listar nada.
+        Un viaje fuera del alcance del llamante responde 404 antes de listar
+        nada (DEC-149).
       responses:
         "200":
           description: Adjuntos del viaje.
@@ -2786,8 +2818,8 @@ paths:
       description: >-
         Reenvía a `operacion.crearIntencionSubidaAdjunto`. Los bytes NO pasan
         por el `bff`: el cliente los sube al almacenamiento de objetos con la URL
-        devuelta. Un usuario fuera del alcance del viaje recibe 403 antes de
-        emitir la intención.
+        devuelta. Un viaje fuera del alcance del llamante responde 404 antes de
+        emitir la intención (DEC-149).
       requestBody:
         required: true
         content:
@@ -2821,8 +2853,8 @@ paths:
       description: >-
         Reenvía a `operacion.descargarAdjunto`. Devuelve una URL de vida corta
         del almacenamiento de objetos; los bytes NO pasan por el `bff`. Cada
-        descarga la audita `operacion`. Un usuario fuera del alcance recibe 403
-        antes de autorizar nada.
+        descarga la audita `operacion`. Un viaje fuera del alcance del llamante
+        responde 404 antes de autorizar nada (DEC-149).
       responses:
         "200":
           description: Autorización de descarga.
@@ -2931,6 +2963,49 @@ components:
           type: string
           description: Token de estado tal como lo publica `operacion` (ADR 19).
         origen: {type: string}
+        cliente:
+          readOnly: true
+          description: >-
+            Cliente del viaje (DEC-149 #11). Solo audiencia Interno: el `bff`
+            lo omite para el Cliente (DEC-149 #14). El `nombre` lo compone el
+            `bff` desde `catalogos`.
+          allOf: [{$ref: "#/components/schemas/ClienteViajeResumen"}]
+        unidades:
+          type: array
+          readOnly: true
+          description: >-
+            Unidades de la escolta vigente del viaje (DEC-149 #11), con su
+            número económico legible que compone el `bff` desde `catalogos`
+            (como `vehiculo` en `Unidad`, tracer.38). Vacío o ausente si el
+            viaje no tiene escolta asignada. Solo audiencia Interno: el `bff`
+            lo omite para el Cliente, cuyo portal no muestra la escolta
+            (DEC-001, DEC-149 #14).
+          items: {$ref: "#/components/schemas/UnidadViajeResumen"}
+
+    ClienteViajeResumen:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        nombre:
+          type: string
+          description: >-
+            Nombre del cliente en `catalogos`. Ausente si el cliente ya no
+            existe en el catálogo: el consumidor muestra el `id`.
+
+    UnidadViajeResumen:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        economico:
+          type: string
+          description: >-
+            Número económico del vehículo de la unidad, de `catalogos`.
+            Ausente si el vehículo no lo tiene capturado o ya no existe en el
+            catálogo: el consumidor muestra el `id`.
 
     PaginaViajesResumen:
       type: object
@@ -3529,6 +3604,14 @@ components:
             (tracer.38, DT-19). Los compone el `bff` desde `catalogos`. Un
             custodio que ya no existe en el catálogo no aparece.
           items: {$ref: "#/components/schemas/CustodioUnidad"}
+        cliente_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`.
+            Espejo de `operacion`. null o ausente = no sirve a ningún cliente y
+            no da alcance de monitoreo a nadie (DEC-149 #13).
 
     VehiculoUnidad:
       type: object
@@ -3594,6 +3677,13 @@ components:
         activa:
           type: boolean
           description: Opcional al crear. Si se omite, el servidor fija el valor por defecto.
+        cliente_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Opcional; mismo formato que `Id`. Cliente al que sirve la unidad
+            (DEC-149 #2). null o ausente = sin cliente (DEC-149 #13).
 
     UnidadModificacion:
       type: object
@@ -3601,7 +3691,8 @@ components:
       description: >-
         Modificación de unidad. Todos los campos son opcionales; activar o
         desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado).
-        Espejo de `UnidadModificacion` de `operacion`.
+        Espejo de `UnidadModificacion` de `operacion`. Propiedad ausente = no
+        se toca.
       properties:
         vehiculo_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         custodios_ids:
@@ -3611,6 +3702,13 @@ components:
           items: {$ref: "_comunes.yaml#/components/schemas/Id"}
         activa:
           type: boolean
+        cliente_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Id de `catalogos` para fijar o cambiar el cliente al que sirve la
+            unidad; `null` para quitarlo (DEC-149 #2 y #13).
 
     # --- Vehículos y custodios de `/catalogos` (adelanto de E8-T16 / DEC-142
     #     #6, tracer.39). Espejo de las formas de `catalogos` (Vehiculo,

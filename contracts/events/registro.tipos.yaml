@@ -154,6 +154,24 @@ tipos:
     agregado: sujeto_id
     sensibilidad: amplia
 
+  # --- Ola `tracer.41`: alcance de monitoreo por cliente (DEC-149 #15) ------
+  # `identidad` publica las unidades efectivas del sujeto; `operacion` las cruza
+  # con el cliente de cada unidad y publica los clientes del sujeto. Ambos son
+  # snapshot del conjunto completo (idempotentes).
+  - tipo: alcance.cambiado
+    version: 1
+    productor: identidad
+    consumidores_durables: [operacion]
+    agregado: sujeto_id
+    sensibilidad: amplia
+
+  - tipo: alcance_monitoreo.cambiado
+    version: 1
+    productor: operacion
+    consumidores_durables: [reportes, mensajeria]
+    agregado: sujeto_id
+    sensibilidad: amplia
+
   # --- Ola contractual 2 (`tracer.7`): conversación de `mensajeria` ---------
   # Superficie RESTRINGIDA: viajan envueltos en `SobreVivo` por el tema
   # restringido (ADR 28; mensajeria.md (g)).

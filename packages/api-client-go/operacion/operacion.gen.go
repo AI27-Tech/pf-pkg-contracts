@@ -136,6 +136,18 @@ type Adjunto struct {
 // AdjuntoEstadoEscaneo Estado del escaneo antivirus del objeto. `pendiente` tras crear la intención; `limpio`/`infectado` cuando el escaneo concluye. Un adjunto no `limpio` no autoriza descarga.
 type AdjuntoEstadoEscaneo string
 
+// AlcanceMonitoreo Clientes que alcanza el monitoreo de un sujeto: los `cliente_id` no nulos de sus unidades efectivas (DEC-149 #4). Coincide en forma con el payload del evento `alcance_monitoreo.cambiado` (contracts/events).
+type AlcanceMonitoreo struct {
+	// CambiadoEn Momento del último cambio del conjunto.
+	CambiadoEn MarcaTiempo `json:"cambiado_en"`
+
+	// ClientesIds Ids de cliente de `catalogos`, sin repetidos.
+	ClientesIds []Id `json:"clientes_ids"`
+
+	// SujetoId Identificador único (UUID). Nunca un correlativo expuesto.
+	SujetoId Id `json:"sujeto_id"`
+}
+
 // AptitudRecurso defines model for AptitudRecurso.
 type AptitudRecurso struct {
 	// Estado Afirmación informativa (DEC-055). `desconocido` lo calcula `operacion`, no `catalogos`. Nunca bloquea la asignación en V1.
@@ -444,6 +456,13 @@ type PaginaAdjuntos struct {
 	Items []Adjunto `json:"items"`
 }
 
+// PaginaAlcancesMonitoreo defines model for PaginaAlcancesMonitoreo.
+type PaginaAlcancesMonitoreo struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string            `json:"cursor_siguiente"`
+	Items           []AlcanceMonitoreo `json:"items"`
+}
+
 // PaginaAuditoria defines model for PaginaAuditoria.
 type PaginaAuditoria struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
@@ -540,6 +559,9 @@ type Unidad struct {
 	// Activa Si la unidad está activa (disponible para asignarse).
 	Activa bool `json:"activa"`
 
+	// ClienteId Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Referencia, no FK. null o ausente = no sirve a ningún cliente y no da alcance de monitoreo a nadie (DEC-149 #13).
+	ClienteId *openapi_types.UUID `json:"cliente_id"`
+
 	// CustodiosIds Custodios de la unidad, por identificador de `catalogos`. Un coche lleva uno o dos; una moto, uno (ADR 31).
 	CustodiosIds []Id `json:"custodios_ids"`
 
@@ -568,17 +590,23 @@ type UnidadAsignada struct {
 // UnidadEntrada Alta de unidad. El `tipo` NO se envía: se deriva del vehículo. `activa` es opcional al crear (el servidor decide el valor por defecto).
 type UnidadEntrada struct {
 	// Activa Opcional al crear. Si se omite, el servidor fija el valor por defecto.
-	Activa       *bool `json:"activa,omitempty"`
-	CustodiosIds []Id  `json:"custodios_ids"`
+	Activa *bool `json:"activa,omitempty"`
+
+	// ClienteId Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2). null o ausente = sin cliente (DEC-149 #13).
+	ClienteId    *openapi_types.UUID `json:"cliente_id"`
+	CustodiosIds []Id                `json:"custodios_ids"`
 
 	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
 	VehiculoId Id `json:"vehiculo_id"`
 }
 
-// UnidadModificacion Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado).
+// UnidadModificacion Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). Propiedad ausente = no se toca.
 type UnidadModificacion struct {
-	Activa       *bool `json:"activa,omitempty"`
-	CustodiosIds *[]Id `json:"custodios_ids,omitempty"`
+	Activa *bool `json:"activa,omitempty"`
+
+	// ClienteId Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13).
+	ClienteId    *openapi_types.UUID `json:"cliente_id"`
+	CustodiosIds *[]Id               `json:"custodios_ids,omitempty"`
 
 	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
 	VehiculoId *Id `json:"vehiculo_id,omitempty"`
@@ -634,6 +662,12 @@ type Prohibido = Error
 
 // SolicitudInvalida defines model for SolicitudInvalida.
 type SolicitudInvalida = Error
+
+// ListarAlcancesMonitoreoParams defines parameters for ListarAlcancesMonitoreo.
+type ListarAlcancesMonitoreoParams struct {
+	// Cursor Cursor de continuación; ausente para el snapshot inicial.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
 
 // ListarUnidadesParams defines parameters for ListarUnidades.
 type ListarUnidadesParams struct {
@@ -785,6 +819,9 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// ListarAlcancesMonitoreo request
+	ListarAlcancesMonitoreo(ctx context.Context, params *ListarAlcancesMonitoreoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarUnidades request
 	ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -898,6 +935,18 @@ type ClientInterface interface {
 	TransicionarViajeWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	TransicionarViaje(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) ListarAlcancesMonitoreo(ctx context.Context, params *ListarAlcancesMonitoreoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarAlcancesMonitoreoRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1414,6 +1463,55 @@ func (c *Client) TransicionarViaje(ctx context.Context, id Id, body Transicionar
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewListarAlcancesMonitoreoRequest generates requests for ListarAlcancesMonitoreo
+func NewListarAlcancesMonitoreoRequest(server string, params *ListarAlcancesMonitoreoParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alcances-monitoreo")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewListarUnidadesRequest generates requests for ListarUnidades
@@ -2747,6 +2845,9 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// ListarAlcancesMonitoreoWithResponse request
+	ListarAlcancesMonitoreoWithResponse(ctx context.Context, params *ListarAlcancesMonitoreoParams, reqEditors ...RequestEditorFn) (*ListarAlcancesMonitoreoResponse, error)
+
 	// ListarUnidadesWithResponse request
 	ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error)
 
@@ -2862,6 +2963,29 @@ type ClientWithResponsesInterface interface {
 	TransicionarViajeWithResponse(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
 }
 
+type ListarAlcancesMonitoreoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaAlcancesMonitoreo
+	JSON401      *NoAutorizado
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarAlcancesMonitoreoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarAlcancesMonitoreoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ListarUnidadesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2969,6 +3093,7 @@ type ListarViajesResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaViajes
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 }
 
 // Status returns HTTPResponse.Status
@@ -3018,6 +3143,7 @@ type ObtenerViajeResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *ViajeDetalle
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3118,6 +3244,7 @@ type ObtenerAsignacionResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *EscoltaVigente
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3144,6 +3271,7 @@ type ReasignarRecursosResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Conflicto
 }
 
@@ -3170,6 +3298,7 @@ type AsignarRecursosResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -3218,6 +3347,7 @@ type ListarBitacoraResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaBitacora
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3244,6 +3374,7 @@ type RegistrarEntradaBitacoraResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 }
 
 // Status returns HTTPResponse.Status
@@ -3292,6 +3423,7 @@ type ListarEstadiasResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaEstadias
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3318,6 +3450,7 @@ type AbrirEstadiaResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 }
 
 // Status returns HTTPResponse.Status
@@ -3370,6 +3503,7 @@ type FijarEtaResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -3421,6 +3555,7 @@ type ObtenerFichaResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *FichaTecnica
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3471,6 +3606,7 @@ type ListarIncidenciasResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaIncidencias
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -3497,6 +3633,7 @@ type AbrirIncidenciaResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -3549,6 +3686,7 @@ type TransicionarViajeResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -3566,6 +3704,15 @@ func (r TransicionarViajeResponse) StatusCode() int {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
+}
+
+// ListarAlcancesMonitoreoWithResponse request returning *ListarAlcancesMonitoreoResponse
+func (c *ClientWithResponses) ListarAlcancesMonitoreoWithResponse(ctx context.Context, params *ListarAlcancesMonitoreoParams, reqEditors ...RequestEditorFn) (*ListarAlcancesMonitoreoResponse, error) {
+	rsp, err := c.ListarAlcancesMonitoreo(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarAlcancesMonitoreoResponse(rsp)
 }
 
 // ListarUnidadesWithResponse request returning *ListarUnidadesResponse
@@ -3940,6 +4087,39 @@ func (c *ClientWithResponses) TransicionarViajeWithResponse(ctx context.Context,
 	return ParseTransicionarViajeResponse(rsp)
 }
 
+// ParseListarAlcancesMonitoreoResponse parses an HTTP response from a ListarAlcancesMonitoreoWithResponse call
+func ParseListarAlcancesMonitoreoResponse(rsp *http.Response) (*ListarAlcancesMonitoreoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarAlcancesMonitoreoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaAlcancesMonitoreo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListarUnidadesResponse parses an HTTP response from a ListarUnidadesWithResponse call
 func ParseListarUnidadesResponse(rsp *http.Response) (*ListarUnidadesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4170,6 +4350,13 @@ func ParseListarViajesResponse(rsp *http.Response) (*ListarViajesResponse, error
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	}
 
 	return response, nil
@@ -4256,6 +4443,13 @@ func ParseObtenerViajeResponse(rsp *http.Response) (*ObtenerViajeResponse, error
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
@@ -4445,6 +4639,13 @@ func ParseObtenerAsignacionResponse(rsp *http.Response) (*ObtenerAsignacionRespo
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4499,6 +4700,13 @@ func ParseReasignarRecursosResponse(rsp *http.Response) (*ReasignarRecursosRespo
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflicto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4552,6 +4760,13 @@ func ParseAsignarRecursosResponse(rsp *http.Response) (*AsignarRecursosResponse,
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error
@@ -4633,6 +4848,13 @@ func ParseListarBitacoraResponse(rsp *http.Response) (*ListarBitacoraResponse, e
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4686,6 +4908,13 @@ func ParseRegistrarEntradaBitacoraResponse(rsp *http.Response) (*RegistrarEntrad
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -4767,6 +4996,13 @@ func ParseListarEstadiasResponse(rsp *http.Response) (*ListarEstadiasResponse, e
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -4820,6 +5056,13 @@ func ParseAbrirEstadiaResponse(rsp *http.Response) (*AbrirEstadiaResponse, error
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -4929,6 +5172,13 @@ func ParseFijarEtaResponse(rsp *http.Response) (*FijarEtaResponse, error) {
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -5030,6 +5280,13 @@ func ParseObtenerFichaResponse(rsp *http.Response) (*ObtenerFichaResponse, error
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -5124,6 +5381,13 @@ func ParseListarIncidenciasResponse(rsp *http.Response) (*ListarIncidenciasRespo
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -5177,6 +5441,13 @@ func ParseAbrirIncidenciaResponse(rsp *http.Response) (*AbrirIncidenciaResponse,
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error
@@ -5285,6 +5556,13 @@ func ParseTransicionarViajeResponse(rsp *http.Response) (*TransicionarViajeRespo
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error

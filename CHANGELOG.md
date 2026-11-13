@@ -3,6 +3,37 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-13 16:18 [tracer.41] — alcance del monitoreo por cliente (DEC-149, DT-07)
+
+**Para quién:** `pf-svc-identidad` (publica `alcance.cambiado` y su snapshot), `pf-svc-operacion` (cliente de la unidad, proyección del alcance, `alcance_monitoreo.cambiado` y su snapshot, y el filtro por cliente en los viajes), `pf-svc-reportes` y `pf-svc-mensajeria` (proyección de los clientes del sujeto y filtro por cliente), `pf-svc-bff` (cliente de la unidad, `cliente` y `unidades` de `ViajeResumen`, `403` de Ejecutivo y Reacción) y el panel interno (`/roster` con el cliente de la unidad y bandeja con cliente y unidades).
+
+**Resumen:** ola aditiva. Cada unidad tiene un cliente al que sirve, opcional. El monitoreo (`monitorista`, `supervisor`, `coordinador`) ve los viajes de los clientes de sus unidades efectivas desde `APROBADO`; `jefe_operativo` y `administrador`, todos. Dos eventos nuevos (`alcance.cambiado`, `alcance_monitoreo.cambiado`) y dos lecturas de snapshot con cursor (`identidad.listarAlcances`, `operacion.listarAlcancesMonitoreo`). `ViajeResumen` del `bff` gana `cliente` y `unidades`, solo para la audiencia Interno. Se retiran los avisos "el alcance por unidad aún no se aplica (DT-07)".
+
+**Reglas:**
+- Alcance (DEC-149 #4 a #6): `cliente_id` del viaje entre los clientes de las unidades efectivas del sujeto, y viaje que pasó por `APROBADO` (nunca `SOLICITADO` ni `RECHAZADO_POR_AI27`). El monitoreo sigue al cliente del viaje, no al de la unidad prestada.
+- Fuera de alcance, el viaje no aparece en `listarViajes` y toda operación sobre él responde `404`. `403` es para la acción que el rol no tiene (DEC-149 #8). Esto reemplaza el "403 fuera de alcance" que decían adjuntos, descarga del expediente y `obtenerViajeInterno`.
+- `ejecutivo` y `reaccion`: `403` en `listarViajes` y en `obtenerViajeInterno` del `bff` (DEC-149 #16). En `operacion.obtenerViaje`, `ejecutivo` recibe `403` y `reaccion` sigue leyendo, porque el `bff` compone con su token el detalle de su caso (`obtenerEmergencia`).
+- Cliente de la unidad (DEC-149 #2, #13): `cliente_id` opcional y nulo; `null` o ausente = no da alcance. En `modificarUnidad`, ausente = no se toca y `null` lo quita. `400` si el cliente no existe o está inactivo en `catalogos`. La regla `unidad_con_reserva_vigente` (DEC-142 #5) también aplica a `cliente_id`.
+- Eventos (DEC-149 #15): los dos llevan el conjunto completo (snapshot, idempotente) y orden por `sujeto_id`. `identidad` emite `alcance.cambiado` para cada sujeto cuyo conjunto efectivo cambie, incluidos Supervisores y Coordinadores; al retirar el alcance por cambio de rol (DEC-140 #3), con el conjunto vacío. `operacion` recalcula `alcance_monitoreo.cambiado` al recibir `alcance.cambiado` y al cambiar el cliente de una unidad.
+- Snapshots: solo para servicio interno, con la forma de `listarSesionesRevocadas` (ADR 26). Solo traen sujetos con conjunto no vacío.
+- `ViajeResumen.cliente` y `ViajeResumen.unidades` (DEC-149 #11, #14): el `bff` los omite para la audiencia Cliente. `unidades` vacío o ausente sin escolta asignada.
+
+**Cambios:**
+- `contracts/events/ai27/eventos/v1/sujeto.proto`: mensaje `AlcanceCambiado`; se quita el comentario que daba el evento de alcance por pendiente.
+- `contracts/events/ai27/eventos/v1/alcance_monitoreo.proto` (nuevo): mensaje `AlcanceMonitoreoCambiado`.
+- `contracts/events/registro.tipos.yaml` e `INVENTARIO.md`: tipos `alcance.cambiado` (`identidad` → `operacion`) y `alcance_monitoreo.cambiado` (`operacion` → `reportes`, `mensajeria`), con su nota de familia.
+- `contracts/openapi/identidad.yaml`: `listarAlcances` (`GET /api/v1/alcances`), tag `alcances`, schemas `AlcanceEfectivo` y `PaginaAlcances`. El tag `gobierno` documenta qué operaciones publican `alcance.cambiado`.
+- `contracts/openapi/operacion.yaml`: regla de alcance en `info.description`; `listarAlcancesMonitoreo` (`GET /api/v1/alcances-monitoreo`), tag `alcances`, schemas `AlcanceMonitoreo` y `PaginaAlcancesMonitoreo`; `cliente_id` en `Unidad`, `UnidadEntrada` y `UnidadModificacion`; descripciones de `listarViajes`, `obtenerViaje`, `crearUnidad`, `modificarUnidad`, adjuntos y descargas. Respuestas `403` agregadas en `listarViajes`, `obtenerViaje`, `obtenerFicha`, `obtenerAsignacion`, `listarBitacora`, `listarIncidencias` y `listarEstadias`; `404` en `transicionarViaje`, `asignarRecursos`, `reasignarRecursos`, `fijarEta`, `registrarEntradaBitacora`, `abrirIncidencia` y `abrirEstadia`.
+- `contracts/openapi/bff.yaml`: regla de alcance en `info.description`; `cliente_id` en `Unidad`, `UnidadEntrada` y `UnidadModificacion`; `ViajeResumen.cliente` y `ViajeResumen.unidades` con los schemas `ClienteViajeResumen` y `UnidadViajeResumen`; descripciones de `listarViajes`, `obtenerViajeInterno`, `descargarViaje`, roster, emergencias del monitoreo, dashboard y evidencia. Respuesta `403` en `listarViajes`; `404` en `transicionarViaje`, `fijarEta` y `listarEmergenciasViaje`.
+- `contracts/openapi/reportes.yaml`: descripción del tag `reportes` con el alcance por cliente. Sin cambio de schemas.
+- `contracts/openapi/mensajeria.yaml`: convención de alcance de las emergencias del viaje en `info.description`; descripciones de `listarEmergencias`, `activarEmergencia`, `cerrarEmergencia` y `cerrarEmergenciaPorId`. Sin cambio de schemas.
+- `info.version` de todas las specs, `VERSION`, `INVENTARIO.md` y `packages/api-client-ts/package.json` a `0.1.0-tracer.41`.
+- Regenerados `packages/api-client-go/{identidad,operacion,bff,registro}`, `packages/api-client-go/eventos/.../{sujeto,alcance_monitoreo}.pb.go`, `packages/api-client-ts/src/openapi/{identidad,operacion,bff,mensajeria}.gen.ts`, `packages/api-client-ts/src/eventos/.../{sujeto,alcance_monitoreo}_pb.ts` y `packages/api-client-ts/src/registro/registro.gen.ts`.
+
+**Aviso al subir el pin del cliente Go (git-workflow §8):** sin constantes de enum renombradas: la ola no agrega enums. Ojo con `UnidadModificacion.ClienteId` (`*openapi_types.UUID` con `json:"cliente_id"`, sin `omitempty`, igual que `FichaTecnicaEntrada.Tracto`): un consumidor Go que serialice un `UnidadModificacion` sin fijar `ClienteId` manda `"cliente_id": null` y le QUITA el cliente a la unidad. Quien reenvíe el PATCH debe pasar el cuerpo tal cual o construirlo sin ese campo.
+
+**Verificación:** `make generate`, `make verify`, `make check-version-ts`, `make check-reproducible`, `make breaking-openapi` (compatible con `v0.1.0-tracer.40`), `make breaking` y `make contract-tests` en verde.
+
 ## 2026-11-09 [tracer.40] — administración de usuarios, alcance de monitoreo y organizaciones (E8-T19, DEC-139/140/141/144/145)
 
 **Para quién:** el panel interno, que necesita `/administracion` (usuarios, roles, alcance y organizaciones) y la tarjeta "mis unidades" de `/roster`. También `pf-svc-identidad` (gobierno de sujetos, alcance, jerarquía y tenants), `pf-svc-catalogos` (alta y edición del expediente del cliente), `pf-svc-bff` (proyección, permisos por rol y orquestación de la organización) y `pf-svc-core` (gobierno de identidad en proceso).

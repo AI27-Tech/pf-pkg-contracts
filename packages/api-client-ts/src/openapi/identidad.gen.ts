@@ -91,6 +91,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alcances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Snapshot de unidades efectivas por sujeto + cursor.
+         * @description Snapshot de las unidades efectivas de cada sujeto más un cursor consistente, para que `operacion` reconstruya su proyección de `alcance.cambiado` y haga catch-up sin ventana (DEC-149 #15, ADR 26). Cada item tiene la forma del payload de `alcance.cambiado`. Solo trae sujetos con al menos una unidad efectiva: un sujeto ausente no tiene alcance de monitoreo. Consumido por los servicios protegidos, no por el navegador.
+         */
+        get: operations["listarAlcances"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sujetos": {
         parameters: {
             query?: never;
@@ -467,6 +487,19 @@ export interface components {
             /** @description Unión, sin repetidos, de `unidades_ids` y de las unidades de los subordinados por la jerarquía (DEC-140 #2). Para un Monitorista es igual a `unidades_ids`. */
             unidades_efectivas_ids: components["schemas"]["Id"][];
         };
+        /** @description Unidades efectivas de un sujeto. Coincide en forma con el payload del evento `alcance.cambiado` (contracts/events, DEC-149 #15). */
+        AlcanceEfectivo: {
+            sujeto_id: components["schemas"]["Id"];
+            /** @description Igual que `AlcanceSujeto.unidades_efectivas_ids`: unión, sin repetidos, de las unidades del sujeto y las de sus subordinados. Ids de `operacion`. */
+            unidades_efectivas_ids: components["schemas"]["Id"][];
+            /** @description Momento del último cambio del conjunto. */
+            cambiado_en: components["schemas"]["MarcaTiempo"];
+        };
+        PaginaAlcances: {
+            items: components["schemas"]["AlcanceEfectivo"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
+        };
         /** @description Conjunto completo de unidades del Monitorista; reemplaza al anterior. */
         UnidadesSujetoEntrada: {
             /** @description Ids de unidades de `operacion`. Vacía para quitarle todas. */
@@ -722,6 +755,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginaRevocaciones"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+        };
+    };
+    listarAlcances: {
+        parameters: {
+            query?: {
+                /** @description Cursor de continuación; ausente para el snapshot inicial. */
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de alcances y cursor. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaAlcances"];
                 };
             };
             401: components["responses"]["NoAutorizado"];
