@@ -12,7 +12,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — reportes
-  version: 0.1.0-tracer.40
+  version: 0.1.0-tracer.41
   description: Proyección de lectura por eventos. Reportes operativos del tracer.
   x-ai27-servicio: reportes
   x-ai27-capa: soporte
@@ -27,6 +27,16 @@ security:
 
 tags:
 - name: reportes
+  description: >-
+    Dashboard de monitoreo para audiencia Interno. Alcance por cliente
+    (DEC-149): `monitorista`, `supervisor` y `coordinador` solo ven los viajes
+    de sus clientes efectivos ("mis clientes" y, por la jerarquía, los de sus
+    subordinados; DEC-149 #18), desde `APROBADO` (nunca `SOLICITADO` ni
+    `RECHAZADO_POR_AI27`); `administrador`, todos. Los clientes de cada sujeto
+    vienen de la proyección local de `alcance.cambiado` de `identidad`,
+    reconstruible con `identidad.listarAlcances` (DEC-149 #20, ADR 26). Un viaje fuera
+    de alcance no aparece en las filas ni cuenta en los totales ni en la
+    distribución por estado. Otro rol responde 403 (DEC-022 #9, DEC-060).
 
 paths:
   /api/v1/reportes/viajes:
