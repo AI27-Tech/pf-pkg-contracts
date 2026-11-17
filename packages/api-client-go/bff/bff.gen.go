@@ -244,15 +244,23 @@ type Adjunto struct {
 // AdjuntoEstadoEscaneo Estado del escaneo antivirus del objeto. `pendiente` tras crear la intención; `limpio`/`infectado` cuando el escaneo concluye. Un adjunto no `limpio` no autoriza descarga. Se refresca releyendo `listarAdjuntos` (sondeo; no hay evento de empuje en V1).
 type AdjuntoEstadoEscaneo string
 
-// AlcanceSujeto Alcance de monitoreo (DEC-140). Espejo de `AlcanceSujeto` de `identidad`.
+// AlcanceSujeto Alcance de monitoreo (DEC-140, DEC-149 #18): los clientes efectivos. Espejo de `AlcanceSujeto` de `identidad`.
 type AlcanceSujeto struct {
+	// ClientesEfectivosIds Unión, sin repetidos, de los clientes propios y los de los subordinados (DEC-140 #2). Es el alcance del monitoreo.
+	ClientesEfectivosIds []Id `json:"clientes_efectivos_ids"`
+
+	// ClientesIds Clientes asignados directamente ("mis clientes"); solo un Monitorista tiene. Ids de `catalogos`.
+	ClientesIds []Id `json:"clientes_ids"`
+
 	// SubordinadosIds Subordinados directos (Monitoristas de un Supervisor, Supervisores de un Coordinador).
 	SubordinadosIds []Id `json:"subordinados_ids"`
 
-	// UnidadesEfectivasIds Unión, sin repetidos, de las unidades propias y las de los subordinados (DEC-140
+	// UnidadesEfectivasIds Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'. Se elimina en una ola posterior. Unión de las unidades propias y las de los subordinados; ya no define el alcance.
+	// Deprecated:
 	UnidadesEfectivasIds []Id `json:"unidades_efectivas_ids"`
 
-	// UnidadesIds Unidades asignadas directamente ("mis unidades"); solo un Monitorista tiene.
+	// UnidadesIds Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'. Se elimina en una ola posterior. Unidades asignadas directamente ("mis unidades"); ya no definen el alcance.
+	// Deprecated:
 	UnidadesIds []Id `json:"unidades_ids"`
 }
 
@@ -369,6 +377,21 @@ type Cliente struct {
 
 // ClienteEstado Estado del cliente. El BFF devuelve sólo `activo` en este selector; `inactivo` no aparece (un cliente inactivo no es asignable a un viaje nuevo). El campo se conserva por fidelidad al espejo de `catalogos`.
 type ClienteEstado string
+
+// ClienteViajeResumen defines model for ClienteViajeResumen.
+type ClienteViajeResumen struct {
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+
+	// Nombre Nombre del cliente en `catalogos`. Ausente si el cliente ya no existe en el catálogo: el consumidor muestra el `id`.
+	Nombre *string `json:"nombre,omitempty"`
+}
+
+// ClientesSujetoEntrada Conjunto completo de clientes del Monitorista ("mis clientes"); reemplaza al anterior. Espejo de `ClientesSujetoEntrada` de `identidad`.
+type ClientesSujetoEntrada struct {
+	// ClientesIds Ids de cliente de `catalogos`. Vacía para quitarle todos.
+	ClientesIds []Id `json:"clientes_ids"`
+}
 
 // CondicionAbierta Condición ortogonal abierta. Espejo de `CondicionAbierta` de `operacion`.
 type CondicionAbierta struct {
@@ -1346,6 +1369,9 @@ type Unidad struct {
 	// Activa Si la unidad está activa (disponible para asignarse).
 	Activa bool `json:"activa"`
 
+	// ClienteId Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Espejo de `operacion`. Dato del roster para asignar la escolta y reconocer el préstamo; no define el alcance del monitoreo (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
+	ClienteId *openapi_types.UUID `json:"cliente_id"`
+
 	// Custodios Nombre de cada custodio de `custodios_ids`, en el mismo orden (tracer.38, DT-19). Los compone el `bff` desde `catalogos`. Un custodio que ya no existe en el catálogo no aparece.
 	Custodios *[]CustodioUnidad `json:"custodios,omitempty"`
 
@@ -1380,8 +1406,11 @@ type UnidadAsignada struct {
 // UnidadEntrada Alta de unidad. El `tipo` NO se envía: se deriva del vehículo. `activa` es opcional al crear (el servidor decide el valor por defecto). Espejo de `UnidadEntrada` de `operacion`.
 type UnidadEntrada struct {
 	// Activa Opcional al crear. Si se omite, el servidor fija el valor por defecto.
-	Activa       *bool `json:"activa,omitempty"`
-	CustodiosIds []Id  `json:"custodios_ids"`
+	Activa *bool `json:"activa,omitempty"`
+
+	// ClienteId Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2), dato del roster que no define el alcance (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
+	ClienteId    *openapi_types.UUID `json:"cliente_id"`
+	CustodiosIds []Id                `json:"custodios_ids"`
 
 	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
 	VehiculoId Id `json:"vehiculo_id"`
@@ -1399,16 +1428,28 @@ type UnidadEscoltaEmergencia struct {
 	Tipo string `json:"tipo"`
 }
 
-// UnidadModificacion Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). Espejo de `UnidadModificacion` de `operacion`.
+// UnidadModificacion Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). Espejo de `UnidadModificacion` de `operacion`. Propiedad ausente = no se toca.
 type UnidadModificacion struct {
-	Activa       *bool `json:"activa,omitempty"`
-	CustodiosIds *[]Id `json:"custodios_ids,omitempty"`
+	Activa *bool `json:"activa,omitempty"`
+
+	// ClienteId Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13). Dato del roster: no cambia el alcance del monitoreo (DEC-149 #18).
+	ClienteId    *openapi_types.UUID `json:"cliente_id"`
+	CustodiosIds *[]Id               `json:"custodios_ids,omitempty"`
 
 	// VehiculoId Identificador único (UUID). Nunca un correlativo expuesto.
 	VehiculoId *Id `json:"vehiculo_id,omitempty"`
 }
 
-// UnidadesSujetoEntrada Conjunto completo de unidades del Monitorista; reemplaza al anterior. Espejo de `UnidadesSujetoEntrada` de `identidad`.
+// UnidadViajeResumen defines model for UnidadViajeResumen.
+type UnidadViajeResumen struct {
+	// Economico Número económico del vehículo de la unidad, de `catalogos`. Ausente si el vehículo no lo tiene capturado o ya no existe en el catálogo: el consumidor muestra el `id`.
+	Economico *string `json:"economico,omitempty"`
+
+	// Id Identificador único (UUID). Nunca un correlativo expuesto.
+	Id Id `json:"id"`
+}
+
+// UnidadesSujetoEntrada Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes' (`ClientesSujetoEntrada`). Se elimina en una ola posterior. Conjunto completo de unidades del Monitorista; reemplaza al anterior. Espejo de `UnidadesSujetoEntrada` de `identidad`.
 type UnidadesSujetoEntrada struct {
 	// UnidadesIds Ids de unidades del roster. Vacía para quitarle todas.
 	UnidadesIds []Id `json:"unidades_ids"`
@@ -1576,12 +1617,18 @@ type ViajeInterno struct {
 
 // ViajeResumen defines model for ViajeResumen.
 type ViajeResumen struct {
+	// Cliente Cliente del viaje (DEC-149 #11). Solo audiencia Interno: el `bff` lo omite para el Cliente (DEC-149 #14). El `nombre` lo compone el `bff` desde `catalogos`.
+	Cliente *ClienteViajeResumen `json:"cliente,omitempty"`
+
 	// Estado Token de estado tal como lo publica `operacion` (ADR 19).
 	Estado string `json:"estado"`
 
 	// Id Identificador único (UUID). Nunca un correlativo expuesto.
 	Id     Id     `json:"id"`
 	Origen string `json:"origen"`
+
+	// Unidades Unidades de la escolta vigente del viaje (DEC-149 #11), con su número económico legible que compone el `bff` desde `catalogos` (como `vehiculo` en `Unidad`, tracer.38). Vacío o ausente si el viaje no tiene escolta asignada. Solo audiencia Interno: el `bff` lo omite para el Cliente, cuyo portal no muestra la escolta (DEC-001, DEC-149 #14).
+	Unidades *[]UnidadViajeResumen `json:"unidades,omitempty"`
 }
 
 // ViajeSeguimiento defines model for ViajeSeguimiento.
@@ -1820,6 +1867,9 @@ type AltaSujetoJSONRequestBody = AltaSujetoEntrada
 
 // EditarSujetoJSONRequestBody defines body for EditarSujeto for application/json ContentType.
 type EditarSujetoJSONRequestBody = EdicionSujetoEntrada
+
+// FijarClientesSujetoJSONRequestBody defines body for FijarClientesSujeto for application/json ContentType.
+type FijarClientesSujetoJSONRequestBody = ClientesSujetoEntrada
 
 // FijarSubordinadosSujetoJSONRequestBody defines body for FijarSubordinadosSujeto for application/json ContentType.
 type FijarSubordinadosSujetoJSONRequestBody = SubordinadosSujetoEntrada
@@ -2132,6 +2182,11 @@ type ClientInterface interface {
 
 	// ObtenerAlcanceSujeto request
 	ObtenerAlcanceSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// FijarClientesSujetoWithBody request with any body
+	FijarClientesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	FijarClientesSujeto(ctx context.Context, id Id, body FijarClientesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// FijarSubordinadosSujetoWithBody request with any body
 	FijarSubordinadosSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3045,6 +3100,30 @@ func (c *Client) EditarSujeto(ctx context.Context, id Id, body EditarSujetoJSONR
 
 func (c *Client) ObtenerAlcanceSujeto(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewObtenerAlcanceSujetoRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarClientesSujetoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarClientesSujetoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) FijarClientesSujeto(ctx context.Context, id Id, body FijarClientesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFijarClientesSujetoRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5929,6 +6008,53 @@ func NewObtenerAlcanceSujetoRequest(server string, id Id) (*http.Request, error)
 	return req, nil
 }
 
+// NewFijarClientesSujetoRequest calls the generic FijarClientesSujeto builder with application/json body
+func NewFijarClientesSujetoRequest(server string, id Id, body FijarClientesSujetoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewFijarClientesSujetoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewFijarClientesSujetoRequestWithBody generates requests for FijarClientesSujeto with any type of body
+func NewFijarClientesSujetoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sujetos/%s/alcance/clientes", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewFijarSubordinadosSujetoRequest calls the generic FijarSubordinadosSujeto builder with application/json body
 func NewFijarSubordinadosSujetoRequest(server string, id Id, body FijarSubordinadosSujetoJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -8101,6 +8227,11 @@ type ClientWithResponsesInterface interface {
 	// ObtenerAlcanceSujetoWithResponse request
 	ObtenerAlcanceSujetoWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerAlcanceSujetoResponse, error)
 
+	// FijarClientesSujetoWithBodyWithResponse request with any body
+	FijarClientesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarClientesSujetoResponse, error)
+
+	FijarClientesSujetoWithResponse(ctx context.Context, id Id, body FijarClientesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarClientesSujetoResponse, error)
+
 	// FijarSubordinadosSujetoWithBodyWithResponse request with any body
 	FijarSubordinadosSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarSubordinadosSujetoResponse, error)
 
@@ -9025,6 +9156,7 @@ type ListarEmergenciasViajeResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 }
 
 // Status returns HTTPResponse.Status
@@ -9362,6 +9494,32 @@ func (r ObtenerAlcanceSujetoResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ObtenerAlcanceSujetoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type FijarClientesSujetoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r FijarClientesSujetoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FijarClientesSujetoResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -9706,6 +9864,7 @@ type ListarViajesResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PaginaViajesResumen
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 }
 
 // Status returns HTTPResponse.Status
@@ -10238,6 +10397,7 @@ type FijarEtaResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -10418,6 +10578,7 @@ type TransicionarViajeResponse struct {
 	JSON400      *SolicitudInvalida
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
+	JSON404      *NoEncontrado
 	JSON409      *Error
 }
 
@@ -11001,6 +11162,23 @@ func (c *ClientWithResponses) ObtenerAlcanceSujetoWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParseObtenerAlcanceSujetoResponse(rsp)
+}
+
+// FijarClientesSujetoWithBodyWithResponse request with arbitrary body returning *FijarClientesSujetoResponse
+func (c *ClientWithResponses) FijarClientesSujetoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FijarClientesSujetoResponse, error) {
+	rsp, err := c.FijarClientesSujetoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarClientesSujetoResponse(rsp)
+}
+
+func (c *ClientWithResponses) FijarClientesSujetoWithResponse(ctx context.Context, id Id, body FijarClientesSujetoJSONRequestBody, reqEditors ...RequestEditorFn) (*FijarClientesSujetoResponse, error) {
+	rsp, err := c.FijarClientesSujeto(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFijarClientesSujetoResponse(rsp)
 }
 
 // FijarSubordinadosSujetoWithBodyWithResponse request with arbitrary body returning *FijarSubordinadosSujetoResponse
@@ -13085,6 +13263,13 @@ func ParseListarEmergenciasViajeResponse(rsp *http.Response) (*ListarEmergencias
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	return response, nil
@@ -13695,6 +13880,60 @@ func ParseObtenerAlcanceSujetoResponse(rsp *http.Response) (*ObtenerAlcanceSujet
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseFijarClientesSujetoResponse parses an HTTP response from a FijarClientesSujetoWithResponse call
+func ParseFijarClientesSujetoResponse(rsp *http.Response) (*FijarClientesSujetoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FijarClientesSujetoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
@@ -14395,6 +14634,13 @@ func ParseListarViajesResponse(rsp *http.Response) (*ListarViajesResponse, error
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	}
 
@@ -15432,6 +15678,13 @@ func ParseFijarEtaResponse(rsp *http.Response) (*FijarEtaResponse, error) {
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15795,6 +16048,13 @@ func ParseTransicionarViajeResponse(rsp *http.Response) (*TransicionarViajeRespo
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Error
