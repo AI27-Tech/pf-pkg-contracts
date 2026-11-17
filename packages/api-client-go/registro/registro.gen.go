@@ -164,6 +164,14 @@ var Tipos = []TipoEvento{
 		Sensibilidad:         SensibilidadAmplia,
 	},
 	{
+		Tipo:                 "alcance.cambiado",
+		Version:              1,
+		Productor:            "identidad",
+		ConsumidoresDurables: []string{"operacion", "reportes", "mensajeria"},
+		Agregado:             "sujeto_id",
+		Sensibilidad:         SensibilidadAmplia,
+	},
+	{
 		Tipo:                 "conversacion.abierta",
 		Version:              1,
 		Productor:            "mensajeria",

@@ -57,7 +57,7 @@ export interface paths {
         };
         /**
          * Listar viajes con filtros, por alcance.
-         * @description Alcance de flota para interno; alcance de tenant para cliente (P9, P10).
+         * @description Reenvía a `operacion.listarViajes`, que filtra por el alcance del llamante (DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los viajes de sus clientes efectivos ("mis clientes") desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). Para la audiencia Interno el `bff` agrega a cada fila `cliente` y `unidades`; para el Cliente los omite (DEC-149 #14).
          */
         get: operations["listarViajes"];
         put?: never;
@@ -105,7 +105,7 @@ export interface paths {
         };
         /**
          * Descargar el expediente de un viaje (solo interno).
-         * @description Compone ficha técnica, histórico de bitácora y auditoría relevante del viaje en un expediente de exportación. Audiencia interna; un operativo fuera de su alcance recibe 403 antes de componer nada. Un viaje inexistente o fuera de alcance devuelve 404. Cada descarga exitosa deja un registro de auditoría (actor, viaje, momento; E1-T7): el rastro lo escribe `operacion` en su transacción vía `registrarDescargaViaje`, no el `bff` (que no tiene base de datos).
+         * @description Compone ficha técnica, histórico de bitácora y auditoría relevante del viaje en un expediente de exportación. Audiencia interna. Un viaje inexistente o fuera del alcance del llamante (DEC-149) devuelve 404 antes de componer nada; 403 es para el rol sin la acción. Cada descarga exitosa deja un registro de auditoría (actor, viaje, momento; E1-T7): el rastro lo escribe `operacion` en su transacción vía `registrarDescargaViaje`, no el `bff` (que no tiene base de datos).
          */
         get: operations["descargarViaje"];
         put?: never;
@@ -127,7 +127,7 @@ export interface paths {
         };
         /**
          * Detalle interno del viaje con estado canónico (audiencia interna).
-         * @description Reenvía a `operacion.obtenerViaje`. Devuelve el `estado` canónico (token de `EstadoViaje`, ADR 19) y las condiciones activas como dato separado, para que el frontend interno derive las acciones ofrecidas desde la máquina de estados generada. Audiencia interna: un usuario fuera del alcance del viaje recibe 403; un viaje inexistente o fuera de alcance, 404.
+         * @description Reenvía a `operacion.obtenerViaje`. Devuelve el `estado` canónico (token de `EstadoViaje`, ADR 19) y las condiciones activas como dato separado, para que el frontend interno derive las acciones ofrecidas desde la máquina de estados generada. Audiencia interna. Un viaje inexistente o fuera del alcance del llamante (DEC-149) responde 404. `ejecutivo` y `reaccion` reciben 403 (DEC-149 #16): Reacción ve el viaje de su caso por `obtenerEmergencia`.
          */
         get: operations["obtenerViajeInterno"];
         put?: never;
@@ -778,7 +778,7 @@ export interface paths {
         put?: never;
         /**
          * Cerrar administrativamente el caso por su id (resuelta -> cerrada).
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.cerrarEmergenciaPorId`. Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje del caso (eje de monitoreo por unidad), o Administrator global (ADR 21 §5). NUNCA Reacción ni Ejecutivo (E8-T18, DEC-045 #9, DEC-121 #5), tampoco por el mando de DEC-099: responden `403`. No exige texto. `cerrada` es irreversible.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.cerrarEmergenciaPorId`. Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje del caso (alcance por cliente, DEC-149 #6), o Administrator global (ADR 21 §5). Un caso de un viaje fuera de alcance responde `404`. NUNCA Reacción ni Ejecutivo (E8-T18, DEC-045 #9, DEC-121 #5), tampoco por el mando de DEC-099: responden `403`. No exige texto. `cerrada` es irreversible.
          */
         post: operations["cerrarEmergenciaPorId"];
         delete?: never;
@@ -868,7 +868,7 @@ export interface paths {
         put?: never;
         /**
          * Crear una unidad del roster (audiencia interna).
-         * @description Solo audiencia Interno. Reenvía a `operacion.crearUnidad`. Crean `jefe_operativo` y `administrador` (DEC-142 #3). El `tipo` no se envía: se deriva del vehículo. El vehículo y los custodios no pueden estar en otra unidad activa (DEC-142 #4). Responde 400 si el vehículo o algún custodio no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
+         * @description Solo audiencia Interno. Reenvía a `operacion.crearUnidad`. Crean `jefe_operativo` y `administrador` (DEC-142 #3). El `tipo` no se envía: se deriva del vehículo. El vehículo y los custodios no pueden estar en otra unidad activa (DEC-142 #4). `cliente_id` es opcional: el cliente al que sirve la unidad, dato del roster que no define el alcance (DEC-149 #2, #13 y #18). Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
          */
         post: operations["crearUnidad"];
         delete?: never;
@@ -898,8 +898,8 @@ export interface paths {
         head?: never;
         /**
          * Modificar una unidad del roster, incluido activar/desactivar (audiencia interna).
-         * @description Solo audiencia Interno. Reenvía a `operacion.modificarUnidad`. Modifican `jefe_operativo` y `administrador` (DEC-142 #3). Activar o desactivar es cambiar `activa`. La exclusividad (DEC-142 #4) se revisa también al reactivar. Una unidad con reserva en un viaje no terminal no se edita ni se desactiva: primero se reasigna la escolta de ese viaje (DEC-142 #5).
-         *     Responde 400 si el vehículo o algún custodio no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
+         * @description Solo audiencia Interno. Reenvía a `operacion.modificarUnidad`. Modifican `jefe_operativo` y `administrador` (DEC-142 #3). Activar o desactivar es cambiar `activa`; quitar el cliente es enviar `cliente_id: null` (DEC-149 #2 y #13). La exclusividad (DEC-142 #4) se revisa también al reactivar. Una unidad con reserva en un viaje no terminal no se edita ni se desactiva, tampoco su `cliente_id`: primero se reasigna la escolta de ese viaje (DEC-142 #5).
+         *     Responde 400 si el vehículo, algún custodio o el cliente no existe o está inactivo en `catalogos`, si hay custodios repetidos o si la cantidad de custodios no corresponde al tipo (patrulla: 1 o 2; moto: 1, ADR 31). Otro rol responde 403.
          */
         patch: operations["modificarUnidad"];
         trace?: never;
@@ -1140,7 +1140,7 @@ export interface paths {
         };
         /**
          * Alcance de monitoreo de un usuario (audiencia interna, B-4).
-         * @description Solo audiencia Interno. Reenvía a `identidad.obtenerAlcanceSujeto`: unidades propias, subordinados directos y unidades efectivas (la unión por jerarquía, DEC-140 #2). Lee `administrador`. El `jefe_operativo` lee solo el alcance de un Monitorista; el de un usuario con otro rol le responde 403. Otro rol responde 403.
+         * @description Solo audiencia Interno. Reenvía a `identidad.obtenerAlcanceSujeto`: clientes propios ("mis clientes"), subordinados directos y clientes efectivos (la unión por jerarquía, DEC-140 #2, DEC-149 #18). Los campos de unidades están deprecados. Lee `administrador`. El `jefe_operativo` lee solo el alcance de un Monitorista; el de un usuario con otro rol le responde 403. Otro rol responde 403.
          */
         get: operations["obtenerAlcanceSujeto"];
         put?: never;
@@ -1163,10 +1163,34 @@ export interface paths {
         };
         get?: never;
         /**
-         * Fijar "mis unidades" de un Monitorista (audiencia interna).
-         * @description Solo audiencia Interno. Valida contra `operacion` que cada unidad exista en el roster y reenvía a `identidad.fijarUnidadesSujeto`. Reemplaza el conjunto completo (idempotente); una unidad puede estar en la lista de varios Monitoristas (DEC-145 #1). Escriben `administrador` y `jefe_operativo` (DEC-140 #1, DEC-142 #2); otro rol responde 403. Responde 400 si alguna unidad no existe en el roster.
+         * Fijar "mis unidades" de un Monitorista (audiencia interna). Deprecada.
+         * @deprecated
+         * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes' (`fijarClientesSujeto`). Se elimina en una ola posterior. Ya no define el alcance. Solo audiencia Interno. Valida contra `operacion` que cada unidad exista en el roster y reenvía a `identidad.fijarUnidadesSujeto`. Reemplaza el conjunto completo (idempotente); una unidad puede estar en la lista de varios Monitoristas (DEC-145 #1). Escriben `administrador` y `jefe_operativo` (DEC-140 #1, DEC-142 #2); otro rol responde 403. Responde 400 si alguna unidad no existe en el roster.
          */
         put: operations["fijarUnidadesSujeto"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sujetos/{id}/alcance/clientes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Fijar "mis clientes" de un Monitorista (audiencia interna).
+         * @description Solo audiencia Interno. Valida contra `catalogos` que cada cliente exista y reenvía a `identidad.fijarClientesSujeto`. Reemplaza el conjunto completo (idempotente); un cliente puede estar en la lista de varios Monitoristas (DEC-149 #18). El Monitorista ve todos los viajes de esos clientes desde `APROBADO`. Escriben `administrador` y `jefe_operativo` (DEC-149 #18); otro rol responde 403. Responde 400 si algún cliente no existe en `catalogos`.
+         */
+        put: operations["fijarClientesSujeto"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1443,7 +1467,7 @@ export interface paths {
         };
         /**
          * Listar los adjuntos de un viaje con sus metadatos (audiencia interna).
-         * @description Reenvía a `operacion.listarAdjuntos`. No devuelve bytes. El `estado_escaneo` de cada adjunto se refresca releyendo esta lista (sondeo HTTP, ADR 27): no hay evento de empuje para el fin del escaneo. Un usuario fuera del alcance del viaje recibe 403 antes de listar nada.
+         * @description Reenvía a `operacion.listarAdjuntos`. No devuelve bytes. El `estado_escaneo` de cada adjunto se refresca releyendo esta lista (sondeo HTTP, ADR 27): no hay evento de empuje para el fin del escaneo. Un viaje fuera del alcance del llamante responde 404 antes de listar nada (DEC-149).
          */
         get: operations["listarAdjuntos"];
         put?: never;
@@ -1467,7 +1491,7 @@ export interface paths {
         put?: never;
         /**
          * Intención de subida de un adjunto con autorización de vida corta.
-         * @description Reenvía a `operacion.crearIntencionSubidaAdjunto`. Los bytes NO pasan por el `bff`: el cliente los sube al almacenamiento de objetos con la URL devuelta. Un usuario fuera del alcance del viaje recibe 403 antes de emitir la intención.
+         * @description Reenvía a `operacion.crearIntencionSubidaAdjunto`. Los bytes NO pasan por el `bff`: el cliente los sube al almacenamiento de objetos con la URL devuelta. Un viaje fuera del alcance del llamante responde 404 antes de emitir la intención (DEC-149).
          */
         post: operations["crearIntencionSubidaAdjunto"];
         delete?: never;
@@ -1488,7 +1512,7 @@ export interface paths {
         };
         /**
          * Autorización de vida corta para descargar un adjunto (audiencia interna).
-         * @description Reenvía a `operacion.descargarAdjunto`. Devuelve una URL de vida corta del almacenamiento de objetos; los bytes NO pasan por el `bff`. Cada descarga la audita `operacion`. Un usuario fuera del alcance recibe 403 antes de autorizar nada.
+         * @description Reenvía a `operacion.descargarAdjunto`. Devuelve una URL de vida corta del almacenamiento de objetos; los bytes NO pasan por el `bff`. Cada descarga la audita `operacion`. Un viaje fuera del alcance del llamante responde 404 antes de autorizar nada (DEC-149).
          */
         get: operations["descargarAdjunto"];
         put?: never;
@@ -1542,6 +1566,20 @@ export interface components {
             /** @description Token de estado tal como lo publica `operacion` (ADR 19). */
             estado: string;
             origen: string;
+            /** @description Cliente del viaje (DEC-149 #11). Solo audiencia Interno: el `bff` lo omite para el Cliente (DEC-149 #14). El `nombre` lo compone el `bff` desde `catalogos`. */
+            readonly cliente?: components["schemas"]["ClienteViajeResumen"];
+            /** @description Unidades de la escolta vigente del viaje (DEC-149 #11), con su número económico legible que compone el `bff` desde `catalogos` (como `vehiculo` en `Unidad`, tracer.38). Vacío o ausente si el viaje no tiene escolta asignada. Solo audiencia Interno: el `bff` lo omite para el Cliente, cuyo portal no muestra la escolta (DEC-001, DEC-149 #14). */
+            readonly unidades?: components["schemas"]["UnidadViajeResumen"][];
+        };
+        ClienteViajeResumen: {
+            id: components["schemas"]["Id"];
+            /** @description Nombre del cliente en `catalogos`. Ausente si el cliente ya no existe en el catálogo: el consumidor muestra el `id`. */
+            nombre?: string;
+        };
+        UnidadViajeResumen: {
+            id: components["schemas"]["Id"];
+            /** @description Número económico del vehículo de la unidad, de `catalogos`. Ausente si el vehículo no lo tiene capturado o ya no existe en el catálogo: el consumidor muestra el `id`. */
+            economico?: string;
         };
         PaginaViajesResumen: {
             items: components["schemas"]["ViajeResumen"][];
@@ -1820,6 +1858,11 @@ export interface components {
             readonly vehiculo?: components["schemas"]["VehiculoUnidad"];
             /** @description Nombre de cada custodio de `custodios_ids`, en el mismo orden (tracer.38, DT-19). Los compone el `bff` desde `catalogos`. Un custodio que ya no existe en el catálogo no aparece. */
             readonly custodios?: components["schemas"]["CustodioUnidad"][];
+            /**
+             * Format: uuid
+             * @description Cliente al que sirve la unidad (DEC-149 #2), id de `catalogos`. Espejo de `operacion`. Dato del roster para asignar la escolta y reconocer el préstamo; no define el alcance del monitoreo (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
+             */
+            cliente_id?: string | null;
         };
         /** @description Opcionales como en `catalogos`, donde el vehículo puede no tenerlos capturados. */
         VehiculoUnidad: {
@@ -1848,12 +1891,22 @@ export interface components {
             custodios_ids: components["schemas"]["Id"][];
             /** @description Opcional al crear. Si se omite, el servidor fija el valor por defecto. */
             activa?: boolean;
+            /**
+             * Format: uuid
+             * @description Opcional; mismo formato que `Id`. Cliente al que sirve la unidad (DEC-149 #2), dato del roster que no define el alcance (DEC-149 #18). null o ausente = sin cliente (DEC-149 #13).
+             */
+            cliente_id?: string | null;
         };
-        /** @description Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). Espejo de `UnidadModificacion` de `operacion`. */
+        /** @description Modificación de unidad. Todos los campos son opcionales; activar o desactivar es cambiar `activa`. El `tipo` nunca se envía (derivado). Espejo de `UnidadModificacion` de `operacion`. Propiedad ausente = no se toca. */
         UnidadModificacion: {
             vehiculo_id?: components["schemas"]["Id"];
             custodios_ids?: components["schemas"]["Id"][];
             activa?: boolean;
+            /**
+             * Format: uuid
+             * @description Id de `catalogos` para fijar o cambiar el cliente al que sirve la unidad; `null` para quitarlo (DEC-149 #2 y #13). Dato del roster: no cambia el alcance del monitoreo (DEC-149 #18).
+             */
+            cliente_id?: string | null;
         };
         /** @description Vehículo de la flota de AI27 (átomo de `catalogos`). Espejo de `Vehiculo` de `catalogos`. */
         Vehiculo: {
@@ -2006,19 +2059,37 @@ export interface components {
             /** @description Cuántas sesiones vivas se revocaron. 0 si no tenía ninguna. */
             sesiones_revocadas: number;
         };
-        /** @description Alcance de monitoreo (DEC-140). Espejo de `AlcanceSujeto` de `identidad`. */
+        /** @description Alcance de monitoreo (DEC-140, DEC-149 #18): los clientes efectivos. Espejo de `AlcanceSujeto` de `identidad`. */
         AlcanceSujeto: {
-            /** @description Unidades asignadas directamente ("mis unidades"); solo un Monitorista tiene. */
+            /** @description Clientes asignados directamente ("mis clientes"); solo un Monitorista tiene. Ids de `catalogos`. */
+            clientes_ids: components["schemas"]["Id"][];
+            /** @description Unión, sin repetidos, de los clientes propios y los de los subordinados (DEC-140 #2). Es el alcance del monitoreo. */
+            clientes_efectivos_ids: components["schemas"]["Id"][];
+            /**
+             * @deprecated
+             * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'. Se elimina en una ola posterior. Unidades asignadas directamente ("mis unidades"); ya no definen el alcance.
+             */
             unidades_ids: components["schemas"]["Id"][];
             /** @description Subordinados directos (Monitoristas de un Supervisor, Supervisores de un Coordinador). */
             subordinados_ids: components["schemas"]["Id"][];
-            /** @description Unión, sin repetidos, de las unidades propias y las de los subordinados (DEC-140 */
+            /**
+             * @deprecated
+             * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes'. Se elimina en una ola posterior. Unión de las unidades propias y las de los subordinados; ya no define el alcance.
+             */
             unidades_efectivas_ids: components["schemas"]["Id"][];
         };
-        /** @description Conjunto completo de unidades del Monitorista; reemplaza al anterior. Espejo de `UnidadesSujetoEntrada` de `identidad`. */
+        /**
+         * @deprecated
+         * @description Retirado por DEC-149 #18: el alcance se asigna como 'mis clientes' (`ClientesSujetoEntrada`). Se elimina en una ola posterior. Conjunto completo de unidades del Monitorista; reemplaza al anterior. Espejo de `UnidadesSujetoEntrada` de `identidad`.
+         */
         UnidadesSujetoEntrada: {
             /** @description Ids de unidades del roster. Vacía para quitarle todas. */
             unidades_ids: components["schemas"]["Id"][];
+        };
+        /** @description Conjunto completo de clientes del Monitorista ("mis clientes"); reemplaza al anterior. Espejo de `ClientesSujetoEntrada` de `identidad`. */
+        ClientesSujetoEntrada: {
+            /** @description Ids de cliente de `catalogos`. Vacía para quitarle todos. */
+            clientes_ids: components["schemas"]["Id"][];
         };
         /** @description Conjunto completo de subordinados directos; reemplaza al anterior. Espejo de `SubordinadosSujetoEntrada` de `identidad`. */
         SubordinadosSujetoEntrada: {
@@ -2730,6 +2801,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
         };
     };
     crearViaje: {
@@ -2916,6 +2988,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
             /** @description Transición no permitida. `codigo` de máquina en el cuerpo: `transicion_no_permitida` (arista inexistente o carrera), `cierre_anticipado_solo_por_incidencia` (cierre desde `EN_TRANSITO` con motivo distinto de `por_incidencia`) o `cierre_anticipado_requiere_incidencia` (cierre anticipado sin `INCIDENCIA` abierta). La UI ramifica por el `codigo`, no por el `mensaje` (DEC-020 #6 / DEC-113). */
             409: {
                 headers: {
@@ -3009,6 +3082,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
             /** @description El viaje está en un estado terminal y no admite fijar ETA. `codigo` de máquina `viaje_en_estado_terminal` en el cuerpo. */
             409: {
                 headers: {
@@ -3602,6 +3676,7 @@ export interface operations {
             400: components["responses"]["SolicitudInvalida"];
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
         };
     };
     activarEmergenciaInterno: {
@@ -4670,6 +4745,44 @@ export interface operations {
         };
         responses: {
             /** @description Unidades fijadas. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description `codigo` de máquina `rol_sin_alcance` si el usuario no tiene rol activo `monitorista`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    fijarClientesSujeto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sujeto_id propio de AI27. */
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientesSujetoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Clientes fijados. */
             204: {
                 headers: {
                     [name: string]: unknown;

@@ -305,13 +305,13 @@ export interface paths {
         };
         /**
          * Listar los casos de emergencia de un viaje por audiencia.
-         * @description Para el cliente, la VISTA MÍNIMA (ADR 21 §6): solo casos en `abierta`, `en_atencion` o `resuelta`, identificados por fecha/hora, sin cuerpos de nota, contactos, recursos ni personal de Reacción. Para audiencia Interno, el caso completo de cualquier tenant (DEC-129): lo ven `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-135); otro rol interno responde `403`. Reacción trabaja desde la bandeja y el detalle por id. El alcance por unidad del monitoreo aún no se aplica (DT-07).
+         * @description Para el cliente, la VISTA MÍNIMA (ADR 21 §6): solo casos en `abierta`, `en_atencion` o `resuelta`, identificados por fecha/hora, sin cuerpos de nota, contactos, recursos ni personal de Reacción. Para audiencia Interno, el caso completo de cualquier tenant (DEC-129): lo ven `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-135); otro rol interno responde `403`. Reacción trabaja desde la bandeja y el detalle por id. El monitoreo solo ve los casos de viajes de su alcance por cliente (DEC-149 #6); fuera de alcance, `404`.
          */
         get: operations["listarEmergencias"];
         put?: never;
         /**
          * Activar una emergencia sobre el viaje (idempotente por activacion_id).
-         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador), activan el caso (ADR 21 §1, DEC-045 #9); otro rol interno responde `403`. Habilitada desde `SOLICITADO` en estados no terminales; denegada en `CERRADO`, `CANCELADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje (DT-16).
+         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por cliente (DEC-149 #6), activan el caso (ADR 21 §1, DEC-045 #9); otro rol interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde `SOLICITADO` en estados no terminales; denegada en `CERRADO`, `CANCELADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje (DT-16).
          *     Idempotente por `activacion_id` del llamante (ADR 21 §2, mismo patrón que `enviarMensaje`): reentregar la misma activación devuelve el MISMO caso con 200 y no crea un duplicado; una pulsación nueva con otro `activacion_id` crea OTRO caso con 201, aunque ya exista uno abierto. No crea incidencia ni condición.
          */
         post: operations["activarEmergencia"];
@@ -458,7 +458,7 @@ export interface paths {
         put?: never;
         /**
          * Cerrar administrativamente el caso (resuelta -> cerrada).
-         * @description Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje, o Administrator global (ADR 21 §5). No exige texto. Reacción no cierra y el Cliente no resuelve ni cierra. `cerrada` es irreversible.
+         * @description Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje (alcance por cliente, DEC-149 #6), o Administrator global (ADR 21 §5). Un viaje fuera de alcance responde `404`. No exige texto. Reacción no cierra y el Cliente no resuelve ni cierra. `cerrada` es irreversible.
          */
         post: operations["cerrarEmergencia"];
         delete?: never;
@@ -643,7 +643,7 @@ export interface paths {
         put?: never;
         /**
          * Cerrar administrativamente el caso por su id (resuelta -> cerrada).
-         * @description Gemela de `cerrarEmergencia` sin `{id}` de viaje; `mensajeria` resuelve el viaje del caso para evaluar el alcance. Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje (eje de monitoreo por unidad), o Administrator global (ADR 21 §5). NUNCA Reacción ni Ejecutivo (E8-T18, DEC-045 #9, DEC-121 #5), tampoco por el mando de DEC-099: responden `403`. No exige texto. `cerrada` es irreversible.
+         * @description Gemela de `cerrarEmergencia` sin `{id}` de viaje; `mensajeria` resuelve el viaje del caso para evaluar el alcance. Solo Monitorista/Supervisor/Coordinador dentro del alcance del viaje (alcance por cliente, DEC-149 #6), o Administrator global (ADR 21 §5). Un caso de un viaje fuera de alcance responde `404`. NUNCA Reacción ni Ejecutivo (E8-T18, DEC-045 #9, DEC-121 #5), tampoco por el mando de DEC-099: responden `403`. No exige texto. `cerrada` es irreversible.
          */
         post: operations["cerrarEmergenciaPorId"];
         delete?: never;
