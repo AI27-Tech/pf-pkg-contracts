@@ -1188,7 +1188,7 @@ export interface paths {
         get?: never;
         /**
          * Fijar "mis clientes" de un Monitorista (audiencia interna).
-         * @description Solo audiencia Interno. Valida contra `catalogos` que cada cliente exista y reenvía a `identidad.fijarClientesSujeto`. Reemplaza el conjunto completo (idempotente); un cliente puede estar en la lista de varios Monitoristas (DEC-149 #18). El Monitorista ve todos los viajes de esos clientes desde `APROBADO`. Escriben `administrador` y `jefe_operativo` (DEC-149 #18); otro rol responde 403. Responde 400 si algún cliente no existe en `catalogos`.
+         * @description Solo audiencia Interno. Valida contra `catalogos` que cada cliente exista y reenvía a `identidad.fijarClientesSujeto`. Reemplaza el conjunto completo (idempotente); un cliente puede estar en la lista de varios Monitoristas (DEC-149 #18). El Monitorista ve todos los viajes de esos clientes desde `APROBADO`. Escriben `administrador` y `jefe_operativo` (DEC-149 #18); otro rol responde 403. Responde 400 si algún cliente no existe en `catalogos` o su organización está desactivada (DEC-149 #21). Un cliente ya asignado que se desactiva después se queda en la lista.
          */
         put: operations["fijarClientesSujeto"];
         post?: never;

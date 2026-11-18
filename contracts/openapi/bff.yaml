@@ -16,7 +16,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — bff
-  version: 0.1.0-tracer.41
+  version: 0.1.0-tracer.42
   description: >-
     Superficie pública del tracer: sesión propia del llamante y lectura
     compuesta de viajes/hitos para los dos portales.
@@ -2312,7 +2312,9 @@ paths:
         varios Monitoristas (DEC-149 #18). El Monitorista ve todos los viajes
         de esos clientes desde `APROBADO`. Escriben `administrador` y
         `jefe_operativo` (DEC-149 #18); otro rol responde 403. Responde 400 si
-        algún cliente no existe en `catalogos`.
+        algún cliente no existe en `catalogos` o su organización está
+        desactivada (DEC-149 #21). Un cliente ya asignado que se desactiva
+        después se queda en la lista.
       requestBody:
         required: true
         content:
