@@ -48,6 +48,9 @@ type AlcanceEfectivo struct {
 	// ClientesEfectivosIds Igual que `AlcanceSujeto.clientes_efectivos_ids`: unión, sin repetidos, de los clientes del sujeto y los de sus subordinados. Ids de `catalogos`.
 	ClientesEfectivosIds []Id `json:"clientes_efectivos_ids"`
 
+	// IdpSubject Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual al `sub` de su token. Los consumidores indexan su proyección por este campo para encontrar el alcance de quien hace la petición (DEC-072, DEC-149 #22, tracer.42).
+	IdpSubject string `json:"idp_subject"`
+
 	// SujetoId Identificador único (UUID). Nunca un correlativo expuesto.
 	SujetoId Id `json:"sujeto_id"`
 }
