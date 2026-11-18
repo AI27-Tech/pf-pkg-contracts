@@ -312,6 +312,10 @@ export class RolRevocado extends Message<RolRevocado> {
  * unidades. La proyección se reconstruye con `identidad.listarAlcances`
  * (patrón ADR 26).
  *
+ * Los consumidores indexan su proyección por `idp_subject`, porque el token
+ * solo trae el `sub` opaco del IdP (DEC-072, DEC-149 #22, `tracer.42`). Si el
+ * `idp_subject` de un sujeto cambia, `identidad` vuelve a publicar su alcance.
+ *
  * @generated from message ai27.eventos.v1.AlcanceCambiado
  */
 export class AlcanceCambiado extends Message<AlcanceCambiado> {
@@ -335,6 +339,15 @@ export class AlcanceCambiado extends Message<AlcanceCambiado> {
    */
   cambiadoEn?: Timestamp;
 
+  /**
+   * Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual al
+   * `sub` de su token. Es la llave con que los consumidores buscan el alcance
+   * de quien hace la petición (DEC-149 #22, `tracer.42`).
+   *
+   * @generated from field: string idp_subject = 4;
+   */
+  idpSubject = "";
+
   constructor(data?: PartialMessage<AlcanceCambiado>) {
     super();
     proto3.util.initPartial(data, this);
@@ -346,6 +359,7 @@ export class AlcanceCambiado extends Message<AlcanceCambiado> {
     { no: 1, name: "sujeto_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "clientes_efectivos_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 3, name: "cambiado_en", kind: "message", T: Timestamp },
+    { no: 4, name: "idp_subject", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AlcanceCambiado {

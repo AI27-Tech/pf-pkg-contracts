@@ -3,6 +3,25 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-17 [tracer.42] — `idp_subject` en el alcance de monitoreo (DEC-149 #21 y #22)
+
+**Para quién:** `pf-svc-identidad` (llenar `idp_subject` en `alcance.cambiado` y `listarAlcances`), `pf-svc-operacion`, `pf-svc-reportes` y `pf-svc-mensajeria` (indexar su proyección de alcance por `idp_subject`) y `pf-svc-bff` (rechazar organizaciones desactivadas en `fijarClientesSujeto`).
+
+**Resumen:** ola aditiva. Corrige un hueco de `tracer.41`: el token solo trae el `sub` opaco del IdP y el `sujeto_id` se resuelve en `identidad` (DEC-072), así que un consumidor no podía encontrar el alcance de quien hace la petición. El alcance ahora viaja con el `idp_subject` del sujeto.
+
+**Reglas:**
+- `alcance.cambiado` y `AlcanceEfectivo` (`listarAlcances`) llevan `idp_subject`, igual al `sub` del token del sujeto. Los consumidores indexan su proyección por él (DEC-149 #22).
+- Si el `idp_subject` de un sujeto cambia, `identidad` vuelve a publicar su alcance.
+- `fijarClientesSujeto` del `bff`: `400` si algún cliente no existe o su organización está desactivada; un cliente ya asignado que se desactiva después se queda en la lista (DEC-149 #21). Solo cambia la descripción.
+
+**Cambios:**
+- `contracts/events/ai27/eventos/v1/sujeto.proto`: campo `idp_subject = 4` en `AlcanceCambiado`.
+- `contracts/openapi/identidad.yaml`: `AlcanceEfectivo.idp_subject` (obligatorio en la respuesta).
+- `contracts/openapi/bff.yaml`: descripción de `fijarClientesSujeto`.
+- `VERSION`, `info.version`, `INVENTARIO.md` y `packages/api-client-ts/package.json` a `0.1.0-tracer.42`. Regenerados los clientes Go y TS.
+
+**Aviso al subir el pin del cliente Go (git-workflow §8):** sin enums nuevos ni constantes renombradas.
+
 ## 2026-11-13 17:29 [tracer.41] — alcance del monitoreo por cliente: "mis clientes" (DEC-149 #18 a #20, DT-07)
 
 **Para quién:** `pf-svc-identidad` ("mis clientes", clientes efectivos por jerarquía, `alcance.cambiado` y su snapshot), `pf-svc-operacion` (cliente de la unidad como dato del roster, proyección de `alcance.cambiado` y filtro por cliente en los viajes), `pf-svc-reportes` y `pf-svc-mensajeria` (proyección de `alcance.cambiado` y filtro por cliente), `pf-svc-bff` (`fijarClientesSujeto` con validación contra `catalogos`, cliente de la unidad, `cliente` y `unidades` de `ViajeResumen`, `403` de Ejecutivo y Reacción) y el panel interno (`/roster` con "mis clientes" y el cliente de la unidad, bandeja con cliente y unidades).
