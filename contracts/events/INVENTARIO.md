@@ -1,4 +1,4 @@
-# Inventario contractual de eventos — tracer `v0.1.0-tracer.41`
+# Inventario contractual de eventos — tracer `v0.1.0-tracer.42`
 
 > **La tabla de abajo es prosa; el dato legible por máquina es
 > `contracts/events/registro.tipos.yaml`.** Desde `tracer.2` el registro es un
@@ -82,7 +82,7 @@ Reglas que este inventario materializa:
   `sujeto.creado` + `rol.asignado` en la misma transacción. Son la fuente de la
   proyección de pool de `mensajeria`. El alcance viaja en `alcance.cambiado`
   (ver abajo).
-- **`alcance.cambiado`** (`tracer.41`, DEC-149 #18 y #20) — Alcance de
+- **`alcance.cambiado`** (`tracer.41`, DEC-149 #18 y #20; `idp_subject` en `tracer.42`, DEC-149 #22) — Alcance de
   monitoreo por cliente. `identidad`, dueño de "mis clientes" y de la
   jerarquía, lo publica con los clientes efectivos del sujeto para cada sujeto
   cuyo conjunto cambie: el Monitorista al fijar "mis clientes", y su Supervisor

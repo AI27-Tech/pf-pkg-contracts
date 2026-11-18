@@ -17,7 +17,7 @@
 openapi: 3.0.3
 info:
   title: AI27 — identidad
-  version: 0.1.0-tracer.41
+  version: 0.1.0-tracer.42
   description: >-
     Autenticación, sesión y alcance del tracer. Fuente de verdad de la
     revocación (evento `sesion.revocada`, ADR 26).
@@ -982,12 +982,19 @@ components:
     AlcanceEfectivo:
       type: object
       additionalProperties: false
-      required: [sujeto_id, clientes_efectivos_ids, cambiado_en]
+      required: [sujeto_id, idp_subject, clientes_efectivos_ids, cambiado_en]
       description: >-
         Clientes efectivos de un sujeto. Coincide en forma con el payload del
         evento `alcance.cambiado` (contracts/events, DEC-149 #20).
       properties:
         sujeto_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        idp_subject:
+          type: string
+          description: >-
+            Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual
+            al `sub` de su token. Los consumidores indexan su proyección por
+            este campo para encontrar el alcance de quien hace la petición
+            (DEC-072, DEC-149 #22, tracer.42).
         clientes_efectivos_ids:
           type: array
           description: >-

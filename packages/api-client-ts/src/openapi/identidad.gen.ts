@@ -524,6 +524,8 @@ export interface components {
         /** @description Clientes efectivos de un sujeto. Coincide en forma con el payload del evento `alcance.cambiado` (contracts/events, DEC-149 #20). */
         AlcanceEfectivo: {
             sujeto_id: components["schemas"]["Id"];
+            /** @description Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual al `sub` de su token. Los consumidores indexan su proyección por este campo para encontrar el alcance de quien hace la petición (DEC-072, DEC-149 #22, tracer.42). */
+            idp_subject: string;
             /** @description Igual que `AlcanceSujeto.clientes_efectivos_ids`: unión, sin repetidos, de los clientes del sujeto y los de sus subordinados. Ids de `catalogos`. */
             clientes_efectivos_ids: components["schemas"]["Id"][];
             /** @description Momento del último cambio del conjunto. */
