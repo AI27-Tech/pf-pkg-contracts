@@ -195,6 +195,28 @@ paths:
               schema: {$ref: "#/components/schemas/PaginaAlcances"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
 
+  /api/v1/alcances/propio:
+    get:
+      operationId: obtenerMiAlcance
+      tags: [alcances]
+      summary: Clientes efectivos del usuario autenticado (DEC-149 #24).
+      description: >-
+        Devuelve los clientes efectivos del propio llamante, resuelto por el
+        `idp_subject` de su token (DEC-072): el usuario no necesita conocer su
+        `sujeto_id`. Es la lectura que distingue "sin clientes asignados" de
+        "sin viajes" en el panel (B-04). Lo leen `monitorista`, `supervisor` y
+        `coordinador`; otro rol responde 403. Un sujeto sin clientes efectivos
+        recibe la lista vacía con 200. No cambia la guarda de
+        `obtenerAlcanceSujeto`.
+      responses:
+        "200":
+          description: Clientes efectivos del llamante.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MiAlcance"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
   /api/v1/sujetos:
     get:
       operationId: listarSujetos
@@ -932,6 +954,22 @@ components:
           type: integer
           minimum: 0
           description: Cuántas sesiones vivas se revocaron. 0 si no tenía ninguna.
+
+    MiAlcance:
+      type: object
+      additionalProperties: false
+      required: [clientes_efectivos_ids]
+      description: >-
+        Alcance del propio usuario (DEC-149 #24). Solo los clientes efectivos:
+        no trae subordinados, superior ni campos de unidades.
+      properties:
+        clientes_efectivos_ids:
+          type: array
+          description: >-
+            Unión, sin repetidos, de los clientes propios y los de los
+            subordinados (DEC-140 #2). Es el alcance del monitoreo. Ids de
+            `catalogos`.
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
 
     AlcanceSujeto:
       type: object
