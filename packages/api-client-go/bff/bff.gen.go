@@ -988,6 +988,12 @@ type MensajeCliente struct {
 	Secuencia int64 `json:"secuencia"`
 }
 
+// MiAlcance Alcance del propio usuario (DEC-149 #24). Espejo de `MiAlcance` de `identidad`. Solo los clientes efectivos: no trae subordinados, superior ni campos de unidades.
+type MiAlcance struct {
+	// ClientesEfectivosIds Unión, sin repetidos, de los clientes propios y los de los subordinados (DEC-140 #2). Es el alcance del monitoreo. Ids de `catalogos`.
+	ClientesEfectivosIds []Id `json:"clientes_efectivos_ids"`
+}
+
 // MotivoCierre Motivo del cierre del viaje (DEC-113). Catálogo cerrado de V1: `normal` o `por_incidencia`. Espejo de `MotivoCierre` de `operacion`.
 type MotivoCierre string
 
@@ -2156,6 +2162,9 @@ type ClientInterface interface {
 
 	IniciarSesion(ctx context.Context, body IniciarSesionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ObtenerMiAlcance request
+	ObtenerMiAlcance(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// RefrescarSesionWithBody request with any body
 	RefrescarSesionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -2980,6 +2989,18 @@ func (c *Client) IniciarSesionWithBody(ctx context.Context, contentType string, 
 
 func (c *Client) IniciarSesion(ctx context.Context, body IniciarSesionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewIniciarSesionRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerMiAlcance(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerMiAlcanceRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -5666,6 +5687,33 @@ func NewIniciarSesionRequestWithBody(server string, contentType string, body io.
 	return req, nil
 }
 
+// NewObtenerMiAlcanceRequest generates requests for ObtenerMiAlcance
+func NewObtenerMiAlcanceRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sesion/alcance")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewRefrescarSesionRequest calls the generic RefrescarSesion builder with application/json body
 func NewRefrescarSesionRequest(server string, body RefrescarSesionJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -8200,6 +8248,9 @@ type ClientWithResponsesInterface interface {
 
 	IniciarSesionWithResponse(ctx context.Context, body IniciarSesionJSONRequestBody, reqEditors ...RequestEditorFn) (*IniciarSesionResponse, error)
 
+	// ObtenerMiAlcanceWithResponse request
+	ObtenerMiAlcanceWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ObtenerMiAlcanceResponse, error)
+
 	// RefrescarSesionWithBodyWithResponse request with any body
 	RefrescarSesionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RefrescarSesionResponse, error)
 
@@ -9324,6 +9375,30 @@ func (r IniciarSesionResponse) StatusCode() int {
 	return 0
 }
 
+type ObtenerMiAlcanceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MiAlcance
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerMiAlcanceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerMiAlcanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type RefrescarSesionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -10014,6 +10089,7 @@ type ObtenerAsignacionResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *EscoltaVigente
 	JSON401      *NoAutorizado
+	JSON403      *Prohibido
 	JSON404      *NoEncontrado
 }
 
@@ -11075,6 +11151,15 @@ func (c *ClientWithResponses) IniciarSesionWithResponse(ctx context.Context, bod
 		return nil, err
 	}
 	return ParseIniciarSesionResponse(rsp)
+}
+
+// ObtenerMiAlcanceWithResponse request returning *ObtenerMiAlcanceResponse
+func (c *ClientWithResponses) ObtenerMiAlcanceWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ObtenerMiAlcanceResponse, error) {
+	rsp, err := c.ObtenerMiAlcance(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerMiAlcanceResponse(rsp)
 }
 
 // RefrescarSesionWithBodyWithResponse request with arbitrary body returning *RefrescarSesionResponse
@@ -13550,6 +13635,46 @@ func ParseIniciarSesionResponse(rsp *http.Response) (*IniciarSesionResponse, err
 	return response, nil
 }
 
+// ParseObtenerMiAlcanceResponse parses an HTTP response from a ObtenerMiAlcanceWithResponse call
+func ParseObtenerMiAlcanceResponse(rsp *http.Response) (*ObtenerMiAlcanceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerMiAlcanceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MiAlcance
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseRefrescarSesionResponse parses an HTTP response from a RefrescarSesionWithResponse call
 func ParseRefrescarSesionResponse(rsp *http.Response) (*RefrescarSesionResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -14916,6 +15041,13 @@ func ParseObtenerAsignacionResponse(rsp *http.Response) (*ObtenerAsignacionRespo
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest NoEncontrado

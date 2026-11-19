@@ -28,6 +28,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sesion/alcance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Clientes efectivos del usuario autenticado (audiencia interna, DEC-149
+         * @description Solo audiencia Interno. Reenvía a `identidad.obtenerMiAlcance`, que resuelve al usuario por el `idp_subject` de su token: el panel no necesita su `sujeto_id`. Devuelve solo `clientes_efectivos_ids`. Lo leen `monitorista`, `supervisor` y `coordinador`; otro rol responde 403. Con la lista vacía y 200, el panel muestra "sin clientes asignados" y no "sin viajes" (B-04).
+         */
+        get: operations["obtenerMiAlcance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sesion/refresh": {
         parameters: {
             query?: never;
@@ -838,7 +858,7 @@ export interface paths {
         };
         /**
          * Escolta vigente del viaje, con sus unidades legibles (audiencia interna).
-         * @description Reenvía a `operacion.obtenerAsignacion` y compone cada unidad con el vehículo y los custodios legibles de `catalogos`, como `listarUnidades` (tracer.38). Es la lectura de la ficha técnica y del detalle del viaje: la escolta asignada a ESTE viaje, no el roster completo (DEC-142, E8-T12). Cualquier rol interno la lee; un actor Cliente recibe 404. `unidades` vacío con 200 si el viaje no tiene asignación vigente.
+         * @description Reenvía a `operacion.obtenerAsignacion` y compone cada unidad con el vehículo y los custodios legibles de `catalogos`, como `listarUnidades` (tracer.38). Es la lectura de la ficha técnica y del detalle del viaje: la escolta asignada a ESTE viaje, no el roster completo (DEC-142, E8-T12). La lee cualquier rol interno salvo `ejecutivo` y `reaccion`, que reciben 403 (DEC-149 #16 y #23); un actor Cliente recibe 404. `unidades` vacío con 200 si el viaje no tiene asignación vigente.
          */
         get: operations["obtenerAsignacion"];
         put?: never;
@@ -1188,7 +1208,7 @@ export interface paths {
         get?: never;
         /**
          * Fijar "mis clientes" de un Monitorista (audiencia interna).
-         * @description Solo audiencia Interno. Valida contra `catalogos` que cada cliente exista y reenvía a `identidad.fijarClientesSujeto`. Reemplaza el conjunto completo (idempotente); un cliente puede estar en la lista de varios Monitoristas (DEC-149 #18). El Monitorista ve todos los viajes de esos clientes desde `APROBADO`. Escriben `administrador` y `jefe_operativo` (DEC-149 #18); otro rol responde 403. Responde 400 si algún cliente no existe en `catalogos` o su organización está desactivada (DEC-149 #21). Un cliente ya asignado que se desactiva después se queda en la lista.
+         * @description Solo audiencia Interno. Valida contra `catalogos` que cada cliente exista y reenvía a `identidad.fijarClientesSujeto`. Reemplaza el conjunto completo (idempotente); un cliente puede estar en la lista de varios Monitoristas (DEC-149 #18). El Monitorista ve todos los viajes de esos clientes desde `APROBADO`. Escriben `administrador` y `jefe_operativo` (DEC-149 #18); otro rol responde 403. Responde 400 si algún cliente no existe en `catalogos` o su organización está desactivada (DEC-149 #21), también uno ya asignado que se desactivó después: la lista guardada lo conserva, y para editarla hay que quitarlo del payload.
          */
         put: operations["fijarClientesSujeto"];
         post?: never;
@@ -2059,6 +2079,11 @@ export interface components {
             /** @description Cuántas sesiones vivas se revocaron. 0 si no tenía ninguna. */
             sesiones_revocadas: number;
         };
+        /** @description Alcance del propio usuario (DEC-149 #24). Espejo de `MiAlcance` de `identidad`. Solo los clientes efectivos: no trae subordinados, superior ni campos de unidades. */
+        MiAlcance: {
+            /** @description Unión, sin repetidos, de los clientes propios y los de los subordinados (DEC-140 #2). Es el alcance del monitoreo. Ids de `catalogos`. */
+            clientes_efectivos_ids: components["schemas"]["Id"][];
+        };
         /** @description Alcance de monitoreo (DEC-140, DEC-149 #18): los clientes efectivos. Espejo de `AlcanceSujeto` de `identidad`. */
         AlcanceSujeto: {
             /** @description Clientes asignados directamente ("mis clientes"); solo un Monitorista tiene. Ids de `catalogos`. */
@@ -2751,6 +2776,28 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["NoAutorizado"];
+        };
+    };
+    obtenerMiAlcance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Clientes efectivos del llamante. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MiAlcance"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
         };
     };
     refrescarSesion: {
@@ -4067,6 +4114,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
         };
     };
