@@ -3,6 +3,27 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-19 [tracer.43] — el usuario lee su propio alcance; `403` y `400` documentados (DEC-149 #21, #23 y #24, B-04)
+
+**Para quién:** `pf-svc-identidad` (implementar `obtenerMiAlcance`), `pf-svc-bff` (reenviarlo), `pf-svc-core` (pins) y el panel interno (distinguir "sin clientes asignados" de "sin viajes", y el estado "sin permiso" de la ficha técnica).
+
+**Resumen:** ola aditiva. Agrega la lectura del propio alcance, sin id, y documenta dos comportamientos que el `bff` ya aplica.
+
+**Reglas:**
+- `obtenerMiAlcance` (DEC-149 #24): `GET /api/v1/alcances/propio` en `identidad` y `GET /api/v1/sesion/alcance` en `bff`. `identidad` resuelve al usuario por el `idp_subject` del token (DEC-072), así que el panel no necesita su `sujeto_id`. Devuelve solo `clientes_efectivos_ids`. Lo leen `monitorista`, `supervisor` y `coordinador`; otro rol, `403`. Un sujeto sin clientes efectivos recibe la lista vacía con `200`. La guarda de `obtenerAlcanceSujeto` no cambia.
+- `obtenerAsignacion` (DEC-149 #23): `403` a `ejecutivo` y `reaccion`. Ya lo aplica `pf-svc-bff` `v0.1.23`; este es el registro en el contrato.
+- `fijarClientesSujeto` (DEC-149 #21): `400` si algún cliente no existe o está desactivado, también uno ya asignado que se desactivó después. La lista guardada lo conserva; para editarla hay que quitarlo del payload. Ya lo aplica el `bff`.
+
+**Aviso al subir el pin del cliente Go (git-workflow §8):** sin enums nuevos ni constantes renombradas.
+
+**Cambios:**
+- `contracts/openapi/identidad.yaml`: operación `obtenerMiAlcance` y esquema `MiAlcance`.
+- `contracts/openapi/bff.yaml`: operación `obtenerMiAlcance`, esquema `MiAlcance`, respuesta `403` y descripción de `obtenerAsignacion`, y descripción de `fijarClientesSujeto`.
+- `VERSION` y `packages/api-client-ts/package.json`: `tracer.43`.
+- `packages/api-client-go` y `packages/api-client-ts`: regenerados con `make generate`.
+
+**Verificado:** `make generate`, `lint-openapi`, `breaking-openapi` (compatible con `tracer.42`), `check-version-ts` y `check-ts-exports`.
+
 ## 2026-11-17 [tracer.42] — `idp_subject` en el alcance de monitoreo (DEC-149 #21 y #22)
 
 **Para quién:** `pf-svc-identidad` (llenar `idp_subject` en `alcance.cambiado` y `listarAlcances`), `pf-svc-operacion`, `pf-svc-reportes` y `pf-svc-mensajeria` (indexar su proyección de alcance por `idp_subject`) y `pf-svc-bff` (rechazar organizaciones desactivadas en `fijarClientesSujeto`).

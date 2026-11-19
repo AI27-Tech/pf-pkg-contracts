@@ -111,6 +111,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alcances/propio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Clientes efectivos del usuario autenticado (DEC-149
+         * @description Devuelve los clientes efectivos del propio llamante, resuelto por el `idp_subject` de su token (DEC-072): el usuario no necesita conocer su `sujeto_id`. Es la lectura que distingue "sin clientes asignados" de "sin viajes" en el panel (B-04). Lo leen `monitorista`, `supervisor` y `coordinador`; otro rol responde 403. Un sujeto sin clientes efectivos recibe la lista vacía con 200. No cambia la guarda de `obtenerAlcanceSujeto`.
+         */
+        get: operations["obtenerMiAlcance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sujetos": {
         parameters: {
             query?: never;
@@ -502,6 +522,11 @@ export interface components {
             /** @description Cuántas sesiones vivas se revocaron. 0 si no tenía ninguna. */
             sesiones_revocadas: number;
         };
+        /** @description Alcance del propio usuario (DEC-149 #24). Solo los clientes efectivos: no trae subordinados, superior ni campos de unidades. */
+        MiAlcance: {
+            /** @description Unión, sin repetidos, de los clientes propios y los de los subordinados (DEC-140 #2). Es el alcance del monitoreo. Ids de `catalogos`. */
+            clientes_efectivos_ids: components["schemas"]["Id"][];
+        };
         /** @description Alcance de monitoreo de un sujeto (DEC-140, DEC-149 #18). El alcance son los clientes efectivos (`clientes_efectivos_ids`). No viaja en el token: se resuelve en servidor (DEC-053). */
         AlcanceSujeto: {
             /** @description Clientes asignados directamente ("mis clientes", DEC-149 #18). Solo un Monitorista tiene; vacía para otro rol. Ids de `catalogos`. */
@@ -826,6 +851,28 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
+        };
+    };
+    obtenerMiAlcance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Clientes efectivos del llamante. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MiAlcance"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
         };
     };
     listarSujetos: {
