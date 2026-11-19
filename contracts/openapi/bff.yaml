@@ -134,6 +134,27 @@ paths:
         "204": {description: Sesión cerrada.}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
 
+  /api/v1/sesion/alcance:
+    get:
+      operationId: obtenerMiAlcance
+      tags: [sesion]
+      summary: Clientes efectivos del usuario autenticado (audiencia interna, DEC-149 #24).
+      description: >-
+        Solo audiencia Interno. Reenvía a `identidad.obtenerMiAlcance`, que
+        resuelve al usuario por el `idp_subject` de su token: el panel no
+        necesita su `sujeto_id`. Devuelve solo `clientes_efectivos_ids`. Lo
+        leen `monitorista`, `supervisor` y `coordinador`; otro rol responde
+        403. Con la lista vacía y 200, el panel muestra "sin clientes
+        asignados" y no "sin viajes" (B-04).
+      responses:
+        "200":
+          description: Clientes efectivos del llamante.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MiAlcance"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
   /api/v1/sesion/refresh:
     post:
       operationId: refrescarSesion
@@ -1595,7 +1616,8 @@ paths:
         vehículo y los custodios legibles de `catalogos`, como `listarUnidades`
         (tracer.38). Es la lectura de la ficha técnica y del detalle del viaje:
         la escolta asignada a ESTE viaje, no el roster completo (DEC-142,
-        E8-T12). Cualquier rol interno la lee; un actor Cliente recibe 404.
+        E8-T12). La lee cualquier rol interno salvo `ejecutivo` y `reaccion`,
+        que reciben 403 (DEC-149 #16 y #23); un actor Cliente recibe 404.
         `unidades` vacío con 200 si el viaje no tiene asignación vigente.
       responses:
         "200":
@@ -1604,6 +1626,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/EscoltaVigente"}
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
     post:
       operationId: asignarRecursos
@@ -2313,8 +2336,9 @@ paths:
         de esos clientes desde `APROBADO`. Escriben `administrador` y
         `jefe_operativo` (DEC-149 #18); otro rol responde 403. Responde 400 si
         algún cliente no existe en `catalogos` o su organización está
-        desactivada (DEC-149 #21). Un cliente ya asignado que se desactiva
-        después se queda en la lista.
+        desactivada (DEC-149 #21), también uno ya asignado que se desactivó
+        después: la lista guardada lo conserva, y para editarla hay que
+        quitarlo del payload.
       requestBody:
         required: true
         content:
@@ -4068,6 +4092,23 @@ components:
           type: integer
           minimum: 0
           description: Cuántas sesiones vivas se revocaron. 0 si no tenía ninguna.
+
+    MiAlcance:
+      type: object
+      additionalProperties: false
+      required: [clientes_efectivos_ids]
+      description: >-
+        Alcance del propio usuario (DEC-149 #24). Espejo de `MiAlcance` de
+        `identidad`. Solo los clientes efectivos: no trae subordinados,
+        superior ni campos de unidades.
+      properties:
+        clientes_efectivos_ids:
+          type: array
+          description: >-
+            Unión, sin repetidos, de los clientes propios y los de los
+            subordinados (DEC-140 #2). Es el alcance del monitoreo. Ids de
+            `catalogos`.
+          items: {$ref: "_comunes.yaml#/components/schemas/Id"}
 
     AlcanceSujeto:
       type: object
