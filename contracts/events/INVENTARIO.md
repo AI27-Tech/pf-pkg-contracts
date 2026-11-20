@@ -84,6 +84,9 @@ Reglas que este inventario materializa:
   `sujeto.creado` + `rol.asignado` en la misma transacción. Son la fuente de la
   proyección de pool de `mensajeria`. El alcance viaja en `alcance.cambiado`
   (ver abajo).
+  Desde `tracer.46` los cuatro (`sujeto.desactivado`, `sujeto.reactivado`,
+  `rol.asignado`, `rol.revocado`) llevan `idp_subject` (DEC-148 #59), para que
+  `mensajeria` resuelva el `sub` del token.
 - **`alcance.cambiado`** (`tracer.41`, DEC-149 #18 y #20; `idp_subject` en `tracer.42`, DEC-149 #22) — Alcance de
   monitoreo por cliente. `identidad`, dueño de "mis clientes" y de la
   jerarquía, lo publica con los clientes efectivos del sujeto para cada sujeto

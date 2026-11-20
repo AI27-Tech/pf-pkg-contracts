@@ -98,6 +98,15 @@ export class SujetoDesactivado extends Message<SujetoDesactivado> {
    */
   desactivadoEn?: Timestamp;
 
+  /**
+   * Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual al
+   * `sub` de su token. Con él `mensajeria` resuelve el sujeto del token sin
+   * consultar a `identidad` (DEC-148 #59, `tracer.46`).
+   *
+   * @generated from field: string idp_subject = 4;
+   */
+  idpSubject = "";
+
   constructor(data?: PartialMessage<SujetoDesactivado>) {
     super();
     proto3.util.initPartial(data, this);
@@ -109,6 +118,7 @@ export class SujetoDesactivado extends Message<SujetoDesactivado> {
     { no: 1, name: "sujeto_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "tenant_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "desactivado_en", kind: "message", T: Timestamp },
+    { no: 4, name: "idp_subject", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SujetoDesactivado {
@@ -150,6 +160,15 @@ export class SujetoReactivado extends Message<SujetoReactivado> {
    */
   reactivadoEn?: Timestamp;
 
+  /**
+   * Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual al
+   * `sub` de su token. Con él `mensajeria` resuelve el sujeto del token sin
+   * consultar a `identidad` (DEC-148 #59, `tracer.46`).
+   *
+   * @generated from field: string idp_subject = 4;
+   */
+  idpSubject = "";
+
   constructor(data?: PartialMessage<SujetoReactivado>) {
     super();
     proto3.util.initPartial(data, this);
@@ -161,6 +180,7 @@ export class SujetoReactivado extends Message<SujetoReactivado> {
     { no: 1, name: "sujeto_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "tenant_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "reactivado_en", kind: "message", T: Timestamp },
+    { no: 4, name: "idp_subject", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SujetoReactivado {
@@ -208,6 +228,15 @@ export class RolAsignado extends Message<RolAsignado> {
    */
   asignadoEn?: Timestamp;
 
+  /**
+   * Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual al
+   * `sub` de su token. Con él `mensajeria` resuelve el sujeto del token sin
+   * consultar a `identidad` (DEC-148 #59, `tracer.46`).
+   *
+   * @generated from field: string idp_subject = 5;
+   */
+  idpSubject = "";
+
   constructor(data?: PartialMessage<RolAsignado>) {
     super();
     proto3.util.initPartial(data, this);
@@ -220,6 +249,7 @@ export class RolAsignado extends Message<RolAsignado> {
     { no: 2, name: "tenant_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "rol", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "asignado_en", kind: "message", T: Timestamp },
+    { no: 5, name: "idp_subject", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): RolAsignado {
@@ -265,6 +295,15 @@ export class RolRevocado extends Message<RolRevocado> {
    */
   revocadoEn?: Timestamp;
 
+  /**
+   * Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual al
+   * `sub` de su token. Con él `mensajeria` resuelve el sujeto del token sin
+   * consultar a `identidad` (DEC-148 #59, `tracer.46`).
+   *
+   * @generated from field: string idp_subject = 5;
+   */
+  idpSubject = "";
+
   constructor(data?: PartialMessage<RolRevocado>) {
     super();
     proto3.util.initPartial(data, this);
@@ -277,6 +316,7 @@ export class RolRevocado extends Message<RolRevocado> {
     { no: 2, name: "tenant_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "rol", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "revocado_en", kind: "message", T: Timestamp },
+    { no: 5, name: "idp_subject", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): RolRevocado {
