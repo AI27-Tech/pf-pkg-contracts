@@ -1,0 +1,46 @@
+// Eventos de dominio de la familia `solicitud.*`, publicados por `operacion`
+// (módulo `solicitudes`, ADR 38, DEC-148). Todos usan el `Sobre` común y la
+// superficie AMPLIA. Orden por agregado = solicitud_id.
+//
+// NO llevan datos comerciales: ni monto, ni moneda, ni motivos, ni fechas del
+// pago. Viajan por la superficie amplia y esos datos son confidenciales para el
+// resto del equipo (DEC-148 #28); quien los necesita los lee por la API de
+// solicitudes con su rol. Solo identifican la solicitud y su estado.
+//
+// El tracer ejercita los dos tipos: la creación abre la conversación de la
+// solicitud en `mensajeria` (DEC-148 #5) y el cambio de estado cierra su ventana
+// de escritura cuando la solicitud termina (DEC-148 #30, #48).
+syntax = "proto3";
+
+package ai27.eventos.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-go/eventos/ai27/eventos/v1;eventosv1";
+
+// solicitud.creada — al comprometer la creación de la solicitud. `mensajeria`
+// crea o reutiliza idempotentemente la conversación de la solicitud.
+message SolicitudCreada {
+  // Id de la solicitud. Es también el id del viaje que nace al aprobarse
+  // (DEC-148 #3).
+  string solicitud_id = 1;
+  string cliente_id = 2;
+  google.protobuf.Timestamp creada_en = 3;
+}
+
+// solicitud.estado_cambiado — al comprometer una transición validada contra
+// contracts/estados/solicitud.estados.yaml (ADR 38). Cubre todas las
+// transiciones: cotización, pago, vencimiento, aprobación, rechazos y
+// cancelaciones. Al pasar a `APROBADO` también nace el viaje, que publica sus
+// propios eventos `viaje.*` por el outbox de `viajes` (ADR 35, ADR 39).
+message SolicitudEstadoCambiado {
+  string solicitud_id = 1;
+  string cliente_id = 2;
+  // Tokens de estado de la solicitud (no del viaje).
+  string de_estado = 3;
+  string a_estado = 4;
+  // true solo cuando el cliente cancela estando en PAGADO (DEC-148 #6). Es una
+  // marca, no un monto.
+  bool marca_penalizacion = 5;
+  google.protobuf.Timestamp cambiado_en = 6;
+}

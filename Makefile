@@ -80,10 +80,15 @@ breaking-openapi: ## Rompe CI ante un cambio incompatible de OpenAPI vs la últi
 # revisar el diff que introduce.
 
 .PHONY: check-estados
-check-estados: ## Verifica que el enum OpenAPI de operacion coincida con estados/
+check-estados: ## Verifica que los enums OpenAPI de operacion (viaje y solicitud) coincidan con estados/
 	cd tools/check-estados && go run . \
 	  -estados ../../contracts/estados/viaje.estados.yaml \
-	  -openapi ../../contracts/openapi/operacion.yaml
+	  -openapi ../../contracts/openapi/operacion.yaml \
+	  -schema EstadoViaje
+	cd tools/check-estados && go run . \
+	  -estados ../../contracts/estados/solicitud.estados.yaml \
+	  -openapi ../../contracts/openapi/operacion.yaml \
+	  -schema EstadoSolicitud
 
 .PHONY: check-registro
 check-registro: ## Verifica que registro, .proto e INVENTARIO.md coincidan

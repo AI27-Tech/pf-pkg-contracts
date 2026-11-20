@@ -29,6 +29,8 @@ authority:
   - DEC-043   # APTO_PARA_SALIDA opcional; sin gating de aptitud en V1
   - DEC-055   # aptitud informativa: se retira la guarda ningun_recurso_no_apto
   - ADR-0031  # la escolta se reserva como unidades completas
+  - ADR-0038  # la solicitud sale del viaje: el viaje nace en APROBADO; CANCELADO pasa a CANCELADO_POR_CLIENTE
+  - DEC-148   # cotización y pago previos a la aprobación (#3, #4, #13, #14, #27)
 
 # -----------------------------------------------------------------------------
 # Estados de progreso. Una sola dimensión con transiciones controladas.
@@ -37,39 +39,15 @@ authority:
 # `terminal`: true          — estado final, sin transiciones de salida.
 # -----------------------------------------------------------------------------
 estados:
-  - token: SOLICITADO
-    nombre_negocio: Solicitado
-    availability: v1
-    descripcion: >-
-      Enviada y en espera de revisión. No existe un estado de revisión separado
-      (DEC-005 #8): el paso de aprobación es la acción del operador sobre la
-      solicitud. Estado inicial cuando la crea el cliente.
-    inicial_para: [cliente]
-
   - token: APROBADO
     nombre_negocio: Aprobado
     availability: v1
     descripcion: >-
-      La solicitud fue aprobada por un operador. Renombrado desde `ACEPTADO`
-      (DEC-032). Estado inicial cuando el viaje lo crea Operación (DEC-026):
-      nace en `APROBADO` en el mismo acto de creación.
-    inicial_para: [operacion]
-
-  - token: RECHAZADO_POR_AI27
-    nombre_negocio: Rechazada por AI27
-    availability: v1
-    terminal: true
-    descripcion: >-
-      AI27 no acepta prestar el servicio solicitado, en la etapa de aprobación.
-      Renombrado desde `RECHAZADO` (DEC-032). Motivo obligatorio (DEC-020 #2).
-
-  - token: RECHAZADO_POR_CLIENTE
-    nombre_negocio: Rechazada por el cliente
-    availability: v1
-    terminal: true
-    descripcion: >-
-      El cliente no acepta el servicio asignado, en `ASIGNADO`/`APTO_PARA_SALIDA`.
-      Nuevo (DEC-032): antes indistinguible de otros rechazos.
+      Único estado inicial del viaje (ADR 38, DEC-148 #3). Nace de una
+      `solicitud` aprobada, con el MISMO id de la solicitud, o lo crea Operación
+      (DEC-026) en el mismo acto. Antes de este estado no hay viaje: la etapa de
+      cotización, pago y aprobación vive en `solicitud.estados.yaml`.
+    inicial_para: [solicitud, operacion]
 
   - token: ASIGNADO
     nombre_negocio: Asignado
@@ -137,19 +115,21 @@ estados:
     descripcion: >-
       Cierre del servicio. Solo ocurre tras la ÚLTIMA parada (DEC-013).
 
-  - token: CANCELADO
-    nombre_negocio: Cancelado
+  - token: CANCELADO_POR_CLIENTE
+    nombre_negocio: Cancelado por el cliente
     availability: v1
     terminal: true
     descripcion: >-
-      El cliente ya no quiere el viaje. Ventana de cancelación: hasta antes de
-      la salida — `SOLICITADO`, `APROBADO`, `ASIGNADO`, `APTO_PARA_SALIDA`
-      (DEC-005 #5).
+      El cliente ya no quiere el viaje. Renombrado desde `CANCELADO` (ADR 38,
+      DEC-148 #13). Ventana de cancelación: hasta antes de la salida,
+      `APROBADO`, `ASIGNADO`, `APTO_PARA_SALIDA` (DEC-005 #5). Lleva marca de
+      penalización solo si el viaje nació de una solicitud pagada (DEC-148 #14);
+      el viaje creado por Operación no la lleva (#27).
 
 # -----------------------------------------------------------------------------
-# `EN_REVISION` fue ELIMINADO (ADR 19 / DEC-005 #8). No es renombre ni fusión:
-# el estado desaparece. `SOLICITADO` ya significa "enviada y en espera de
-# revisión". Se documenta aquí para que nadie lo reintroduzca.
+# Estados retirados del viaje. Se documentan aquí para que nadie los
+# reintroduzca. `EN_REVISION` se eliminó por ADR 19 / DEC-005 #8 (no es renombre
+# ni fusión); los demás, por ADR 38 (DEC-148).
 # -----------------------------------------------------------------------------
 removed:
   - token: EN_REVISION
@@ -161,6 +141,23 @@ removed:
       Se dividió en RECHAZADO_POR_AI27 y RECHAZADO_POR_CLIENTE (DEC-032).
   - token: ACEPTADO
     motivo: Renombrado a APROBADO (DEC-032).
+  # Retirados al nacer la `solicitud` (ADR 38, DEC-148 #4, #13, #14). Pasan a
+  # `solicitud.estados.yaml` o, en el caso de `CANCELADO`, se renombran.
+  - token: SOLICITADO
+    motivo: >-
+      Pasa a la solicitud. El viaje nace en `APROBADO` (DEC-148 #4). No se
+      reintroduce en el viaje: la etapa previa a la aprobación no es del viaje.
+  - token: RECHAZADO_POR_AI27
+    motivo: >-
+      Pasa a la solicitud, con su guarda de motivo obligatorio (DEC-148 #4). Un
+      viaje solo existe si AI27 ya aprobó la solicitud.
+  - token: RECHAZADO_POR_CLIENTE
+    motivo: >-
+      Un viaje solo existe si el cliente ya aceptó y pagó la cotización, así que
+      ya no puede rechazar la escolta asignada (DEC-148 #14). El rechazo de la
+      cotización vive en la solicitud.
+  - token: CANCELADO
+    motivo: Renombrado a CANCELADO_POR_CLIENTE (ADR 38, DEC-148 #13).
 
 # -----------------------------------------------------------------------------
 # Transiciones permitidas (de -> a) con su disparador. El backbone NO es lineal:
@@ -170,18 +167,8 @@ removed:
 # `disparador`: quién/qué la origina. `guarda`: condición previa obligatoria.
 # -----------------------------------------------------------------------------
 transiciones:
-  # --- Alta y aprobación ---
-  - de: SOLICITADO
-    a: APROBADO
-    disparador: operador
-    guarda: fecha_hora_servicio_definida   # DEC-010 #2: obligatoria antes de aprobar
-  - de: SOLICITADO
-    a: RECHAZADO_POR_AI27
-    disparador: operador
-    guarda: motivo_obligatorio             # DEC-020 #2
-  - de: SOLICITADO
-    a: CANCELADO
-    disparador: cliente
+  # El viaje nace en APROBADO (ADR 38): la aprobación, el rechazo de AI27 y la
+  # cancelación previa al pago son transiciones de la `solicitud`, no del viaje.
 
   # --- Asignación ---
   - de: APROBADO
@@ -189,7 +176,7 @@ transiciones:
     disparador: operador
     guarda: escolta_reservada               # reserva atómica de la escolta (ADR 31). La aptitud NO gatea en V1 (DEC-055)
   - de: APROBADO
-    a: CANCELADO
+    a: CANCELADO_POR_CLIENTE
     disparador: cliente
 
   # --- Preparación de salida ---
@@ -209,11 +196,8 @@ transiciones:
     disparador: operador
     nota: apto_para_salida_opcional         # DEC-043 #1: arranque sin APTO_PARA_SALIDA
   - de: ASIGNADO
-    a: RECHAZADO_POR_CLIENTE
-    disparador: cliente                     # DEC-005 #7
-  - de: ASIGNADO
-    a: CANCELADO
-    disparador: cliente
+    a: CANCELADO_POR_CLIENTE
+    disparador: cliente                     # el cliente ya no rechaza la escolta asignada (DEC-148 #14)
 
   - de: APTO_PARA_SALIDA
     a: EN_EMBARQUE
@@ -223,10 +207,7 @@ transiciones:
     disparador: operador
     nota: embarque_opcional                 # DEC-005 #3: unidad ya cargada
   - de: APTO_PARA_SALIDA
-    a: RECHAZADO_POR_CLIENTE
-    disparador: cliente
-  - de: APTO_PARA_SALIDA
-    a: CANCELADO
+    a: CANCELADO_POR_CLIENTE
     disparador: cliente
 
   # --- Embarque -> recorrido ---

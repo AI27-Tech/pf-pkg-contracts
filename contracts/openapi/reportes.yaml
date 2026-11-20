@@ -31,8 +31,8 @@ tags:
     Dashboard de monitoreo para audiencia Interno. Alcance por cliente
     (DEC-149): `monitorista`, `supervisor` y `coordinador` solo ven los viajes
     de sus clientes efectivos ("mis clientes" y, por la jerarquía, los de sus
-    subordinados; DEC-149 #18), desde `APROBADO` (nunca `SOLICITADO` ni
-    `RECHAZADO_POR_AI27`); `administrador`, todos. Los clientes de cada sujeto
+    subordinados; DEC-149 #18), desde `APROBADO` (el viaje nace ahí, ADR 38);
+    `administrador`, todos. Los clientes de cada sujeto
     vienen de la proyección local de `alcance.cambiado` de `identidad`,
     reconstruible con `identidad.listarAlcances` (DEC-149 #20, ADR 26). Un viaje fuera
     de alcance no aparece en las filas ni cuenta en los totales ni en la
@@ -48,8 +48,7 @@ paths:
         Filas del reporte de viajes. Sin `en_curso`, `desde` y `hasta` son
         obligatorios y acotan por la fecha de creación del viaje (400 si falta
         alguno). Con `en_curso=true`, devuelve los viajes en un estado NO
-        terminal (todo lo que no es `CERRADO`, `CANCELADO` ni
-        `RECHAZADO_POR_*`) sin importar cuándo se crearon; `desde` y `hasta` son
+        terminal (todo lo que no es `CERRADO` ni `CANCELADO_POR_CLIENTE`) sin importar cuándo se crearon; `desde` y `hasta` son
         entonces opcionales y, si se mandan, se intersecan con la fecha de
         creación. Los estados terminales los fija `contracts/estados/` (ADR 19).
       parameters:

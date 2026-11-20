@@ -126,6 +126,49 @@ paths:
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
         "409": {$ref: "#/components/responses/ResyncRequerido"}
 
+  # Bandeja de solicitudes del pool de `cotizacion`, SIN {id} (V2, DEC-148 #31).
+  # Cola única e implícita resuelta por el rol del token, como la de chat
+  # (DEC-103).
+  /api/v1/bandeja/solicitudes:
+    get:
+      operationId: listarTrabajoMiBandejaSolicitudes
+      tags: [bandejas]
+      summary: Listar el trabajo de la bandeja de solicitudes del sujeto (bootstrap y catch-up).
+      description: >-
+        `mensajeria` resuelve la bandeja de solicitudes por el rol del sujeto:
+        todo usuario con rol `cotizacion` es miembro (un solo pool, DEC-148 #31) y
+        el `administrador` la lee por herencia (DEC-148 #20). `ejecutivo`,
+        `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion`
+        no tienen esta bandeja y reciben `404`, igual que una bandeja inexistente
+        (DEC-148 #12, #28). Sin acotar por el tenant de quien pregunta
+        (DEC-129). `desde_revision` y `cursor` funcionan igual que en
+        `listarTrabajoMiBandeja`; el `409 stream_resync_required` también.
+
+        Cada elemento lleva la marca de mensaje sin respuesta (DEC-148 #54): se
+        activa de inmediato cuando se acepta un mensaje del cliente sin respuesta
+        posterior de AI27 y se detiene con la respuesta. La marca llega al pool de
+        `cotizacion`, no al Supervisor, que no ve estas conversaciones.
+      parameters:
+      - {$ref: "#/components/parameters/CursorPagina"}
+      - name: desde_revision
+        in: query
+        required: false
+        description: >-
+          Catch-up: devuelve los cambios de la colección con revisión mayor a
+          este valor. Es la `revision` de una respuesta previa, no el cursor de
+          paginación.
+        schema: {$ref: "#/components/schemas/RevisionBandeja"}
+      responses:
+        "200":
+          description: Trabajo de la bandeja de solicitudes con la revisión de la colección.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TrabajoBandeja"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/ResyncRequerido"}
+
   /api/v1/bandejas/{id}/trabajo:
     parameters:
     - {$ref: "#/components/parameters/IdRuta"}
@@ -238,6 +281,46 @@ paths:
       responses:
         "200":
           description: Conversación del viaje.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Conversacion"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  # ---------------------------------------------------------------------------
+  # CONVERSACIÓN DE LA SOLICITUD (V2, DEC-148 #5, #29 a #31, #45 a #48, #54).
+  # Distinta de la del viaje: es entre el cliente y el pool de `cotizacion`, con
+  # el mismo mecanismo de reclamo, liberación y transferencia que el `ejecutivo`
+  # (DEC-148 #31), y se identifica por la solicitud. Como el viaje hereda el id de
+  # la solicitud (DEC-148 #3), las dos conversaciones comparten `viaje_id`; las
+  # distingue `Conversacion.tipo`. Las operaciones por `{id}` de conversación
+  # (mensajes, reclamos, transferencias, recibos, atendida) sirven a las dos.
+  # ---------------------------------------------------------------------------
+  /api/v1/solicitudes/{id}/conversacion:
+    parameters:
+    - {$ref: "#/components/parameters/IdRuta"}
+    get:
+      operationId: obtenerConversacionDeSolicitud
+      tags: [conversaciones]
+      summary: Conversación de una solicitud, resuelta por el id de la solicitud.
+      description: >-
+        `{id}` es el id de la solicitud, no el de la conversación. Devuelve la
+        conversación de tipo `solicitud` con la misma forma que
+        `obtenerConversacion`. La conversación nace con la solicitud (DEC-148 #5)
+        y acepta mensajes hasta 3 días después de que la solicitud termina por
+        cualquier vía, incluido pasar a `APROBADO`; después queda en solo lectura
+        para el cliente, `cotizacion` y `administrador` (DEC-148 #30, #48).
+
+        Audiencia: el Cliente de la empresa dueña de la solicitud y, por audiencia
+        Interno, los usuarios con rol `cotizacion` y el `administrador`
+        (DEC-148 #1, #20). `ejecutivo`, `supervisor`, `coordinador`,
+        `jefe_operativo`, `monitorista` y `reaccion` reciben `403` (DEC-148 #12,
+        #28). Un usuario de `cotizacion` recién agregado lee el historial previo
+        (DEC-148 #46). El Cliente de otra empresa recibe `404`.
+      responses:
+        "200":
+          description: Conversación de la solicitud.
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Conversacion"}
@@ -536,8 +619,8 @@ paths:
         (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por
         cliente (DEC-149 #6), activan el caso (ADR 21 §1, DEC-045 #9); otro rol
         interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde
-        `SOLICITADO` en estados no terminales; denegada en `CERRADO`,
-        `CANCELADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE` con 409
+        `APROBADO` (el viaje nace ahí, DEC-148 #5) en estados no terminales;
+        denegada en `CERRADO` y `CANCELADO_POR_CLIENTE` con 409
         `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de
         reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje
         (DT-16).
@@ -1134,6 +1217,16 @@ components:
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         viaje_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        tipo:
+          type: string
+          description: >-
+            `viaje` (conversación entre el cliente y el `ejecutivo`, nace en
+            `APROBADO`) o `solicitud` (entre el cliente y el pool de `cotizacion`,
+            nace con la solicitud; DEC-148 #29). Ausente se lee como `viaje`
+            (valor de V1). En una conversación de tipo `solicitud`, `viaje_id` es
+            el id de la solicitud, que el viaje hereda al aprobarse (DEC-148 #3),
+            así que coincide con el de la conversación del viaje. `string` y no
+            enum para poder ampliar sin ruptura.
         cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
         bandeja_id:
           type: string
