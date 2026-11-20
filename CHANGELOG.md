@@ -3,6 +3,19 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-20 [tooling] — el chequeo de eventos compara contra `pf-contracts-m` y no contra `HEAD`
+
+**Para quién:** quien revisa PR de contratos y quien promueve olas. No cambia ningún contrato ni genera artefactos: `VERSION` no sube.
+
+**Resumen:** `buf` no resuelve `FETCH_HEAD` y lo trata como `HEAD`. `.git#ref=FETCH_HEAD`, la invocación del workflow y de `scripts/breaking-eventos.sh`, comparaba el commit contra sí mismo, así que el `buf breaking` de eventos nunca detectó nada en CI. Medido: contra `ref=FETCH_HEAD` y contra `ref=HEAD` la salida era idéntica; contra el SHA real de `-m` funcionaba y, en un control, detectaba un campo eliminado de un evento.
+
+**Cambios:**
+- `scripts/breaking-eventos.sh`: resuelve `#ref=<ref>` a un SHA antes de llamar a `buf`, y falla si no puede resolverlo (antes se habría comparado contra otra cosa).
+- `scripts/test-breaking-gate.sh`: caso 9, regresión. En un clon temporal fija `FETCH_HEAD` en la base, commitea un evento con un campo eliminado y exige que el chequeo falle; exige también que un ref sin resolver falle. Se comprobó que el caso falla con el script viejo y pasa con el nuevo.
+- `rompimientos/v0.1.0-tracer.45.yaml`: con el chequeo comparando de verdad, `solicitud.estado_cambiado` (que perdió `marca_penalizacion` en la revisión de `tracer.45`, PR #153) aparece como ruptura contra `-m`, que aún trae la versión previa. Se declaran las 5 rupturas: `tracer.45` no está publicado y ningún consumidor pudo fijarlo. Dejan de existir al publicarse `tracer.45`.
+
+**Verificado:** `make test-breaking-gate` (pasa con el arreglo; el caso 9 falla con el script anterior), y `./scripts/breaking-eventos.sh '.git#ref=FETCH_HEAD'` contra el `-m` real: 5 rupturas, todas declaradas.
+
 ## 2026-11-19 [tracer.45] — la solicitud entra al contrato y sale del viaje (ADR 38 y 39, DEC-148) — INCOMPATIBLE
 
 **Para quién:** `pf-svc-operacion` (módulo `solicitudes`, enum del viaje), `pf-svc-bff`, `pf-svc-mensajeria` (conversación de la solicitud), `pf-svc-identidad` (rol `cotizacion`), `pf-svc-reportes`, `pf-svc-core` (pins) y los dos frontends. **Cada uno adapta su código en su propio PR al subir el pin.**
@@ -14,12 +27,13 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 - Por eso `listarViajes` (filtro `estado`) y `transicionarViaje` (`a_estado`) dejan de aceptar esos valores. Oasdiff lo reporta como ruptura y está declarado en `rompimientos/v0.1.0-tracer.45.yaml`.
 - El cliente ya no llama `crearViaje`: ahora crea una solicitud. Solo Operación crea viajes (DEC-026). El viaje nace al aprobar la solicitud, con el mismo id.
 - `transicionarViajeCliente` (bff) solo acepta `CANCELADO_POR_CLIENTE`; el cliente ya no rechaza la escolta asignada (DEC-148 #14).
+- `Viaje.cancelacion_con_penalizacion` (operacion) y `ViajeSeguimiento.cancelacion_con_penalizacion` (bff): dicen si cancelar el viaje lleva marca de penalización (nació de una solicitud pagada) o ya la lleva. Sin él, el portal no podía mostrar el aviso del 50% ni su confirmación (E1-HU-002).
 
 **Qué se agrega:**
 - **API de solicitudes** (`operacion.yaml` y su espejo en `bff.yaml`): `crearSolicitud`, `listarSolicitudes`, `obtenerSolicitud`, `listarHistoricoSolicitud`, `cotizarSolicitud`, `reprogramarSolicitud`, `rechazarCotizacion`, `cancelarSolicitud`, `confirmarPago`, `revertirPago`, `aprobarSolicitud`, `rechazarSolicitud`. Una acción por endpoint porque cada una lleva datos propios.
-- **Conversación de la solicitud** (`mensajeria.yaml` y `bff.yaml`): `obtenerConversacionDeSolicitud`, `listarTrabajoMiBandejaSolicitudes` (pool de `cotizacion`), y en el `bff` `obtenerConversacionSolicitud`, `listarMensajesSolicitud`, `enviarMensajeSolicitud` y `listarTrabajoBandejaSolicitudes`. `Conversacion.tipo` distingue `viaje` de `solicitud`; las dos comparten `viaje_id` porque el viaje hereda el id de la solicitud.
+- **Conversación de la solicitud** (`mensajeria.yaml` y `bff.yaml`): `obtenerConversacionDeSolicitud`, `listarTrabajoMiBandejaSolicitudes` (pool de `cotizacion`), y en el `bff` `obtenerConversacionSolicitud`, `listarMensajesSolicitud`, `enviarMensajeSolicitud` y `listarTrabajoBandejaSolicitudes`. `Conversacion.tipo` (en `mensajeria` y en `bff`) distingue `viaje` de `solicitud`; las dos comparten `viaje_id` porque el viaje hereda el id de la solicitud. Las operaciones por `{id}` (leer, mensajes, enviar, reclamar, liberar, transferir, atendida, recibos) declaran su audiencia por tipo: en `solicitud`, `cotizacion` y `administrador`; el `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` reciben `403`. Las bandejas de chat solo devuelven `tipo=viaje`, y `obtenerConversacionDeViaje` solo la de `tipo=viaje`. Transferir en una conversación de solicitud a quien no tiene el rol `cotizacion` responde `409 destino_no_es_cotizacion`. `Conversacion.sin_respuesta` expresa la marca de mensaje sin respuesta (DEC-148 #54).
 - **Rol `cotizacion`** (noveno rol, interno y global, DEC-148 #1).
-- **Eventos** `solicitud.creada` y `solicitud.estado_cambiado` (`solicitud.proto`, registro, inventario). Sin datos comerciales en el payload (DEC-148 #28).
+- **Eventos** `solicitud.creada` y `solicitud.estado_cambiado` (`solicitud.proto`, registro, inventario). Sin datos comerciales ni de pago en el payload, tampoco la marca de penalización: la superficie amplia lleva metadatos no sensibles (DEC-148 #28).
 - **Enum `EstadoSolicitud`** en `operacion.yaml`, verificado contra `solicitud.estados.yaml` por `make check-estados`.
 
 **Reglas:**
@@ -38,6 +52,9 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 - `Monto` es un decimal en texto sin signo; los límites (cero, decimales) y el catálogo de `moneda` siguen pendientes.
 - `listarHistoricoSolicitud` lo ven `cotizacion`, `jefe_operativo` (en `PAGADO`) y `administrador`.
 - La reversa de un pago es `POST .../reversa-pago` (no `DELETE`) porque necesita un cuerpo con el motivo.
+- `jefe_operativo` recibe la `Solicitud` completa, con monto, moneda, notas y la referencia del pago, porque ninguna HU lo acota. DEC-148 #28 trata la cotización como confidencial frente al `ejecutivo`, no frente al Jefe; si el Lead quiere ocultárselo hace falta una vista sin esos campos.
+- `CrearSolicitudEntrada` no trae el operador (nombre, teléfono) que menciona E1-HU-001. Es un hueco heredado: `CrearViajeEntrada` tampoco lo tenía. Se completa en la ficha técnica.
+- `Conversacion.sin_respuesta` es un booleano y no una marca derivada de `atendida_en`, porque `atendida_en` no distingue "mensaje del cliente sin respuesta".
 - Qué pasa al revertir un pago con la vigencia ya terminada, y si `VENCIDA → PAGADO` puede repetirse, siguen pendientes (ADR 38).
 
 **Cambios:**
@@ -46,11 +63,14 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 - `contracts/events/`: `solicitud.proto`, `registro.tipos.yaml`, `INVENTARIO.md`; comentario de `viaje.proto`.
 - `tools/check-estados` y `Makefile`: el chequeo cubre `EstadoSolicitud`.
 - `scripts/contract-tests.sh`: mapa de estados del viaje, mapa de la solicitud y nueve roles.
-- `rompimientos/v0.1.0-tracer.45.yaml`: allowlist de las dos rupturas de OpenAPI.
+- `rompimientos/v0.1.0-tracer.45.yaml`: allowlist de las 8 rupturas de OpenAPI, una por valor de enum retirado y operación.
+- `tools/breaking-gate`: ahora compara también la línea de detalle de oasdiff, no solo `in API <ruta>`. Antes una entrada autorizaba cualquier ruptura de esa ruta: se comprobó que una ruptura nueva en `GET /api/v1/viajes/{id}` pasaba con la allowlist de esta ola. `scripts/test-breaking-gate.sh` suma tres casos (declarada pasa; otra ruptura en la misma ruta falla; otro valor del mismo filtro falla).
 - `VERSION` y `packages/api-client-ts/package.json`: `tracer.45`.
 - `packages/api-client-go` y `packages/api-client-ts`: regenerados con `make generate`.
 
-**Verificado:** `make generate`, `check-reproducible`, `lint-openapi`, `check-estados`, `check-registro`, `buf lint`, `buf breaking` (compatible), `breaking-openapi` con la allowlist, `test-breaking-gate`, `verify`, `check-version-ts`, `check-ts-exports`, `tsc --noEmit`, y el `main.go` del consumidor limpio de `contract-tests.sh` ejecutado contra el árbol local (el job real corre con el tag publicado).
+**Verificado:** `make generate`, `check-reproducible`, `lint-openapi`, `check-estados`, `check-registro`, `buf lint`, `buf breaking` contra el SHA de `-m` (compatible; ver nota), `breaking-openapi` con la allowlist, `test-breaking-gate`, `verify`, `check-version-ts`, `check-ts-exports`, `tsc --noEmit`, y el `main.go` del consumidor limpio de `contract-tests.sh` ejecutado contra el árbol local (el job real corre con el tag publicado).
+
+**Nota sobre `buf breaking`:** `buf` no resuelve `FETCH_HEAD` y lo trata como `HEAD`, así que `.git#ref=FETCH_HEAD` (la invocación del workflow y de `scripts/breaking-eventos.sh`) compara el commit contra sí mismo y no detecta nada. Medido: contra `ref=FETCH_HEAD` y contra `ref=HEAD` la salida es idéntica; contra el SHA real de `-m` el chequeo funciona y, en un control, detecta el campo eliminado de un evento. Esta ola se verificó con el SHA. El arreglo del workflow va en un PR aparte.
 
 ## 2026-11-19 [tracer.44] — máquina de estados de la solicitud como dato (ADR 38, DEC-148)
 

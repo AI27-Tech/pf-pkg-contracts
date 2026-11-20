@@ -16,10 +16,10 @@
 # confirma el pago, y el Jefe Operativo la aprueba. Al aprobarse nace el viaje
 # con el MISMO id (DEC-148 #3), cuya máquina vive en `viaje.estados.yaml`.
 #
-# Esta ola es ADITIVA: no modifica `viaje.estados.yaml`. La enmienda del enum del
+# Esta fuente se introdujo en `tracer.44` (aditiva). La enmienda del enum del
 # viaje (salen `SOLICITADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE`;
-# `CANCELADO` pasa a `CANCELADO_POR_CLIENTE`) es una ola rompiente aparte, junto
-# con el OpenAPI de solicitudes.
+# `CANCELADO` pasa a `CANCELADO_POR_CLIENTE`) llegó en `tracer.45`, junto con el
+# OpenAPI de solicitudes.
 #
 # Los nombres de estado coinciden con tokens del viaje (`APROBADO`,
 # `RECHAZADO_POR_AI27`, `RECHAZADO_POR_CLIENTE`, `CANCELADO_POR_CLIENTE`) porque

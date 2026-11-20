@@ -382,7 +382,7 @@ export interface paths {
         put?: never;
         /**
          * Aprobar la solicitud pagada y crear el viaje.
-         * @description Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`. La aprobación es explícita, nunca automática. Exige la fecha y hora del servicio (DEC-010 #2). En la misma transacción la solicitud pasa a `APROBADO` y nace el viaje en `APROBADO` con el MISMO id de la solicitud (DEC-148 #3, #52; ADR 39): no existe una solicitud aprobada sin su viaje. El viaje se consulta después con `obtenerViaje` usando ese id.
+         * @description Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`. La aprobación es explícita, nunca automática. Exige la fecha y hora del servicio (DEC-010 #2). En la misma transacción la solicitud pasa a `APROBADO` y nace el viaje en `APROBADO` con el MISMO id de la solicitud (DEC-148 #3, #52; ADR 39): no existe una solicitud aprobada sin su viaje. El viaje se consulta después con `obtenerViaje` usando ese id. La respuesta es la última vista de la solicitud para el `jefe_operativo`: como solo ve las que están en `PAGADO`, `obtenerSolicitud` le responde `404` desde que la resuelve. Por la misma razón, una segunda aprobación tras una carrera le da `404`; el `409 transicion_no_permitida` lo ve el `administrador`.
          */
         post: operations["aprobarSolicitud"];
         delete?: never;
@@ -404,7 +404,7 @@ export interface paths {
         put?: never;
         /**
          * Rechazar la solicitud pagada (AI27).
-         * @description Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`. Motivo obligatorio (DEC-020 #2). Termina en `RECHAZADO_POR_AI27`, sin marca de reembolso (el reembolso se maneja fuera de Argos, DEC-148 #19) y sin crear viaje. El cliente ve el motivo.
+         * @description Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`. Motivo obligatorio (DEC-020 #2). Termina en `RECHAZADO_POR_AI27`, sin marca de reembolso (el reembolso se maneja fuera de Argos, DEC-148 #19) y sin crear viaje. El cliente ve el motivo. Igual que en `aprobarSolicitud`, el `jefe_operativo` ya no ve la solicitud después de resolverla (`404`).
          */
         post: operations["rechazarSolicitud"];
         delete?: never;
@@ -753,6 +753,8 @@ export interface components {
              * @description ETA estimado del viaje, capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado. `operacion` no calcula ni expone `stale`: eso lo hace el `bff`.
              */
             eta_estimado?: string | null;
+            /** @description `true` si cancelar este viaje lleva marca de penalización, o ya la lleva por haberse cancelado: el viaje nació de una solicitud pagada (DEC-148 #14). `false` si lo creó Operación (DEC-148 #27). El cliente lo usa para mostrar el aviso del 50% antes de cancelar (DEC-042) y su confirmación después. Argos solo marca; no calcula ni guarda el monto (DEC-148 #6). Ausente se lee como `false`. */
+            cancelacion_con_penalizacion?: boolean;
             creado_en: components["schemas"]["MarcaTiempo"];
         };
         ViajeDetalle: {
@@ -795,7 +797,7 @@ export interface components {
         TransicionEntrada: {
             /** @description Estado destino. Se valida contra la máquina de estados. */
             a_estado: components["schemas"]["EstadoViaje"];
-            /** @description Causa de la transición. Obligatoria cuando el destino la requiere (p. ej. motivo de rechazo, DEC-020 #2). La validación fina vive en el servicio. */
+            /** @description Causa de la transición. Obligatoria cuando el destino la requiere (p. ej. el motivo de la cancelación del cliente, DEC-111). El motivo del rechazo de AI27 (DEC-020 #2) ya no es del viaje: lo lleva `rechazarSolicitud`. La validación fina vive en el servicio. */
             causa?: string;
             /** @description Obligatorio al transicionar a `CERRADO` (E8-T14, DEC-113); ignorado en cualquier otra arista. Sustituye el puente previo que leía el motivo de `causa`. */
             motivo_cierre?: components["schemas"]["MotivoCierre"];
@@ -1118,7 +1120,7 @@ export interface components {
         PagoEntrada: {
             /**
              * Format: date
-             * @description Cuándo pagó el cliente (día calendario en `America/Mexico_City`). Debe caer dentro de la vigencia de la última cotización (DEC-148 #34, #43).
+             * @description Cuándo pagó el cliente (día calendario en `America/Mexico_City`). Debe caer dentro de la vigencia de la última cotización: desde su entrega hasta su último día, ambos incluidos (DEC-148 #34, #43). Una fecha anterior a la entrega o posterior al último día se rechaza.
              */
             fecha_pago: string;
             /** @description Folio o nota en texto. Opcional; sin archivo adjunto (DEC-148 */
@@ -1172,8 +1174,10 @@ export interface components {
         HistoricoSolicitudItem: {
             /** @description Qué ocurrió: `creada`, `cotizada`, `recotizada`, `reprogramada`, `pago_confirmado`, `pago_confirmado_tardio` (excepción `VENCIDA → PAGADO`), `pago_revertido`, `cotizacion_rechazada`, `cancelada`, `vencida`, `aprobada`, `rechazada`. `string` y no enum para poder ampliar sin ruptura. */
             accion: string;
-            de_estado?: string | null;
-            a_estado?: string | null;
+            /** @description Estado de origen; null en `creada` y en las acciones sin cambio de estado. */
+            de_estado?: components["schemas"]["EstadoSolicitud"] | null;
+            /** @description Estado de destino; null en las acciones sin cambio de estado (recotizar, reprogramar). */
+            a_estado?: components["schemas"]["EstadoSolicitud"] | null;
             /** @description null cuando lo hizo el sistema (el vencimiento). */
             actor_id?: components["schemas"]["Id"] | null;
             motivo?: string | null;
@@ -1876,7 +1880,7 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
-            /** @description No se puede confirmar. `codigo` de máquina: `transicion_no_permitida` (estado de origen inválido) o `fecha_pago_fuera_de_vigencia` (la fecha del pago es posterior al último día de vigencia). */
+            /** @description No se puede confirmar. `codigo` de máquina: `transicion_no_permitida` (estado de origen inválido) o `fecha_pago_fuera_de_vigencia` (la fecha del pago no cae dentro de la vigencia de la última cotización). */
             409: {
                 headers: {
                     [name: string]: unknown;

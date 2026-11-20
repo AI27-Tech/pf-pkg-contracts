@@ -64,6 +64,17 @@ info:
     de alcance responde `404`; `403` es para el rol sin la acción. La
     conversación sigue con su alcance por cliente del `ejecutivo` (DEC-046,
     DEC-103) y la bandeja de Reacción no cambia.
+
+
+    Conversación de la solicitud (V2, DEC-148 #5, #29 a #31). Es otra
+    conversación: `Conversacion.tipo` vale `solicitud`, es entre el Cliente y el
+    pool de `cotizacion` (un solo pool, con el mismo reclamo, liberación y
+    transferencia que el `ejecutivo`), y el `administrador` interviene por
+    herencia. Las operaciones por `{id}` de conversación sirven a los dos tipos;
+    en cada una, la audiencia interna de `tipo=solicitud` es `cotizacion` y
+    `administrador`, y `ejecutivo`, `supervisor`, `coordinador`,
+    `jefe_operativo`, `monitorista` y `reaccion` reciben `403`. Las bandejas de
+    chat (`tipo=viaje`) y de solicitudes no se mezclan.
   x-ai27-servicio: mensajeria
   x-ai27-capa: soporte
   x-ai27-tracer: false
@@ -105,6 +116,8 @@ paths:
         inexistente. Sin acotar por el tenant de quien pregunta (DEC-129).
         `desde_revision` y `cursor` funcionan igual que en la ruta con `{id}`;
         el `409 stream_resync_required` también.
+
+        Solo conversaciones `tipo=viaje`. Las de solicitud se atienden en `listarTrabajoMiBandejaSolicitudes` y no se mezclan con estas (DEC-148 #12, #28).
       parameters:
       - {$ref: "#/components/parameters/CursorPagina"}
       - name: desde_revision
@@ -188,6 +201,8 @@ paths:
         revisión. Si la revisión pedida quedó fuera de la ventana retenida,
         responde `409 stream_resync_required` y el cliente repite el bootstrap
         (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
+
+        Solo conversaciones `tipo=viaje`. Las de solicitud se atienden en `listarTrabajoMiBandejaSolicitudes` y no se mezclan con estas (DEC-148 #12, #28).
       parameters:
       - {$ref: "#/components/parameters/CursorPagina"}
       - name: desde_revision
@@ -219,6 +234,8 @@ paths:
         audiencia interna, las de su alcance por `cliente` (DEC-045 #8), sin
         acotar por el tenant de quien pregunta (DEC-129). `supervisor` y
         `coordinador` las leen (DEC-131).
+
+        Solo conversaciones `tipo=viaje`. Las de solicitud se atienden en `listarTrabajoMiBandejaSolicitudes` y no se mezclan con estas (DEC-148 #12, #28).
       parameters:
       - {$ref: "#/components/parameters/CursorPagina"}
       responses:
@@ -243,6 +260,8 @@ paths:
         existiera. El interno no se acota por tenant (DEC-129): otro rol interno
         recibe `403`. `ultima_secuencia` es el cursor de dominio del bootstrap
         (ADR 28 §2).
+
+        Conversación `tipo=solicitud` (V2, DEC-148 #12, #28, #31): la leen `cotizacion` y `administrador`; `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` reciben `403`.
       responses:
         "200":
           description: Conversación.
@@ -269,7 +288,7 @@ paths:
         conversación del viaje con la misma forma que `obtenerConversacion`; el
         `id` de la respuesta es el que usan `listarMensajes`, `enviarMensaje` y
         demás operaciones por conversación. Si el viaje tiene una conversación
-        no cerrada (a lo más una por tenant y viaje, Addendum §6) se devuelve
+        no cerrada (a lo más una por tenant, viaje y tipo, Addendum §6) se devuelve
         ésa; si sólo tiene conversaciones cerradas, la más reciente.
 
         Audiencia: el Cliente de la empresa dueña del viaje y, por audiencia
@@ -278,6 +297,8 @@ paths:
         de quien pregunta (DEC-129). Poseer el `viaje_id` no autoriza (Addendum
         §7): el Cliente de otra empresa recibe 404, igual que si el viaje
         todavía no tuviera conversación; otro rol interno recibe `403`.
+
+        Devuelve solo la de `tipo=viaje`. Como el viaje hereda el id de la solicitud (DEC-148 #3), durante los 3 días posteriores a la aprobación la conversación de la solicitud (`tipo=solicitud`) comparte `viaje_id` y puede seguir abierta; no se devuelve aquí, sino en `obtenerConversacionDeSolicitud`.
       responses:
         "200":
           description: Conversación del viaje.
@@ -318,6 +339,8 @@ paths:
         `jefe_operativo`, `monitorista` y `reaccion` reciben `403` (DEC-148 #12,
         #28). Un usuario de `cotizacion` recién agregado lee el historial previo
         (DEC-148 #46). El Cliente de otra empresa recibe `404`.
+
+        Devuelve solo la de `tipo=solicitud`.
       responses:
         "200":
           description: Conversación de la solicitud.
@@ -341,6 +364,8 @@ paths:
         mutuamente excluyentes; sin ninguno, devuelve los más recientes. El
         orden es siempre por `secuencia`, nunca por `creado_en`. Mismo acceso
         que `obtenerConversacion`: `supervisor`/`coordinador` leen (DEC-131).
+
+        Conversación `tipo=solicitud` (V2, DEC-148 #12, #28, #31): la leen `cotizacion` y `administrador`; `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` reciben `403`.
       parameters:
       - name: antes_de
         in: query
@@ -379,6 +404,11 @@ paths:
         `403`.
         Reintentar el mismo `client_message_id` devuelve el mensaje original
         con 200 y nunca crea un segundo mensaje.
+
+        En una conversación `tipo=solicitud` (V2, DEC-148 #31) el interno es `cotizacion`, con RECLAMO ACTIVO y
+        `version_reclamo_esperada`, o el `administrador`, que interviene por herencia (#20). No hay override de
+        `supervisor` ni de `coordinador`; el `ejecutivo` recibe `403`. La intervención del `administrador` se audita
+        como el override de Supervisor (DEC-148 #47).
       requestBody:
         required: true
         content:
@@ -420,6 +450,8 @@ paths:
         y reciben `403` (DEC-131). Dos reclamos concurrentes producen un
         ganador; el perdedor recibe 409 `conflicto_version_reclamo` (Addendum
         §4 punto 5).
+
+        En `tipo=solicitud` solo reclama `cotizacion`, que forma un solo pool (DEC-148 #31); el `ejecutivo` recibe `403`.
       requestBody:
         required: true
         content:
@@ -451,6 +483,8 @@ paths:
       description: >-
         Lo hace el responsable. En V1 un `supervisor`/`coordinador` NO libera
         una conversación ajena (DEC-118) y recibe `403` (DEC-131).
+
+        En `tipo=solicitud` lo hace el responsable de `cotizacion` y la conversación vuelve al pool de `cotizacion` con su historia (DEC-148 #31).
       parameters:
       - name: version_esperada
         in: query
@@ -475,6 +509,9 @@ paths:
         una conversación ajena (DEC-118) y recibe `403` (DEC-131). Cierra el
         reclamo anterior y abre el siguiente en UNA transacción: no hay ventana
         sin responsable ni con dos (Addendum §6).
+
+        En `tipo=solicitud` el destino debe ser un usuario con rol `cotizacion` (DEC-148 #31; E10-HU-038, escenario 5). Otro
+        destino (por ejemplo un `ejecutivo`) responde `409` con `codigo` `destino_no_es_cotizacion`, y el reclamo del llamante no cambia.
       requestBody:
         required: true
         content:
@@ -490,7 +527,14 @@ paths:
         "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
         "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
-        "409": {$ref: "#/components/responses/ConflictoVersion"}
+        "409":
+          description: >-
+            `codigo` de máquina `conflicto_version_reclamo` (la versión esperada del reclamo no coincide con la
+            vigente) o, en una conversación `tipo=solicitud`, `destino_no_es_cotizacion` (el destino no tiene el rol
+            `cotizacion`; el reclamo del llamante no cambia).
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
 
   /api/v1/conversaciones/{id}/recibos/entregado:
     parameters:
@@ -503,6 +547,8 @@ paths:
         Cliente o `ejecutivo` con acceso a la conversación.
         `supervisor`/`coordinador` solo leen y no registran recibos: `403`
         (DEC-131).
+
+        En `tipo=solicitud` lo registran el Cliente y `cotizacion` (o el `administrador`); otro rol interno recibe `403`.
       requestBody:
         required: true
         content:
@@ -526,6 +572,8 @@ paths:
         visible al cliente (Addendum §8). Cliente o `ejecutivo` con acceso a la
         conversación; `supervisor`/`coordinador` solo leen y no registran
         recibos: `403` (DEC-131).
+
+        En `tipo=solicitud` lo registran el Cliente y `cotizacion` (o el `administrador`); otro rol interno recibe `403`.
       requestBody:
         required: true
         content:
@@ -547,6 +595,8 @@ paths:
       description: >-
         Solo el responsable (DEC-117); `supervisor`/`coordinador` reciben `403`
         (DEC-131).
+
+        En `tipo=solicitud` lo hace el responsable de `cotizacion`; otro rol interno recibe `403`.
       requestBody:
         required: true
         content:
@@ -1250,6 +1300,13 @@ components:
           format: date-time
           nullable: true
         abierta_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        sin_respuesta:
+          type: boolean
+          description: >-
+            `true` si el último mensaje aceptado es del cliente y AI27 no ha respondido después (DEC-148 #54; en V1,
+            la condición de la alerta de E3-HU-016). Se activa de inmediato al aceptar el mensaje y se detiene con la
+            respuesta. Solo audiencia Interno; ausente para el Cliente. Lo ve el pool de la conversación: en
+            `tipo=solicitud`, `cotizacion` (el Supervisor no ve esas conversaciones).
 
     PaginaConversaciones:
       type: object

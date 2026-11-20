@@ -462,6 +462,12 @@ type Conversacion struct {
 	// ReclamoActivo Reclamo vigente. Solo para audiencia Interno; null si está en el pool.
 	ReclamoActivo *Reclamo `json:"reclamo_activo"`
 
+	// SinRespuesta `true` si el último mensaje aceptado es del cliente y AI27 no ha respondido después (DEC-148 #54; en V1, la condición de la alerta de E3-HU-016). Se activa de inmediato al aceptar el mensaje y se detiene con la respuesta. Solo audiencia Interno; ausente para el Cliente. Lo ve el pool de la conversación: en `tipo=solicitud`, `cotizacion` (el Supervisor no ve esas conversaciones).
+	SinRespuesta *bool `json:"sin_respuesta,omitempty"`
+
+	// Tipo `viaje` (conversación entre el cliente y el `ejecutivo`, nace en `APROBADO`) o `solicitud` (entre el cliente y el pool de `cotizacion`, nace con la solicitud; DEC-148 #29). Ausente se lee como `viaje` (valor de V1). En una conversación de tipo `solicitud`, `viaje_id` es el id de la solicitud, que el viaje hereda al aprobarse (DEC-148 #3), así que coincide con el de la conversación del viaje. `string` y no enum para poder ampliar sin ruptura.
+	Tipo *string `json:"tipo,omitempty"`
+
 	// UltimaSecuencia Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una versión de reclamo ni el `seq` de transporte de `realtime`.
 	UltimaSecuencia SecuenciaMensaje `json:"ultima_secuencia"`
 
@@ -951,7 +957,8 @@ type HistoricoSolicitud struct {
 
 // HistoricoSolicitudItem defines model for HistoricoSolicitudItem.
 type HistoricoSolicitudItem struct {
-	AEstado *string `json:"a_estado"`
+	// AEstado Estado de destino; null en las acciones sin cambio de estado (recotizar, reprogramar).
+	AEstado *EstadoSolicitud `json:"a_estado"`
 
 	// Accion Qué ocurrió: `creada`, `cotizada`, `recotizada`, `reprogramada`, `pago_confirmado`, `pago_confirmado_tardio` (excepción `VENCIDA → PAGADO`), `pago_revertido`, `cotizacion_rechazada`, `cancelada`, `vencida`, `aprobada`, `rechazada`. `string` y no enum para poder ampliar sin ruptura.
 	Accion string `json:"accion"`
@@ -961,7 +968,9 @@ type HistoricoSolicitudItem struct {
 
 	// Cotizacion Versión completa, solo en `cotizada` y `recotizada` (DEC-148
 	Cotizacion *Cotizacion `json:"cotizacion"`
-	DeEstado   *string     `json:"de_estado"`
+
+	// DeEstado Estado de origen; null en `creada` y en las acciones sin cambio de estado.
+	DeEstado *EstadoSolicitud `json:"de_estado"`
 
 	// En Instante en UTC, RFC 3339.
 	En MarcaTiempo `json:"en"`
@@ -1343,7 +1352,7 @@ type Pago struct {
 
 // PagoEntrada defines model for PagoEntrada.
 type PagoEntrada struct {
-	// FechaPago Cuándo pagó el cliente (día calendario en `America/Mexico_City`). Debe caer dentro de la vigencia de la última cotización (DEC-148 #34, #43).
+	// FechaPago Cuándo pagó el cliente (día calendario en `America/Mexico_City`). Debe caer dentro de la vigencia de la última cotización: desde su entrega hasta su último día, ambos incluidos (DEC-148 #34, #43). Una fecha anterior a la entrega o posterior al último día se rechaza.
 	FechaPago openapi_types.Date `json:"fecha_pago"`
 
 	// Referencia Folio o nota en texto. Opcional; sin archivo adjunto (DEC-148
@@ -1833,6 +1842,9 @@ type ViajeResumen struct {
 
 // ViajeSeguimiento defines model for ViajeSeguimiento.
 type ViajeSeguimiento struct {
+	// CancelacionConPenalizacion `true` si cancelar este viaje lleva marca de penalización, o ya la lleva por haberse cancelado: el viaje nació de una solicitud pagada (DEC-148 #14). `false` si lo creó Operación (DEC-148 #27). El cliente lo usa para mostrar el aviso del 50% antes de cancelar (DEC-042) y su confirmación después. Argos solo marca; no calcula ni guarda el monto (DEC-148 #6). Ausente se lee como `false`.
+	CancelacionConPenalizacion *bool `json:"cancelacion_con_penalizacion,omitempty"`
+
 	// Eta ETA estimado, no en vivo; con marca de obsolescencia (stale).
 	Eta *struct {
 		Obsoleto bool `json:"obsoleto"`
@@ -10224,7 +10236,7 @@ type TransferirConversacionResponse struct {
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
 	JSON404      *NoEncontrado
-	JSON409      *ConflictoVersion
+	JSON409      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -14564,7 +14576,7 @@ func ParseTransferirConversacionResponse(rsp *http.Response) (*TransferirConvers
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ConflictoVersion
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

@@ -26,14 +26,60 @@ version: v0.1.0-tracer.45
 # (`EstadoViaje` en `Viaje.estado`) también pierde valores, pero oasdiff la
 # clasifica como advertencia y no como ruptura.
 #
-# El matcher es por subcadena: `GET /api/v1/viajes` también cubriría rutas que
-# empiezan igual, así que esta entrada es más amplia de lo ideal. Es el límite
-# del mecanismo (ver la cabecera de v0.1.0-tracer.4.yaml); el diff completo de la
-# ola está en el CHANGELOG para que la revisión humana lo contraste.
+# El matcher compara por subcadena contra `<método ruta> | <detalle>` (el gate
+# une la línea `in API` con la línea de detalle de oasdiff), así que cada entrada
+# acota la ruptura a UN valor de enum retirado en UNA operación. Una ruptura
+# distinta en la misma ruta (por ejemplo un parámetro nuevo obligatorio en
+# `GET /api/v1/viajes/{id}`) NO queda autorizada y sigue fallando.
 openapi:
   - servicio: operacion
-    match: "GET /api/v1/viajes"
-    fuente: ADR 38 / DEC-148 #4, #13, #14 — el filtro `estado` de `listarViajes` pierde SOLICITADO, RECHAZADO_POR_AI27, RECHAZADO_POR_CLIENTE y CANCELADO (ahora CANCELADO_POR_CLIENTE); sin datos de producción de V1
+    match: "GET /api/v1/viajes | removed the enum value 'SOLICITADO' from the 'query' request parameter 'estado'"
+    fuente: ADR 38 / DEC-148 #4, #13, #14 — el filtro `estado` de `listarViajes` pierde SOLICITADO; sin datos de producción de V1
   - servicio: operacion
-    match: "POST /api/v1/viajes/{id}/transiciones"
-    fuente: ADR 38 / DEC-148 #4, #13, #14 — el `a_estado` de `transicionarViaje` pierde SOLICITADO, RECHAZADO_POR_AI27, RECHAZADO_POR_CLIENTE y CANCELADO (ahora CANCELADO_POR_CLIENTE); sin datos de producción de V1
+    match: "GET /api/v1/viajes | removed the enum value 'RECHAZADO_POR_AI27' from the 'query' request parameter 'estado'"
+    fuente: ADR 38 / DEC-148 #4, #13, #14 — el filtro `estado` de `listarViajes` pierde RECHAZADO_POR_AI27; sin datos de producción de V1
+  - servicio: operacion
+    match: "GET /api/v1/viajes | removed the enum value 'RECHAZADO_POR_CLIENTE' from the 'query' request parameter 'estado'"
+    fuente: ADR 38 / DEC-148 #4, #13, #14 — el filtro `estado` de `listarViajes` pierde RECHAZADO_POR_CLIENTE; sin datos de producción de V1
+  - servicio: operacion
+    match: "GET /api/v1/viajes | removed the enum value 'CANCELADO' from the 'query' request parameter 'estado'"
+    fuente: ADR 38 / DEC-148 #4, #13, #14 — el filtro `estado` de `listarViajes` pierde CANCELADO; sin datos de producción de V1
+  - servicio: operacion
+    match: "POST /api/v1/viajes/{id}/transiciones | removed the enum value 'SOLICITADO' of the request property 'a_estado/allOf[#/components/schemas/EstadoViaje]/'"
+    fuente: ADR 38 / DEC-148 #4, #13, #14 — el `a_estado` de `transicionarViaje` pierde SOLICITADO; sin datos de producción de V1
+  - servicio: operacion
+    match: "POST /api/v1/viajes/{id}/transiciones | removed the enum value 'RECHAZADO_POR_AI27' of the request property 'a_estado/allOf[#/components/schemas/EstadoViaje]/'"
+    fuente: ADR 38 / DEC-148 #4, #13, #14 — el `a_estado` de `transicionarViaje` pierde RECHAZADO_POR_AI27; sin datos de producción de V1
+  - servicio: operacion
+    match: "POST /api/v1/viajes/{id}/transiciones | removed the enum value 'RECHAZADO_POR_CLIENTE' of the request property 'a_estado/allOf[#/components/schemas/EstadoViaje]/'"
+    fuente: ADR 38 / DEC-148 #4, #13, #14 — el `a_estado` de `transicionarViaje` pierde RECHAZADO_POR_CLIENTE; sin datos de producción de V1
+  - servicio: operacion
+    match: "POST /api/v1/viajes/{id}/transiciones | removed the enum value 'CANCELADO' of the request property 'a_estado/allOf[#/components/schemas/EstadoViaje]/'"
+    fuente: ADR 38 / DEC-148 #4, #13, #14 — el `a_estado` de `transicionarViaje` pierde CANCELADO; sin datos de producción de V1
+
+# --- Rupturas de eventos (buf breaking). `match` es una subcadena del mensaje
+#     que imprime buf. ---
+#
+# `solicitud.estado_cambiado` perdió `marca_penalizacion` (campo 5) y
+# `cambiado_en` pasó del campo 6 al 5 (revisión de tracer.45, PR #153): la marca
+# de penalización revelaba por la superficie amplia que el cliente pagó y
+# canceló, y ningún consumidor la necesitaba.
+#
+# Ruptura segura: `tracer.45` NO está publicado (sin tag; `pf-contracts-m` solo
+# trae la versión previa a la corrección, que ningún consumidor pudo fijar
+# porque los consumidores fijan por tag). Se declara porque, con el chequeo de
+# eventos comparando de verdad contra `pf-contracts-m` (antes `FETCH_HEAD` se
+# resolvía a HEAD y el chequeo no comparaba nada), la promoción de la corrección
+# a `-m` lo detecta. Una vez publicado `tracer.45`, esta ruptura deja de existir:
+# la línea base ya trae el campo corregido.
+eventos:
+  - match: 'Previously present field "6" with name "cambiado_en" on message "SolicitudEstadoCambiado" was deleted.'
+    fuente: PR #153 (revisión de tracer.45) — `cambiado_en` pasa del campo 6 al 5; tracer.45 sin publicar
+  - match: 'Field "5" with name "cambiado_en" on message "SolicitudEstadoCambiado" changed cardinality'
+    fuente: PR #153 — el campo 5 pasa de `marca_penalizacion` (bool) a `cambiado_en` (Timestamp); tracer.45 sin publicar
+  - match: 'Field "5" with name "cambiado_en" on message "SolicitudEstadoCambiado" changed option "json_name" from "marcaPenalizacion" to "cambiadoEn"'
+    fuente: PR #153 — el campo 5 pasa de `marca_penalizacion` a `cambiado_en`; tracer.45 sin publicar
+  - match: 'Field "5" with name "cambiado_en" on message "SolicitudEstadoCambiado" changed type from "bool" to "message"'
+    fuente: PR #153 — el campo 5 pasa de bool a Timestamp; tracer.45 sin publicar
+  - match: 'Field "5" on message "SolicitudEstadoCambiado" changed name from "marca_penalizacion" to "cambiado_en"'
+    fuente: PR #153 — se retira `marca_penalizacion` de la superficie amplia; tracer.45 sin publicar

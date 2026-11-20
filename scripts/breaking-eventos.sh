@@ -12,6 +12,12 @@
 # Línea base: la rama principal `pf-contracts-m` (igual que antes, `make
 # breaking`). Si no existe o no trae contratos, se omite como en el primer
 # release.
+#
+# `buf` NO resuelve `FETCH_HEAD`: lo trata como `HEAD` y compara el commit contra
+# sí mismo, así que `.git#ref=FETCH_HEAD` nunca detecta nada (medido: la salida
+# contra `ref=FETCH_HEAD` y contra `ref=HEAD` es idéntica). Por eso este script
+# resuelve cualquier `#ref=<ref>` a un SHA antes de llamar a `buf`, y falla si no
+# puede resolverlo en vez de comparar contra otra cosa.
 # =============================================================================
 set -euo pipefail
 
@@ -20,6 +26,18 @@ cd "$RAIZ"
 
 VERSION="${VERSION:-$(cat VERSION)}"
 BASE_REF="${1:-.git#branch=pf-contracts-m}"
+
+# Resuelve `#ref=<ref>` a un SHA (ver la nota de arriba). `#branch=` y `#tag=` sí
+# los entiende buf y no se tocan.
+if [[ "$BASE_REF" =~ ^(.*)#ref=([^,]+)(.*)$ ]]; then
+  base_sha="$(git rev-parse --verify --quiet "${BASH_REMATCH[2]}^{commit}" || true)"
+  if [ -z "$base_sha" ]; then
+    echo "ERROR: no se pudo resolver la línea base '${BASH_REMATCH[2]}' a un commit." >&2
+    echo "       Un ref que buf no entiende lo compara contra HEAD y el chequeo queda vacío." >&2
+    exit 1
+  fi
+  BASE_REF="${BASH_REMATCH[1]}#ref=${base_sha}${BASH_REMATCH[3]}"
+fi
 GATE_DIR="$RAIZ/tools/breaking-gate"
 ROMPIMIENTOS_DIR="$RAIZ/rompimientos"
 
