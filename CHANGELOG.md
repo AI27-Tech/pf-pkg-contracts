@@ -3,6 +3,19 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-20 [tooling] — el chequeo de eventos compara contra `pf-contracts-m` y no contra `HEAD`
+
+**Para quién:** quien revisa PR de contratos y quien promueve olas. No cambia ningún contrato ni genera artefactos: `VERSION` no sube.
+
+**Resumen:** `buf` no resuelve `FETCH_HEAD` y lo trata como `HEAD`. `.git#ref=FETCH_HEAD`, la invocación del workflow y de `scripts/breaking-eventos.sh`, comparaba el commit contra sí mismo, así que el `buf breaking` de eventos nunca detectó nada en CI. Medido: contra `ref=FETCH_HEAD` y contra `ref=HEAD` la salida era idéntica; contra el SHA real de `-m` funcionaba y, en un control, detectaba un campo eliminado de un evento.
+
+**Cambios:**
+- `scripts/breaking-eventos.sh`: resuelve `#ref=<ref>` a un SHA antes de llamar a `buf`, y falla si no puede resolverlo (antes se habría comparado contra otra cosa).
+- `scripts/test-breaking-gate.sh`: caso 9, regresión. En un clon temporal fija `FETCH_HEAD` en la base, commitea un evento con un campo eliminado y exige que el chequeo falle; exige también que un ref sin resolver falle. Se comprobó que el caso falla con el script viejo y pasa con el nuevo.
+- `rompimientos/v0.1.0-tracer.45.yaml`: con el chequeo comparando de verdad, `solicitud.estado_cambiado` (que perdió `marca_penalizacion` en la revisión de `tracer.45`, PR #153) aparece como ruptura contra `-m`, que aún trae la versión previa. Se declaran las 5 rupturas: `tracer.45` no está publicado y ningún consumidor pudo fijarlo. Dejan de existir al publicarse `tracer.45`.
+
+**Verificado:** `make test-breaking-gate` (pasa con el arreglo; el caso 9 falla con el script anterior), y `./scripts/breaking-eventos.sh '.git#ref=FETCH_HEAD'` contra el `-m` real: 5 rupturas, todas declaradas.
+
 ## 2026-11-19 [tracer.45] — la solicitud entra al contrato y sale del viaje (ADR 38 y 39, DEC-148) — INCOMPATIBLE
 
 **Para quién:** `pf-svc-operacion` (módulo `solicitudes`, enum del viaje), `pf-svc-bff`, `pf-svc-mensajeria` (conversación de la solicitud), `pf-svc-identidad` (rol `cotizacion`), `pf-svc-reportes`, `pf-svc-core` (pins) y los dos frontends. **Cada uno adapta su código en su propio PR al subir el pin.**
