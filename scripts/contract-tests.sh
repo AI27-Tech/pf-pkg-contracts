@@ -114,6 +114,21 @@ func main() {
 	// estados/ — la máquina de estados del viaje.
 	_ = estados.EstadosViaje
 
+	// estados/ — la máquina de estados de la solicitud (ADR 38). Las constantes
+	// llevan el prefijo del tipo para no chocar con las del viaje.
+	if !estados.PuedeTransicionarSolicitud(estados.EstadoSolicitudCotizado, estados.EstadoSolicitudPagado) {
+		panic("COTIZADO -> PAGADO debe ser una transición permitida de la solicitud")
+	}
+	if !estados.PuedeTransicionarSolicitud(estados.EstadoSolicitudVencida, estados.EstadoSolicitudPagado) {
+		panic("VENCIDA -> PAGADO (pago en vigencia confirmado tarde, DEC-148 #35) debe estar permitida")
+	}
+	if estados.PuedeTransicionarSolicitud(estados.EstadoSolicitudAprobado, estados.EstadoSolicitudPagado) {
+		panic("APROBADO es terminal para la solicitud: no admite transiciones de salida")
+	}
+	if estados.EstadoSolicitudVencida.EsTerminal() {
+		panic("VENCIDA no es terminal: tiene la salida VENCIDA -> PAGADO")
+	}
+
 	// registro/ — el registro de tipos de evento, y su validación en runtime.
 	if !registro.EsTipoRegistrado("viaje.estado_cambiado") {
 		panic("viaje.estado_cambiado debe estar en el registro publicado")

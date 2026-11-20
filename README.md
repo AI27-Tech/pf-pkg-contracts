@@ -49,7 +49,8 @@ señal, geocercas). Que una capacidad esté decidida no obliga a incluirla en
 
 ```
 contracts/
-  estados/viaje.estados.yaml   Fuente ÚNICA de la máquina de estados (dato).
+  estados/viaje.estados.yaml   Fuente ÚNICA de la máquina de estados del viaje (dato).
+  estados/solicitud.estados.yaml  Ídem para la solicitud (cotización, pago, aprobación; ADR 38).
   openapi/                     Un spec por servicio del tracer + _comunes.yaml.
     identidad.yaml  catalogos.yaml  operacion.yaml  bff.yaml  reportes.yaml
     mensajeria.yaml  realtime.yaml
