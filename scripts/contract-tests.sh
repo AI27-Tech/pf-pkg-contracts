@@ -155,11 +155,14 @@ func main() {
 	if roles.EsRol("operador") {
 		panic("operador no es un rol del contrato y no debe existir")
 	}
-	if len(roles.Todos) != 8 {
-		panic("el contrato declara ocho roles canónicos")
+	if !roles.EsRol("cotizacion") {
+		panic("cotizacion (V2, DEC-148 #1) debe estar en el enum de roles publicado")
+	}
+	if len(roles.Todos) != 9 {
+		panic("el contrato declara nueve roles canónicos")
 	}
 	// El mapeo a `Audiencia` (`Cliente` | `Interno`): `cliente` es el ÚNICO rol
-	// externo y los otros siete son internos. Esta aserción existe porque
+	// externo y los otros ocho son internos. Esta aserción existe porque
 	// `EsInterno` se generó una vez invertido (negando a `jefe_operativo` en
 	// lugar de a `cliente`), lo que daba la respuesta correcta por casualidad en
 	// seis de los ocho roles y la equivocada justo en los dos que importan. Un
@@ -231,10 +234,7 @@ func main() {
 	// consumidor; la equivalencia exhaustiva estado<->spec la hace
 	// `make check-estados` en el job verificar.
 	operacionEstados := map[estados.EstadoViaje]operacion.EstadoViaje{
-		estados.EstadoSolicitado:          operacion.SOLICITADO,
 		estados.EstadoAprobado:            operacion.APROBADO,
-		estados.EstadoRechazadoPorAi27:    operacion.RECHAZADOPORAI27,
-		estados.EstadoRechazadoPorCliente: operacion.RECHAZADOPORCLIENTE,
 		estados.EstadoAsignado:            operacion.ASIGNADO,
 		estados.EstadoAptoParaSalida:      operacion.APTOPARASALIDA,
 		estados.EstadoEnEmbarque:          operacion.ENEMBARQUE,
@@ -243,7 +243,7 @@ func main() {
 		estados.EstadoEnDestino:           operacion.ENDESTINO,
 		estados.EstadoEnDescarga:          operacion.ENDESCARGA,
 		estados.EstadoCerrado:             operacion.CERRADO,
-		estados.EstadoCancelado:           operacion.CANCELADO,
+		estados.EstadoCanceladoPorCliente: operacion.CANCELADOPORCLIENTE,
 	}
 	if len(operacionEstados) != len(estados.EstadosViaje) {
 		panic(fmt.Sprintf(
@@ -257,9 +257,39 @@ func main() {
 		}
 	}
 
-	// estados/ — la máquina de estados: transiciones válidas entre estados.
-	if !estados.PuedeTransicionar(estados.EstadoSolicitado, estados.EstadoAprobado) {
-		panic("SOLICITADO -> APROBADO es una transición válida")
+	// Lo mismo para la solicitud (ADR 38): operacion.EstadoSolicitud y
+	// estados.EstadoSolicitud deben narrar los MISMOS ocho valores. Las
+	// constantes Go de la solicitud llevan nombres propios (`x-enum-varnames`)
+	// para no prefijar las del viaje.
+	operacionSolicitud := map[estados.EstadoSolicitud]operacion.EstadoSolicitud{
+		estados.EstadoSolicitudSolicitado:          operacion.SolicitudSolicitado,
+		estados.EstadoSolicitudCotizado:            operacion.SolicitudCotizado,
+		estados.EstadoSolicitudPagado:              operacion.SolicitudPagado,
+		estados.EstadoSolicitudAprobado:            operacion.SolicitudAprobado,
+		estados.EstadoSolicitudRechazadoPorAi27:    operacion.SolicitudRechazadoPorAi27,
+		estados.EstadoSolicitudRechazadoPorCliente: operacion.SolicitudRechazadoPorCliente,
+		estados.EstadoSolicitudCanceladoPorCliente: operacion.SolicitudCanceladoPorCliente,
+		estados.EstadoSolicitudVencida:             operacion.SolicitudVencida,
+	}
+	if len(operacionSolicitud) != len(estados.EstadosSolicitud) {
+		panic(fmt.Sprintf(
+			"operacion declara %d estados de solicitud y contracts/estados/ %d: la enumeración quedó desfasada",
+			len(operacionSolicitud), len(estados.EstadosSolicitud)))
+	}
+	for canonico, generado := range operacionSolicitud {
+		if string(generado) != string(canonico) {
+			panic(fmt.Sprintf("operacion.%q y estados.%q no son el mismo estado de solicitud",
+				string(generado), string(canonico)))
+		}
+	}
+
+	// estados/ — la máquina de estados: transiciones válidas entre estados. El
+	// viaje nace en APROBADO (ADR 38): ya no existe SOLICITADO -> APROBADO.
+	if !estados.PuedeTransicionar(estados.EstadoAprobado, estados.EstadoAsignado) {
+		panic("APROBADO -> ASIGNADO es una transición válida")
+	}
+	if !estados.PuedeTransicionar(estados.EstadoAprobado, estados.EstadoCanceladoPorCliente) {
+		panic("APROBADO -> CANCELADO_POR_CLIENTE es una transición válida")
 	}
 	if estados.PuedeTransicionar(estados.EstadoCerrado, estados.EstadoEnTransito) {
 		panic("un viaje cerrado no puede volver a tránsito")

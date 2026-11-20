@@ -31,8 +31,9 @@ export class ViajeCreado extends Message<ViajeCreado> {
   clienteId = "";
 
   /**
-   * Token de estado inicial (SOLICITADO si lo crea el cliente, APROBADO si
-   * Operación). Coincide con contracts/estados/ (ADR 19).
+   * Token de estado inicial: siempre APROBADO (ADR 38). El viaje nace de una
+   * solicitud aprobada, con el mismo id, o lo crea Operación. Coincide con
+   * contracts/estados/viaje.estados.yaml.
    *
    * @generated from field: string estado = 3;
    */

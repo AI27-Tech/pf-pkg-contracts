@@ -23,6 +23,7 @@ const (
 	RolEjecutivo     Rol = "ejecutivo"
 	RolReaccion      Rol = "reaccion"
 	RolAdministrador Rol = "administrador"
+	RolCotizacion    Rol = "cotizacion"
 )
 
 // Todos son los roles canónicos del contrato, en el orden de la fuente.
@@ -35,13 +36,14 @@ var Todos = []Rol{
 	RolEjecutivo,
 	RolReaccion,
 	RolAdministrador,
+	RolCotizacion,
 }
 
 // EsRol indica si el valor es un rol del contrato. Un rol desconocido se
 // rechaza en servidor; nunca se degrada a un permiso por defecto.
 func EsRol(v string) bool {
 	switch Rol(v) {
-	case RolCliente, RolJefeOperativo, RolMonitorista, RolSupervisor, RolCoordinador, RolEjecutivo, RolReaccion, RolAdministrador:
+	case RolCliente, RolJefeOperativo, RolMonitorista, RolSupervisor, RolCoordinador, RolEjecutivo, RolReaccion, RolAdministrador, RolCotizacion:
 		return true
 	}
 	return false

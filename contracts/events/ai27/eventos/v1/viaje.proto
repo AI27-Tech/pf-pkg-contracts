@@ -17,8 +17,9 @@ option go_package = "github.com/AI27-Tech/pf-pkg-contracts/packages/api-client-g
 message ViajeCreado {
   string viaje_id = 1;
   string cliente_id = 2;
-  // Token de estado inicial (SOLICITADO si lo crea el cliente, APROBADO si
-  // Operación). Coincide con contracts/estados/ (ADR 19).
+  // Token de estado inicial: siempre APROBADO (ADR 38). El viaje nace de una
+  // solicitud aprobada, con el mismo id, o lo crea Operación. Coincide con
+  // contracts/estados/viaje.estados.yaml.
   string estado = 3;
   string origen = 4;
   google.protobuf.Timestamp creado_en = 5;

@@ -29,8 +29,8 @@ info:
     clientes" y, por la jerarquía, los de sus subordinados; DEC-149 #18),
     que `operacion` mantiene como proyección local de `alcance.cambiado`
     (reconstruible con `identidad.listarAlcances`, DEC-149 #20, ADR 26); solo
-    desde `APROBADO`: nunca un viaje en `SOLICITADO` ni en
-    `RECHAZADO_POR_AI27`, ni uno que no pasó por `APROBADO`. No hay cruce con
+    desde `APROBADO`; el viaje nace en `APROBADO` (ADR 38), así que ya no
+    existen viajes en `SOLICITADO` ni en `RECHAZADO_POR_AI27`. No hay cruce con
     unidades: el `cliente_id` y el estado `activa` de las unidades no
     intervienen. El monitoreo sigue al cliente del viaje, no al de la unidad
     prestada (DEC-149 #5). `ejecutivo` no lista ni lee viajes (`403`, DEC-149 #16);
@@ -53,6 +53,10 @@ security:
 
 tags:
 - name: viajes
+- name: solicitudes
+  description: >-
+    Solicitud previa al viaje: cotización, pago y aprobación (V2, ADR 38 y 39,
+    DEC-148). Al aprobarse nace el viaje con el mismo id.
 - name: asignacion
 - name: roster
   description: Roster de unidades (paquetes vehículo + custodios) administrado por el jefe_operativo (ADR 31/33).
@@ -73,12 +77,13 @@ paths:
     post:
       operationId: crearViaje
       tags: [viajes]
-      summary: Crear un viaje.
+      summary: Crear un viaje (Operación).
       description: >-
-        El cliente crea en `SOLICITADO`. Operación crea en `APROBADO` en el mismo
-        acto y puede asignar atómicamente `unidad`+`custodios` para dejarlo
-        `ASIGNADO` (DEC-026). El estado inicial lo determina el rol del token,
-        no un campo de la petición.
+        Solo Operación (`jefe_operativo` y `administrador`). Crea en `APROBADO`
+        en el mismo acto y puede asignar atómicamente `unidad`+`custodios` para
+        dejarlo `ASIGNADO` (DEC-026). El cliente ya no crea viajes: crea una
+        solicitud (`crearSolicitud`, ADR 38) y el viaje nace al aprobarse, con el
+        mismo id. Un Cliente que llame aquí recibe `403`.
       requestBody:
         required: true
         content:
@@ -387,10 +392,9 @@ paths:
       tags: [viajes]
       summary: Completar o editar la fecha/hora del servicio del viaje.
       description: >-
-        Escribe `fecha_hora_servicio` sobre un viaje ya creado. La aprobación
-        exige este dato (guarda `fecha_hora_servicio_definida` de
-        `SOLICITADO → APROBADO`, DEC-010 #2); si el cliente no lo puso al crear,
-        el operador lo completa antes de aprobar (E1-HU-003). NO valida contra el
+        Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha
+        la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y
+        el viaje nace con ella; este endpoint la corrige después. NO valida contra el
         grafo de transiciones —no es un cambio de estado—; sólo exige que el
         viaje no esté en un estado terminal, igual que `fijarEta`.
       requestBody:
@@ -415,6 +419,402 @@ paths:
           content:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  # ===========================================================================
+  # SOLICITUDES (V2, ADR 38 y 39, DEC-148). Previas al viaje: el cliente crea la
+  # solicitud, `cotizacion` la cotiza y confirma el pago, y el Jefe Operativo la
+  # aprueba. Al aprobarse nace el viaje con el MISMO id, en la misma transacción
+  # (ADR 39). Una acción por endpoint porque cada una lleva datos propios. El
+  # estado solo cambia por una acción validada contra
+  # `contracts/estados/solicitud.estados.yaml`; no existe escritura directa.
+  #
+  # Rol × acción (DEC-148 #1, #12, #20, #22, #28). `cotizacion` y
+  # `administrador` ven todas las solicitudes en cualquier estado; el
+  # `administrador` hereda las facultades de `cotizacion` y del Jefe Operativo.
+  # `jefe_operativo` ve solo las que están en `PAGADO`. El Cliente, las de su
+  # tenant. Cualquier otro rol recibe `403`. Una solicitud fuera de alcance
+  # responde `404`, igual que si no existiera.
+  # ===========================================================================
+  /api/v1/solicitudes:
+    post:
+      operationId: crearSolicitud
+      tags: [solicitudes]
+      summary: Crear una solicitud (cliente).
+      description: >-
+        Solo el Cliente. Nace en `SOLICITADO`. La fecha y hora del servicio es
+        opcional (DEC-148 #38); si falta, `cotizacion` la fija al cotizar (#39).
+        La organización de la solicitud es la del token; no se acepta en el
+        cuerpo. Operación no crea solicitudes: sus viajes nacen en `APROBADO`
+        (`crearViaje`, DEC-026). El id de la solicitud es el que heredará el
+        viaje al aprobarse. Publica `solicitud.creada`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CrearSolicitudEntrada"}
+      responses:
+        "201":
+          description: Solicitud creada en `SOLICITADO`.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Solicitud"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+    get:
+      operationId: listarSolicitudes
+      tags: [solicitudes]
+      summary: Listar solicitudes por alcance.
+      description: >-
+        Cliente: las de su tenant. `cotizacion` y `administrador`: todas, en
+        cualquier estado. `jefe_operativo`: solo las que están en `PAGADO` (su
+        bandeja, DEC-148 #22). Cualquier otro rol recibe `403`. Cada fila lleva
+        las marcas de aviso que le tocan al llamante (`avisos`, DEC-148 #53 a
+        #57).
+      parameters:
+      - name: estado
+        in: query
+        required: false
+        description: Filtro por estado de la solicitud.
+        schema: {$ref: "#/components/schemas/EstadoSolicitud"}
+      - name: cursor
+        in: query
+        required: false
+        schema: {$ref: "_comunes.yaml#/components/schemas/Cursor"}
+      responses:
+        "200":
+          description: Página de solicitudes.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PaginaSolicitudes"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+
+  /api/v1/solicitudes/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: obtenerSolicitud
+      tags: [solicitudes]
+      summary: Obtener una solicitud con su cotización vigente.
+      description: >-
+        Devuelve la solicitud con la cotización vigente. Las versiones anteriores
+        de la cotización no se exponen aquí: están en `listarHistoricoSolicitud`
+        para el personal interno (DEC-148 #42). Fuera de alcance responde `404`.
+      responses:
+        "200":
+          description: La solicitud.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Solicitud"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/solicitudes/{id}/historico:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    get:
+      operationId: listarHistoricoSolicitud
+      tags: [solicitudes]
+      summary: Histórico de la solicitud (audiencia interna).
+      description: >-
+        Cada transición y cada acción sin cambio de estado (recotizar,
+        reprogramar), en orden cronológico, con actor, motivo y marca de tiempo.
+        Las entradas de cotización llevan la versión completa (DEC-148 #42).
+        Solo `cotizacion`, `jefe_operativo` (en `PAGADO`) y `administrador`; el
+        Cliente recibe `403`.
+      responses:
+        "200":
+          description: Histórico de la solicitud.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HistoricoSolicitud"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+
+  /api/v1/solicitudes/{id}/cotizacion:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    put:
+      operationId: cotizarSolicitud
+      tags: [solicitudes]
+      summary: Cotizar o recotizar la solicitud.
+      description: >-
+        Solo `cotizacion` y `administrador`. En `SOLICITADO` envía la primera
+        cotización y la solicitud pasa a `COTIZADO`; en `COTIZADO` recotiza sin
+        cambiar de estado. Cada llamada crea una versión nueva y conserva las
+        anteriores (DEC-148 #42). Exige monto, moneda y fecha y hora del servicio
+        (DEC-148 #39, #41); la fecha puede diferir de la que pidió el cliente.
+        La vigencia es de 15 días desde esta entrega, contados en
+        `America/Mexico_City` (DEC-148 #15, #50). No valida disponibilidad de
+        unidades (DEC-148 #23). El cambio de fecha no requiere aceptación del
+        cliente en el sistema (DEC-148 #40).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CotizacionEntrada"}
+      responses:
+        "200":
+          description: Cotización registrada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Solicitud"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/SolicitudTransicionNoPermitida"}
+
+  /api/v1/solicitudes/{id}/fecha-hora:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    put:
+      operationId: reprogramarSolicitud
+      tags: [solicitudes]
+      summary: Reprogramar la fecha y hora de una solicitud pagada.
+      description: >-
+        Solo `cotizacion` y `administrador`, con la solicitud en `PAGADO`. El
+        motivo es obligatorio. No hay pago nuevo ni cambio de estado; el cambio
+        queda en el histórico con actor, motivo y marca de tiempo. Se hace
+        después de acordarlo con el cliente en la conversación de la solicitud
+        (DEC-148 #24, #40).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ReprogramacionEntrada"}
+      responses:
+        "200":
+          description: Fecha y hora actualizada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Solicitud"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/SolicitudTransicionNoPermitida"}
+
+  /api/v1/solicitudes/{id}/rechazo-cotizacion:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: rechazarCotizacion
+      tags: [solicitudes]
+      summary: Rechazar la cotización (cliente).
+      description: >-
+        Solo el Cliente dueño de la solicitud, en `COTIZADO`. "No acepto este
+        precio o estas condiciones": la solicitud termina en
+        `RECHAZADO_POR_CLIENTE`, sin marca de penalización y sin crear viaje
+        (DEC-148 #9, #18). Distinta de `cancelarSolicitud`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AccionClienteEntrada"}
+      responses:
+        "200":
+          description: Cotización rechazada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Solicitud"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/SolicitudTransicionNoPermitida"}
+
+  /api/v1/solicitudes/{id}/cancelacion:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: cancelarSolicitud
+      tags: [solicitudes]
+      summary: Cancelar la solicitud (cliente).
+      description: >-
+        Solo el Cliente dueño de la solicitud, en `SOLICITADO`, `COTIZADO` o
+        `PAGADO`. "Ya no necesito el servicio": termina en
+        `CANCELADO_POR_CLIENTE`. Lleva marca de penalización solo si estaba en
+        `PAGADO`; sin ella en los otros dos casos (DEC-148 #6, #17). Argos solo
+        marca; no calcula ni guarda monto. No se crea viaje. La respuesta
+        confirma la marca (`marca_penalizacion`).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AccionClienteEntrada"}
+      responses:
+        "200":
+          description: Solicitud cancelada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Solicitud"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/SolicitudTransicionNoPermitida"}
+
+  /api/v1/solicitudes/{id}/pago:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    put:
+      operationId: confirmarPago
+      tags: [solicitudes]
+      summary: Confirmar el pago de la solicitud.
+      description: >-
+        Solo `cotizacion` y `administrador`. El pago ocurre fuera de Argos; esto
+        registra su confirmación. Exige la fecha del pago, que debe caer dentro
+        de la vigencia de la última cotización: gana la fecha del pago, no la de
+        la confirmación (DEC-148 #34, #43). Desde `COTIZADO` pasa a `PAGADO`.
+        Desde `VENCIDA` también pasa a `PAGADO`, solo si la fecha del pago cae
+        dentro de la vigencia, y queda registrado como excepción (DEC-148 #35).
+        No genera aviso al cliente (#56).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/PagoEntrada"}
+      responses:
+        "200":
+          description: Pago confirmado; la solicitud queda en `PAGADO`.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Solicitud"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            No se puede confirmar. `codigo` de máquina:
+            `transicion_no_permitida` (estado de origen inválido) o
+            `fecha_pago_fuera_de_vigencia` (la fecha del pago es posterior al
+            último día de vigencia).
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/solicitudes/{id}/reversa-pago:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: revertirPago
+      tags: [solicitudes]
+      summary: Revertir una confirmación de pago hecha por error.
+      description: >-
+        Solo `administrador`, con motivo obligatorio y mientras la solicitud siga
+        en `PAGADO`. Regresa a `COTIZADO` y queda en el histórico (DEC-148 #37).
+        Si la vigencia ya terminó al revertir, el resultado está pendiente de
+        decisión (ADR 38).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MotivoEntrada"}
+      responses:
+        "200":
+          description: Pago revertido; la solicitud regresa a `COTIZADO`.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Solicitud"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/SolicitudTransicionNoPermitida"}
+
+  /api/v1/solicitudes/{id}/aprobacion:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: aprobarSolicitud
+      tags: [solicitudes]
+      summary: Aprobar la solicitud pagada y crear el viaje.
+      description: >-
+        Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`. La
+        aprobación es explícita, nunca automática. Exige la fecha y hora del
+        servicio (DEC-010 #2). En la misma transacción la solicitud pasa a
+        `APROBADO` y nace el viaje en `APROBADO` con el MISMO id de la solicitud
+        (DEC-148 #3, #52; ADR 39): no existe una solicitud aprobada sin su viaje.
+        El viaje se consulta después con `obtenerViaje` usando ese id.
+      responses:
+        "200":
+          description: Solicitud aprobada; el viaje ya existe con el mismo id.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Solicitud"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409":
+          description: >-
+            No se puede aprobar. `codigo` de máquina: `transicion_no_permitida`
+            (no está en `PAGADO`) o `fecha_hora_servicio_requerida` (falta la
+            fecha y hora del servicio).
+          content:
+            application/json:
+              schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
+  /api/v1/solicitudes/{id}/rechazo:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema: {$ref: "_comunes.yaml#/components/schemas/Id"}
+    post:
+      operationId: rechazarSolicitud
+      tags: [solicitudes]
+      summary: Rechazar la solicitud pagada (AI27).
+      description: >-
+        Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`.
+        Motivo obligatorio (DEC-020 #2). Termina en `RECHAZADO_POR_AI27`, sin
+        marca de reembolso (el reembolso se maneja fuera de Argos, DEC-148 #19) y
+        sin crear viaje. El cliente ve el motivo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MotivoEntrada"}
+      responses:
+        "200":
+          description: Solicitud rechazada.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Solicitud"}
+        "400": {$ref: "_comunes.yaml#/components/responses/SolicitudInvalida"}
+        "401": {$ref: "_comunes.yaml#/components/responses/NoAutorizado"}
+        "403": {$ref: "_comunes.yaml#/components/responses/Prohibido"}
+        "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
+        "409": {$ref: "#/components/responses/SolicitudTransicionNoPermitida"}
 
   /api/v1/unidades:
     get:
@@ -944,6 +1344,16 @@ paths:
         "404": {$ref: "_comunes.yaml#/components/responses/NoEncontrado"}
 
 components:
+  responses:
+    SolicitudTransicionNoPermitida:
+      description: >-
+        La acción no es válida para el estado actual de la solicitud. `codigo`
+        de máquina `transicion_no_permitida` (la arista no existe: la solicitud
+        ya es terminal, `VENCIDA` no se recotiza, o hay una carrera).
+      content:
+        application/json:
+          schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
+
   schemas:
     # --- Enum espejo de contracts/estados/viaje.estados.yaml. CI verifica la
     #     equivalencia; la fuente canónica es el archivo de estados. ---
@@ -951,13 +1361,11 @@ components:
       type: string
       description: >-
         Estado de progreso del viaje. Espejo del enum canónico de
-        `contracts/estados/` (ADR 19). Incluye estados V2 declarados e
-        inalcanzables en V1 (PATRULLA_EN_CAMINO).
+        `contracts/estados/` (ADR 19, enmendado por ADR 38). El viaje nace en
+        `APROBADO`: las etapas previas son de la solicitud (`EstadoSolicitud`).
+        Incluye estados V2 declarados e inalcanzables en V1 (PATRULLA_EN_CAMINO).
       enum:
-      - SOLICITADO
       - APROBADO
-      - RECHAZADO_POR_AI27
-      - RECHAZADO_POR_CLIENTE
       - ASIGNADO
       - APTO_PARA_SALIDA
       - EN_EMBARQUE
@@ -966,7 +1374,7 @@ components:
       - EN_DESTINO
       - EN_DESCARGA
       - CERRADO
-      - CANCELADO
+      - CANCELADO_POR_CLIENTE
 
     CondicionViaje:
       type: string
@@ -1738,3 +2146,295 @@ components:
           format: uri
           description: URL de vida corta del almacenamiento de objetos.
         expira_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    # =========================================================================
+    # SOLICITUDES (V2, ADR 38, DEC-148)
+    # =========================================================================
+    EstadoSolicitud:
+      type: string
+      description: >-
+        Estado de la solicitud. Espejo del enum canónico de
+        `contracts/estados/solicitud.estados.yaml` (ADR 38). CI verifica la
+        equivalencia; la fuente canónica es el archivo de estados.
+      enum:
+      - SOLICITADO
+      - COTIZADO
+      - PAGADO
+      - APROBADO
+      - RECHAZADO_POR_AI27
+      - RECHAZADO_POR_CLIENTE
+      - CANCELADO_POR_CLIENTE
+      - VENCIDA
+      # Nombres propios de las constantes Go. Sin ellos, el generador ve valores
+      # compartidos con `EstadoViaje` (APROBADO, ...) y prefija TODAS las
+      # constantes de ambos enums, lo que renombraría las del viaje en cada
+      # consumidor sin que cambie nada en el cable (git-workflow §8).
+      x-enum-varnames:
+      - SolicitudSolicitado
+      - SolicitudCotizado
+      - SolicitudPagado
+      - SolicitudAprobado
+      - SolicitudRechazadoPorAi27
+      - SolicitudRechazadoPorCliente
+      - SolicitudCanceladoPorCliente
+      - SolicitudVencida
+
+    Monto:
+      type: string
+      pattern: "^[0-9]+(\\.[0-9]+)?$"
+      description: >-
+        Importe como decimal en texto, sin signo ni separador de miles (evita
+        errores de punto flotante). Los límites (cero, decimales máximos) siguen
+        pendientes de decisión (DEC-148).
+
+    CrearSolicitudEntrada:
+      type: object
+      additionalProperties: false
+      required: [origen, destinos]
+      description: >-
+        Solicitud mínima del cliente (E1-HU-001). La organización la fija el
+        token, no el cuerpo.
+      properties:
+        origen:
+          type: string
+          description: Origen en texto libre (DEC-010 #1).
+        destinos:
+          type: array
+          minItems: 1
+          description: Uno o más destinos (multi-parada, DEC-013).
+          items: {$ref: "#/components/schemas/Destino"}
+        fecha_hora_servicio:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Fecha y hora deseada del servicio. Opcional para el cliente
+            (DEC-148 #38); si falta, `cotizacion` la fija al cotizar.
+        tipo_servicio: {type: string}
+        tracto:
+          allOf: [{$ref: "#/components/schemas/Tracto"}]
+          nullable: true
+          description: Tracto del cliente. Opcional (DEC-104 #1).
+
+    CotizacionEntrada:
+      type: object
+      additionalProperties: false
+      required: [monto, moneda, fecha_hora_servicio]
+      properties:
+        monto: {$ref: "#/components/schemas/Monto"}
+        moneda:
+          type: string
+          minLength: 1
+          description: >-
+            Código de moneda. `string` y no enum porque el catálogo de monedas
+            sigue pendiente (DEC-148); estrechar a enum después es incompatible.
+        fecha_hora_servicio:
+          type: string
+          format: date-time
+          description: >-
+            Fecha y hora del servicio que ofrece la cotización. Obligatoria
+            (DEC-148 #39); puede diferir de la que pidió el cliente.
+        notas:
+          type: string
+          nullable: true
+          description: Texto libre. Sin desglose estructurado en V2 (DEC-148 #41).
+
+    Cotizacion:
+      type: object
+      additionalProperties: false
+      required: [version, monto, moneda, fecha_hora_servicio, entregada_en, vigente_hasta]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Número de versión; la recotización incrementa.
+        monto: {$ref: "#/components/schemas/Monto"}
+        moneda: {type: string}
+        fecha_hora_servicio: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        notas:
+          type: string
+          nullable: true
+        entregada_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+        vigente_hasta:
+          type: string
+          format: date
+          description: >-
+            Último día de vigencia: 15 días calendario desde la entrega, en
+            `America/Mexico_City` (DEC-148 #15, #50). La solicitud pasa a
+            `VENCIDA` un día después.
+
+    ReprogramacionEntrada:
+      type: object
+      additionalProperties: false
+      required: [fecha_hora_servicio, motivo]
+      properties:
+        fecha_hora_servicio:
+          type: string
+          format: date-time
+        motivo:
+          type: string
+          minLength: 1
+          description: Obligatorio (DEC-148 #24).
+
+    PagoEntrada:
+      type: object
+      additionalProperties: false
+      required: [fecha_pago]
+      properties:
+        fecha_pago:
+          type: string
+          format: date
+          description: >-
+            Cuándo pagó el cliente (día calendario en `America/Mexico_City`).
+            Debe caer dentro de la vigencia de la última cotización (DEC-148
+            #34, #43).
+        referencia:
+          type: string
+          nullable: true
+          description: Folio o nota en texto. Opcional; sin archivo adjunto (DEC-148 #43).
+
+    Pago:
+      type: object
+      additionalProperties: false
+      required: [fecha_pago, confirmado_en]
+      properties:
+        fecha_pago: {type: string, format: date}
+        referencia: {type: string, nullable: true}
+        confirmado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    MotivoEntrada:
+      type: object
+      additionalProperties: false
+      required: [motivo]
+      properties:
+        motivo:
+          type: string
+          minLength: 1
+          description: Obligatorio en esta acción.
+
+    AccionClienteEntrada:
+      type: object
+      additionalProperties: false
+      description: >-
+        Cuerpo opcional de las acciones del cliente. El `motivo` es opcional:
+        DEC-148 no lo exige para la solicitud (a diferencia de DEC-111 para el
+        viaje); queda pendiente de confirmación.
+      properties:
+        motivo: {type: string, nullable: true}
+
+    Solicitud:
+      type: object
+      additionalProperties: false
+      required: [id, estado, origen, destinos, marca_penalizacion, avisos, creado_en]
+      properties:
+        id:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/Id"}]
+          description: >-
+            Id de la solicitud. Es también el id del viaje que nace al aprobarse
+            (DEC-148 #3).
+        estado: {$ref: "#/components/schemas/EstadoSolicitud"}
+        cliente_id: {$ref: "_comunes.yaml#/components/schemas/Id"}
+        origen: {type: string}
+        destinos:
+          type: array
+          items: {$ref: "#/components/schemas/Destino"}
+        fecha_hora_servicio:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Fecha y hora vigente del servicio: la del cliente, la de la última
+            cotización o la de la última reprogramación.
+        tipo_servicio:
+          type: string
+          nullable: true
+        tracto:
+          allOf: [{$ref: "#/components/schemas/Tracto"}]
+          nullable: true
+        cotizacion:
+          allOf: [{$ref: "#/components/schemas/Cotizacion"}]
+          nullable: true
+          description: Cotización vigente; null mientras no se ha cotizado.
+        pago:
+          allOf: [{$ref: "#/components/schemas/Pago"}]
+          nullable: true
+          description: Pago confirmado; null mientras no lo hay.
+        marca_penalizacion:
+          type: boolean
+          description: >-
+            `true` si el cliente canceló estando en `PAGADO` (DEC-148 #6). Argos
+            solo marca; no calcula ni guarda el monto.
+        motivo_rechazo:
+          type: string
+          nullable: true
+          description: >-
+            Motivo del rechazo de AI27. Lo ve el cliente (DEC-148 #55). null en
+            cualquier otro estado.
+        avisos:
+          type: array
+          description: >-
+            Marcas de aviso dentro de Argos que le tocan al llamante (DEC-148 #53
+            a #57). Se derivan del estado y la hora; no se almacenan. Valores:
+            `nueva` (para `cotizacion`: está en `SOLICITADO`),
+            `cotizacion_nueva` (para el cliente: se entregó o recotizó),
+            `por_vencer` (para ambos: faltan 3 días o menos para el último día
+            de vigencia), `cancelacion_con_penalizacion` (para `cotizacion`) y
+            `rechazo_de_ai27` (para el cliente). `string` y no enum para poder
+            ampliar la lista sin ruptura. Cuándo se apaga cada aviso sigue
+            pendiente (salvo el de mensaje sin respuesta, que produce
+            `mensajeria`).
+          items: {type: string}
+        creado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    PaginaSolicitudes:
+      type: object
+      additionalProperties: false
+      required: [items, cursor_siguiente]
+      properties:
+        items:
+          type: array
+          items: {$ref: "#/components/schemas/Solicitud"}
+        cursor_siguiente:
+          type: string
+          nullable: true
+          description: Opcional; mismo formato que `Cursor`. null si no aplica.
+
+    HistoricoSolicitudItem:
+      type: object
+      additionalProperties: false
+      required: [accion, en]
+      properties:
+        accion:
+          type: string
+          description: >-
+            Qué ocurrió: `creada`, `cotizada`, `recotizada`, `reprogramada`,
+            `pago_confirmado`, `pago_confirmado_tardio` (excepción
+            `VENCIDA → PAGADO`), `pago_revertido`, `cotizacion_rechazada`,
+            `cancelada`, `vencida`, `aprobada`, `rechazada`. `string` y no enum
+            para poder ampliar sin ruptura.
+        de_estado: {type: string, nullable: true}
+        a_estado: {type: string, nullable: true}
+        actor_id:
+          allOf: [{$ref: "_comunes.yaml#/components/schemas/Id"}]
+          nullable: true
+          description: null cuando lo hizo el sistema (el vencimiento).
+        motivo: {type: string, nullable: true}
+        cotizacion:
+          allOf: [{$ref: "#/components/schemas/Cotizacion"}]
+          nullable: true
+          description: Versión completa, solo en `cotizada` y `recotizada` (DEC-148 #42).
+        marca_penalizacion:
+          type: boolean
+          nullable: true
+          description: Solo en `cancelada`.
+        en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
+
+    HistoricoSolicitud:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: En orden cronológico.
+          items: {$ref: "#/components/schemas/HistoricoSolicitudItem"}

@@ -7,10 +7,7 @@ package estados
 type EstadoViaje string
 
 const (
-	EstadoSolicitado          EstadoViaje = "SOLICITADO"
 	EstadoAprobado            EstadoViaje = "APROBADO"
-	EstadoRechazadoPorAi27    EstadoViaje = "RECHAZADO_POR_AI27"
-	EstadoRechazadoPorCliente EstadoViaje = "RECHAZADO_POR_CLIENTE"
 	EstadoAsignado            EstadoViaje = "ASIGNADO"
 	EstadoAptoParaSalida      EstadoViaje = "APTO_PARA_SALIDA"
 	EstadoEnEmbarque          EstadoViaje = "EN_EMBARQUE"
@@ -19,15 +16,12 @@ const (
 	EstadoEnDestino           EstadoViaje = "EN_DESTINO"
 	EstadoEnDescarga          EstadoViaje = "EN_DESCARGA"
 	EstadoCerrado             EstadoViaje = "CERRADO"
-	EstadoCancelado           EstadoViaje = "CANCELADO"
+	EstadoCanceladoPorCliente EstadoViaje = "CANCELADO_POR_CLIENTE"
 )
 
 // EstadosViaje son todos los estados declarados, incluidos los de V2 inalcanzables.
 var EstadosViaje = []EstadoViaje{
-	EstadoSolicitado,
 	EstadoAprobado,
-	EstadoRechazadoPorAi27,
-	EstadoRechazadoPorCliente,
 	EstadoAsignado,
 	EstadoAptoParaSalida,
 	EstadoEnEmbarque,
@@ -36,13 +30,13 @@ var EstadosViaje = []EstadoViaje{
 	EstadoEnDestino,
 	EstadoEnDescarga,
 	EstadoCerrado,
-	EstadoCancelado,
+	EstadoCanceladoPorCliente,
 }
 
 // EsTerminal indica si un estado no admite transiciones de salida.
 func (e EstadoViaje) EsTerminal() bool {
 	switch e {
-	case EstadoRechazadoPorAi27, EstadoRechazadoPorCliente, EstadoCerrado, EstadoCancelado:
+	case EstadoCerrado, EstadoCanceladoPorCliente:
 		return true
 	}
 	return false
@@ -53,20 +47,15 @@ type transicion struct{ De, A EstadoViaje }
 
 // transicionesViaje son las aristas permitidas (de -> a). Generadas desde la fuente.
 var transicionesViaje = []transicion{
-	{De: EstadoSolicitado, A: EstadoAprobado},
-	{De: EstadoSolicitado, A: EstadoRechazadoPorAi27},
-	{De: EstadoSolicitado, A: EstadoCancelado},
 	{De: EstadoAprobado, A: EstadoAsignado},
-	{De: EstadoAprobado, A: EstadoCancelado},
+	{De: EstadoAprobado, A: EstadoCanceladoPorCliente},
 	{De: EstadoAsignado, A: EstadoAptoParaSalida},
 	{De: EstadoAsignado, A: EstadoEnEmbarque},
 	{De: EstadoAsignado, A: EstadoEnTransito},
-	{De: EstadoAsignado, A: EstadoRechazadoPorCliente},
-	{De: EstadoAsignado, A: EstadoCancelado},
+	{De: EstadoAsignado, A: EstadoCanceladoPorCliente},
 	{De: EstadoAptoParaSalida, A: EstadoEnEmbarque},
 	{De: EstadoAptoParaSalida, A: EstadoEnTransito},
-	{De: EstadoAptoParaSalida, A: EstadoRechazadoPorCliente},
-	{De: EstadoAptoParaSalida, A: EstadoCancelado},
+	{De: EstadoAptoParaSalida, A: EstadoCanceladoPorCliente},
 	{De: EstadoEnEmbarque, A: EstadoEnTransito},
 	{De: EstadoEnTransito, A: EstadoEnDestino},
 	{De: EstadoEnDestino, A: EstadoEnDescarga},

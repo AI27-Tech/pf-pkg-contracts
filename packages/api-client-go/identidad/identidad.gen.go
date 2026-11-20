@@ -27,6 +27,7 @@ const (
 	RolAdministrador Rol = "administrador"
 	RolCliente       Rol = "cliente"
 	RolCoordinador   Rol = "coordinador"
+	RolCotizacion    Rol = "cotizacion"
 	RolEjecutivo     Rol = "ejecutivo"
 	RolJefeOperativo Rol = "jefe_operativo"
 	RolMonitorista   Rol = "monitorista"
@@ -83,7 +84,7 @@ type AltaSujetoEntrada struct {
 	// Nombre Nombre del usuario.
 	Nombre string `json:"nombre"`
 
-	// Rol Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+	// Rol Rol del sujeto dentro del tenant. Los nueve identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. `cotizacion` (V2, DEC-148 #1) es un rol interno y global: ve todas las solicitudes, las cotiza y confirma su pago; el `administrador` hereda sus facultades (#20). El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros ocho roles a `Interno`.
 	Rol Rol `json:"rol"`
 
 	// TenantId Tenant del sujeto. Para `cliente` lo determina su organización; para los roles internos es el tenant interno de AI27 (G-9).
@@ -92,7 +93,7 @@ type AltaSujetoEntrada struct {
 
 // AsignacionRolEntrada Rol a fijar en el sujeto. Si no tiene rol activo lo asigna; si ya tiene, lo reemplaza. El actor se resuelve en servidor desde el token.
 type AsignacionRolEntrada struct {
-	// Rol Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+	// Rol Rol del sujeto dentro del tenant. Los nueve identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. `cotizacion` (V2, DEC-148 #1) es un rol interno y global: ve todas las solicitudes, las cotiza y confirma su pago; el `administrador` hereda sus facultades (#20). El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros ocho roles a `Interno`.
 	Rol Rol `json:"rol"`
 }
 
@@ -248,7 +249,7 @@ type RevocacionSesionesResultado struct {
 	SesionesRevocadas int `json:"sesiones_revocadas"`
 }
 
-// Rol Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+// Rol Rol del sujeto dentro del tenant. Los nueve identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. `cotizacion` (V2, DEC-148 #1) es un rol interno y global: ve todas las solicitudes, las cotiza y confirma su pago; el `administrador` hereda sus facultades (#20). El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros ocho roles a `Interno`.
 type Rol string
 
 // SesionEmitida defines model for SesionEmitida.

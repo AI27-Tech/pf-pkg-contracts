@@ -3,10 +3,7 @@
 
 /** Estado de progreso del viaje. Enum como dato (P14). */
 export const EstadoViaje = {
-  Solicitado: "SOLICITADO",
   Aprobado: "APROBADO",
-  RechazadoPorAi27: "RECHAZADO_POR_AI27",
-  RechazadoPorCliente: "RECHAZADO_POR_CLIENTE",
   Asignado: "ASIGNADO",
   AptoParaSalida: "APTO_PARA_SALIDA",
   EnEmbarque: "EN_EMBARQUE",
@@ -15,17 +12,14 @@ export const EstadoViaje = {
   EnDestino: "EN_DESTINO",
   EnDescarga: "EN_DESCARGA",
   Cerrado: "CERRADO",
-  Cancelado: "CANCELADO",
+  CanceladoPorCliente: "CANCELADO_POR_CLIENTE",
 } as const;
 
 export type EstadoViaje = (typeof EstadoViaje)[keyof typeof EstadoViaje];
 
 /** Todos los estados declarados, incluidos los de V2 inalcanzables. */
 export const ESTADOS_VIAJE: readonly EstadoViaje[] = [
-  EstadoViaje.Solicitado,
   EstadoViaje.Aprobado,
-  EstadoViaje.RechazadoPorAi27,
-  EstadoViaje.RechazadoPorCliente,
   EstadoViaje.Asignado,
   EstadoViaje.AptoParaSalida,
   EstadoViaje.EnEmbarque,
@@ -34,15 +28,13 @@ export const ESTADOS_VIAJE: readonly EstadoViaje[] = [
   EstadoViaje.EnDestino,
   EstadoViaje.EnDescarga,
   EstadoViaje.Cerrado,
-  EstadoViaje.Cancelado,
+  EstadoViaje.CanceladoPorCliente,
 ];
 
 /** Estados terminales (sin transiciones de salida). */
 export const ESTADOS_TERMINALES: readonly EstadoViaje[] = [
-  EstadoViaje.RechazadoPorAi27,
-  EstadoViaje.RechazadoPorCliente,
   EstadoViaje.Cerrado,
-  EstadoViaje.Cancelado,
+  EstadoViaje.CanceladoPorCliente,
 ];
 
 export function esTerminal(e: EstadoViaje): boolean {
@@ -51,20 +43,15 @@ export function esTerminal(e: EstadoViaje): boolean {
 
 /** Aristas permitidas de la máquina de estados (de -> a). */
 export const TRANSICIONES_VIAJE: ReadonlyArray<readonly [EstadoViaje, EstadoViaje]> = [
-  [EstadoViaje.Solicitado, EstadoViaje.Aprobado],
-  [EstadoViaje.Solicitado, EstadoViaje.RechazadoPorAi27],
-  [EstadoViaje.Solicitado, EstadoViaje.Cancelado],
   [EstadoViaje.Aprobado, EstadoViaje.Asignado],
-  [EstadoViaje.Aprobado, EstadoViaje.Cancelado],
+  [EstadoViaje.Aprobado, EstadoViaje.CanceladoPorCliente],
   [EstadoViaje.Asignado, EstadoViaje.AptoParaSalida],
   [EstadoViaje.Asignado, EstadoViaje.EnEmbarque],
   [EstadoViaje.Asignado, EstadoViaje.EnTransito],
-  [EstadoViaje.Asignado, EstadoViaje.RechazadoPorCliente],
-  [EstadoViaje.Asignado, EstadoViaje.Cancelado],
+  [EstadoViaje.Asignado, EstadoViaje.CanceladoPorCliente],
   [EstadoViaje.AptoParaSalida, EstadoViaje.EnEmbarque],
   [EstadoViaje.AptoParaSalida, EstadoViaje.EnTransito],
-  [EstadoViaje.AptoParaSalida, EstadoViaje.RechazadoPorCliente],
-  [EstadoViaje.AptoParaSalida, EstadoViaje.Cancelado],
+  [EstadoViaje.AptoParaSalida, EstadoViaje.CanceladoPorCliente],
   [EstadoViaje.EnEmbarque, EstadoViaje.EnTransito],
   [EstadoViaje.EnTransito, EstadoViaje.EnDestino],
   [EstadoViaje.EnDestino, EstadoViaje.EnDescarga],

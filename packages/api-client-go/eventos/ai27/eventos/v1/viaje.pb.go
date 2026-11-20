@@ -37,8 +37,9 @@ type ViajeCreado struct {
 
 	ViajeId   string `protobuf:"bytes,1,opt,name=viaje_id,json=viajeId,proto3" json:"viaje_id,omitempty"`
 	ClienteId string `protobuf:"bytes,2,opt,name=cliente_id,json=clienteId,proto3" json:"cliente_id,omitempty"`
-	// Token de estado inicial (SOLICITADO si lo crea el cliente, APROBADO si
-	// Operación). Coincide con contracts/estados/ (ADR 19).
+	// Token de estado inicial: siempre APROBADO (ADR 38). El viaje nace de una
+	// solicitud aprobada, con el mismo id, o lo crea Operación. Coincide con
+	// contracts/estados/viaje.estados.yaml.
 	Estado   string                 `protobuf:"bytes,3,opt,name=estado,proto3" json:"estado,omitempty"`
 	Origen   string                 `protobuf:"bytes,4,opt,name=origen,proto3" json:"origen,omitempty"`
 	CreadoEn *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=creado_en,json=creadoEn,proto3" json:"creado_en,omitempty"`
