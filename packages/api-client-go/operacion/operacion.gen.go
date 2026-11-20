@@ -55,21 +55,30 @@ const (
 	NoAutorizada EjeAutorizacionEstadia = "no_autorizada"
 )
 
+// Defines values for EstadoSolicitud.
+const (
+	SolicitudAprobado            EstadoSolicitud = "APROBADO"
+	SolicitudCanceladoPorCliente EstadoSolicitud = "CANCELADO_POR_CLIENTE"
+	SolicitudCotizado            EstadoSolicitud = "COTIZADO"
+	SolicitudPagado              EstadoSolicitud = "PAGADO"
+	SolicitudRechazadoPorAi27    EstadoSolicitud = "RECHAZADO_POR_AI27"
+	SolicitudRechazadoPorCliente EstadoSolicitud = "RECHAZADO_POR_CLIENTE"
+	SolicitudSolicitado          EstadoSolicitud = "SOLICITADO"
+	SolicitudVencida             EstadoSolicitud = "VENCIDA"
+)
+
 // Defines values for EstadoViaje.
 const (
 	APROBADO            EstadoViaje = "APROBADO"
 	APTOPARASALIDA      EstadoViaje = "APTO_PARA_SALIDA"
 	ASIGNADO            EstadoViaje = "ASIGNADO"
-	CANCELADO           EstadoViaje = "CANCELADO"
+	CANCELADOPORCLIENTE EstadoViaje = "CANCELADO_POR_CLIENTE"
 	CERRADO             EstadoViaje = "CERRADO"
 	ENDESCARGA          EstadoViaje = "EN_DESCARGA"
 	ENDESTINO           EstadoViaje = "EN_DESTINO"
 	ENEMBARQUE          EstadoViaje = "EN_EMBARQUE"
 	ENTRANSITO          EstadoViaje = "EN_TRANSITO"
 	PATRULLAENCAMINO    EstadoViaje = "PATRULLA_EN_CAMINO"
-	RECHAZADOPORAI27    EstadoViaje = "RECHAZADO_POR_AI27"
-	RECHAZADOPORCLIENTE EstadoViaje = "RECHAZADO_POR_CLIENTE"
-	SOLICITADO          EstadoViaje = "SOLICITADO"
 )
 
 // Defines values for IncidenciaEstado.
@@ -107,6 +116,11 @@ const (
 	Moto     UnidadTipo = "moto"
 	Patrulla UnidadTipo = "patrulla"
 )
+
+// AccionClienteEntrada Cuerpo opcional de las acciones del cliente. El `motivo` es opcional: DEC-148 no lo exige para la solicitud (a diferencia de DEC-111 para el viaje); queda pendiente de confirmación.
+type AccionClienteEntrada struct {
+	Motivo *string `json:"motivo"`
+}
 
 // Adjunto Metadatos de un adjunto del viaje. No incluye los bytes.
 type Adjunto struct {
@@ -196,6 +210,57 @@ type Contenedor struct {
 	Economico *string `json:"economico,omitempty"`
 	Placas    *string `json:"placas,omitempty"`
 	Sello     *string `json:"sello,omitempty"`
+}
+
+// Cotizacion defines model for Cotizacion.
+type Cotizacion struct {
+	// EntregadaEn Instante en UTC, RFC 3339.
+	EntregadaEn MarcaTiempo `json:"entregada_en"`
+
+	// FechaHoraServicio Instante en UTC, RFC 3339.
+	FechaHoraServicio MarcaTiempo `json:"fecha_hora_servicio"`
+	Moneda            string      `json:"moneda"`
+
+	// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148).
+	Monto Monto   `json:"monto"`
+	Notas *string `json:"notas"`
+
+	// Version Número de versión; la recotización incrementa.
+	Version int `json:"version"`
+
+	// VigenteHasta Último día de vigencia: 15 días calendario desde la entrega, en `America/Mexico_City` (DEC-148 #15, #50). La solicitud pasa a `VENCIDA` un día después.
+	VigenteHasta openapi_types.Date `json:"vigente_hasta"`
+}
+
+// CotizacionEntrada defines model for CotizacionEntrada.
+type CotizacionEntrada struct {
+	// FechaHoraServicio Fecha y hora del servicio que ofrece la cotización. Obligatoria (DEC-148 #39); puede diferir de la que pidió el cliente.
+	FechaHoraServicio time.Time `json:"fecha_hora_servicio"`
+
+	// Moneda Código de moneda. `string` y no enum porque el catálogo de monedas sigue pendiente (DEC-148); estrechar a enum después es incompatible.
+	Moneda string `json:"moneda"`
+
+	// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148).
+	Monto Monto `json:"monto"`
+
+	// Notas Texto libre. Sin desglose estructurado en V2 (DEC-148
+	Notas *string `json:"notas"`
+}
+
+// CrearSolicitudEntrada Solicitud mínima del cliente (E1-HU-001). La organización la fija el token, no el cuerpo.
+type CrearSolicitudEntrada struct {
+	// Destinos Uno o más destinos (multi-parada, DEC-013).
+	Destinos []Destino `json:"destinos"`
+
+	// FechaHoraServicio Fecha y hora deseada del servicio. Opcional para el cliente (DEC-148 #38); si falta, `cotizacion` la fija al cotizar.
+	FechaHoraServicio *time.Time `json:"fecha_hora_servicio"`
+
+	// Origen Origen en texto libre (DEC-010
+	Origen       string  `json:"origen"`
+	TipoServicio *string `json:"tipo_servicio,omitempty"`
+
+	// Tracto Tracto del cliente. Opcional (DEC-104
+	Tracto *Tracto `json:"tracto"`
 }
 
 // CrearViajeEntrada defines model for CrearViajeEntrada.
@@ -322,7 +387,10 @@ type EstadiaEntrada struct {
 	Motivo MotivoEstadia `json:"motivo"`
 }
 
-// EstadoViaje Estado de progreso del viaje. Espejo del enum canónico de `contracts/estados/` (ADR 19). Incluye estados V2 declarados e inalcanzables en V1 (PATRULLA_EN_CAMINO).
+// EstadoSolicitud Estado de la solicitud. Espejo del enum canónico de `contracts/estados/solicitud.estados.yaml` (ADR 38). CI verifica la equivalencia; la fuente canónica es el archivo de estados.
+type EstadoSolicitud string
+
+// EstadoViaje Estado de progreso del viaje. Espejo del enum canónico de `contracts/estados/` (ADR 19, enmendado por ADR 38). El viaje nace en `APROBADO`: las etapas previas son de la solicitud (`EstadoSolicitud`). Incluye estados V2 declarados e inalcanzables en V1 (PATRULLA_EN_CAMINO).
 type EstadoViaje string
 
 // EtaEntrada defines model for EtaEntrada.
@@ -359,6 +427,34 @@ type FichaTecnicaEntrada struct {
 
 	// Tracto Objeto para fijarlo; `null` para borrarlo.
 	Tracto *Tracto `json:"tracto"`
+}
+
+// HistoricoSolicitud defines model for HistoricoSolicitud.
+type HistoricoSolicitud struct {
+	// Items En orden cronológico.
+	Items []HistoricoSolicitudItem `json:"items"`
+}
+
+// HistoricoSolicitudItem defines model for HistoricoSolicitudItem.
+type HistoricoSolicitudItem struct {
+	AEstado *string `json:"a_estado"`
+
+	// Accion Qué ocurrió: `creada`, `cotizada`, `recotizada`, `reprogramada`, `pago_confirmado`, `pago_confirmado_tardio` (excepción `VENCIDA → PAGADO`), `pago_revertido`, `cotizacion_rechazada`, `cancelada`, `vencida`, `aprobada`, `rechazada`. `string` y no enum para poder ampliar sin ruptura.
+	Accion string `json:"accion"`
+
+	// ActorId null cuando lo hizo el sistema (el vencimiento).
+	ActorId *Id `json:"actor_id"`
+
+	// Cotizacion Versión completa, solo en `cotizada` y `recotizada` (DEC-148
+	Cotizacion *Cotizacion `json:"cotizacion"`
+	DeEstado   *string     `json:"de_estado"`
+
+	// En Instante en UTC, RFC 3339.
+	En MarcaTiempo `json:"en"`
+
+	// MarcaPenalizacion Solo en `cancelada`.
+	MarcaPenalizacion *bool   `json:"marca_penalizacion"`
+	Motivo            *string `json:"motivo"`
 }
 
 // Id Identificador único (UUID). Nunca un correlativo expuesto.
@@ -433,8 +529,17 @@ type IntencionSubidaAdjuntoEntrada struct {
 // MarcaTiempo Instante en UTC, RFC 3339.
 type MarcaTiempo = time.Time
 
+// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148).
+type Monto = string
+
 // MotivoCierre Motivo del cierre del viaje (DEC-113). Catálogo cerrado de V1: `normal` (cierre tras la última parada) o `por_incidencia` (habilita el cierre anticipado, DEC-020 #6). Se retiró `bitacora` (era una cita a DEC-013 sin respaldo, DEC-113). La ventana de escritura de la conversación la decide `mensajeria` por el motivo (3 días / 6 meses, DEC-030/DEC-041).
 type MotivoCierre string
+
+// MotivoEntrada defines model for MotivoEntrada.
+type MotivoEntrada struct {
+	// Motivo Obligatorio en esta acción.
+	Motivo string `json:"motivo"`
+}
 
 // MotivoEstadia Motivo de la estadía (parada). Lista cerrada de V1; se amplía por ola aditiva si el negocio lo decide.
 type MotivoEstadia string
@@ -472,6 +577,13 @@ type PaginaIncidencias struct {
 	Items           []Incidencia `json:"items"`
 }
 
+// PaginaSolicitudes defines model for PaginaSolicitudes.
+type PaginaSolicitudes struct {
+	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
+	CursorSiguiente *string     `json:"cursor_siguiente"`
+	Items           []Solicitud `json:"items"`
+}
+
 // PaginaUnidades defines model for PaginaUnidades.
 type PaginaUnidades struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
@@ -484,6 +596,23 @@ type PaginaViajes struct {
 	// CursorSiguiente Opcional; mismo formato que `Cursor`. null si no aplica.
 	CursorSiguiente *string `json:"cursor_siguiente"`
 	Items           []Viaje `json:"items"`
+}
+
+// Pago defines model for Pago.
+type Pago struct {
+	// ConfirmadoEn Instante en UTC, RFC 3339.
+	ConfirmadoEn MarcaTiempo        `json:"confirmado_en"`
+	FechaPago    openapi_types.Date `json:"fecha_pago"`
+	Referencia   *string            `json:"referencia"`
+}
+
+// PagoEntrada defines model for PagoEntrada.
+type PagoEntrada struct {
+	// FechaPago Cuándo pagó el cliente (día calendario en `America/Mexico_City`). Debe caer dentro de la vigencia de la última cotización (DEC-148 #34, #43).
+	FechaPago openapi_types.Date `json:"fecha_pago"`
+
+	// Referencia Folio o nota en texto. Opcional; sin archivo adjunto (DEC-148
+	Referencia *string `json:"referencia"`
 }
 
 // ReasignacionEntrada La reasignación manda la escolta completa (D2). Ambos campos son obligatorios. No recibe custodios: cambiar un custodio es edición de roster, no reasignación.
@@ -509,9 +638,54 @@ type RegistroAuditoria struct {
 	Ts MarcaTiempo `json:"ts"`
 }
 
+// ReprogramacionEntrada defines model for ReprogramacionEntrada.
+type ReprogramacionEntrada struct {
+	FechaHoraServicio time.Time `json:"fecha_hora_servicio"`
+
+	// Motivo Obligatorio (DEC-148
+	Motivo string `json:"motivo"`
+}
+
 // ResolucionIncidenciaEntrada defines model for ResolucionIncidenciaEntrada.
 type ResolucionIncidenciaEntrada struct {
 	Resolucion string `json:"resolucion"`
+}
+
+// Solicitud defines model for Solicitud.
+type Solicitud struct {
+	// Avisos Marcas de aviso dentro de Argos que le tocan al llamante (DEC-148 #53 a #57). Se derivan del estado y la hora; no se almacenan. Valores: `nueva` (para `cotizacion`: está en `SOLICITADO`), `cotizacion_nueva` (para el cliente: se entregó o recotizó), `por_vencer` (para ambos: faltan 3 días o menos para el último día de vigencia), `cancelacion_con_penalizacion` (para `cotizacion`) y `rechazo_de_ai27` (para el cliente). `string` y no enum para poder ampliar la lista sin ruptura. Cuándo se apaga cada aviso sigue pendiente (salvo el de mensaje sin respuesta, que produce `mensajeria`).
+	Avisos []string `json:"avisos"`
+
+	// ClienteId Identificador único (UUID). Nunca un correlativo expuesto.
+	ClienteId *Id `json:"cliente_id,omitempty"`
+
+	// Cotizacion Cotización vigente; null mientras no se ha cotizado.
+	Cotizacion *Cotizacion `json:"cotizacion"`
+
+	// CreadoEn Instante en UTC, RFC 3339.
+	CreadoEn MarcaTiempo `json:"creado_en"`
+	Destinos []Destino   `json:"destinos"`
+
+	// Estado Estado de la solicitud. Espejo del enum canónico de `contracts/estados/solicitud.estados.yaml` (ADR 38). CI verifica la equivalencia; la fuente canónica es el archivo de estados.
+	Estado EstadoSolicitud `json:"estado"`
+
+	// FechaHoraServicio Fecha y hora vigente del servicio: la del cliente, la de la última cotización o la de la última reprogramación.
+	FechaHoraServicio *time.Time `json:"fecha_hora_servicio"`
+
+	// Id Id de la solicitud. Es también el id del viaje que nace al aprobarse (DEC-148 #3).
+	Id Id `json:"id"`
+
+	// MarcaPenalizacion `true` si el cliente canceló estando en `PAGADO` (DEC-148 #6). Argos solo marca; no calcula ni guarda el monto.
+	MarcaPenalizacion bool `json:"marca_penalizacion"`
+
+	// MotivoRechazo Motivo del rechazo de AI27. Lo ve el cliente (DEC-148 #55). null en cualquier otro estado.
+	MotivoRechazo *string `json:"motivo_rechazo"`
+	Origen        string  `json:"origen"`
+
+	// Pago Pago confirmado; null mientras no lo hay.
+	Pago         *Pago   `json:"pago"`
+	TipoServicio *string `json:"tipo_servicio"`
+	Tracto       *Tracto `json:"tracto"`
 }
 
 // Tracto Tracto del cliente (unidad escoltada). Texto libre: no es recurso de AI27 ni viene de catálogo. `placas`/`economico` separados para permitir búsqueda (DEC-104 #1, supera el "texto libre" de DEC-011 #2). Todos los campos opcionales. Mismo shape en lectura y en entrada.
@@ -602,7 +776,7 @@ type Viaje struct {
 	CreadoEn MarcaTiempo `json:"creado_en"`
 	Destinos []Destino   `json:"destinos"`
 
-	// Estado Estado de progreso del viaje. Espejo del enum canónico de `contracts/estados/` (ADR 19). Incluye estados V2 declarados e inalcanzables en V1 (PATRULLA_EN_CAMINO).
+	// Estado Estado de progreso del viaje. Espejo del enum canónico de `contracts/estados/` (ADR 19, enmendado por ADR 38). El viaje nace en `APROBADO`: las etapas previas son de la solicitud (`EstadoSolicitud`). Incluye estados V2 declarados e inalcanzables en V1 (PATRULLA_EN_CAMINO).
 	Estado EstadoViaje `json:"estado"`
 
 	// EtaEstimado ETA estimado del viaje, capturado a mano (ADR 20). Mismo formato que `MarcaTiempo`. null si no se ha fijado. `operacion` no calcula ni expone `stale`: eso lo hace el `bff`.
@@ -644,6 +818,16 @@ type Prohibido = Error
 // SolicitudInvalida defines model for SolicitudInvalida.
 type SolicitudInvalida = Error
 
+// SolicitudTransicionNoPermitida defines model for SolicitudTransicionNoPermitida.
+type SolicitudTransicionNoPermitida = Error
+
+// ListarSolicitudesParams defines parameters for ListarSolicitudes.
+type ListarSolicitudesParams struct {
+	// Estado Filtro por estado de la solicitud.
+	Estado *EstadoSolicitud `form:"estado,omitempty" json:"estado,omitempty"`
+	Cursor *Cursor          `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListarUnidadesParams defines parameters for ListarUnidades.
 type ListarUnidadesParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -675,6 +859,30 @@ type ListarEstadiasParams struct {
 type ListarIncidenciasParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
+
+// CrearSolicitudJSONRequestBody defines body for CrearSolicitud for application/json ContentType.
+type CrearSolicitudJSONRequestBody = CrearSolicitudEntrada
+
+// CancelarSolicitudJSONRequestBody defines body for CancelarSolicitud for application/json ContentType.
+type CancelarSolicitudJSONRequestBody = AccionClienteEntrada
+
+// CotizarSolicitudJSONRequestBody defines body for CotizarSolicitud for application/json ContentType.
+type CotizarSolicitudJSONRequestBody = CotizacionEntrada
+
+// ReprogramarSolicitudJSONRequestBody defines body for ReprogramarSolicitud for application/json ContentType.
+type ReprogramarSolicitudJSONRequestBody = ReprogramacionEntrada
+
+// ConfirmarPagoJSONRequestBody defines body for ConfirmarPago for application/json ContentType.
+type ConfirmarPagoJSONRequestBody = PagoEntrada
+
+// RechazarSolicitudJSONRequestBody defines body for RechazarSolicitud for application/json ContentType.
+type RechazarSolicitudJSONRequestBody = MotivoEntrada
+
+// RechazarCotizacionJSONRequestBody defines body for RechazarCotizacion for application/json ContentType.
+type RechazarCotizacionJSONRequestBody = AccionClienteEntrada
+
+// RevertirPagoJSONRequestBody defines body for RevertirPago for application/json ContentType.
+type RevertirPagoJSONRequestBody = MotivoEntrada
 
 // CrearUnidadJSONRequestBody defines body for CrearUnidad for application/json ContentType.
 type CrearUnidadJSONRequestBody = UnidadEntrada
@@ -794,6 +1002,58 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// ListarSolicitudes request
+	ListarSolicitudes(ctx context.Context, params *ListarSolicitudesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CrearSolicitudWithBody request with any body
+	CrearSolicitudWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CrearSolicitud(ctx context.Context, body CrearSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ObtenerSolicitud request
+	ObtenerSolicitud(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AprobarSolicitud request
+	AprobarSolicitud(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CancelarSolicitudWithBody request with any body
+	CancelarSolicitudWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CancelarSolicitud(ctx context.Context, id Id, body CancelarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CotizarSolicitudWithBody request with any body
+	CotizarSolicitudWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CotizarSolicitud(ctx context.Context, id Id, body CotizarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReprogramarSolicitudWithBody request with any body
+	ReprogramarSolicitudWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ReprogramarSolicitud(ctx context.Context, id Id, body ReprogramarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListarHistoricoSolicitud request
+	ListarHistoricoSolicitud(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ConfirmarPagoWithBody request with any body
+	ConfirmarPagoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ConfirmarPago(ctx context.Context, id Id, body ConfirmarPagoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RechazarSolicitudWithBody request with any body
+	RechazarSolicitudWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	RechazarSolicitud(ctx context.Context, id Id, body RechazarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RechazarCotizacionWithBody request with any body
+	RechazarCotizacionWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	RechazarCotizacion(ctx context.Context, id Id, body RechazarCotizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RevertirPagoWithBody request with any body
+	RevertirPagoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	RevertirPago(ctx context.Context, id Id, body RevertirPagoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarUnidades request
 	ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -907,6 +1167,246 @@ type ClientInterface interface {
 	TransicionarViajeWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	TransicionarViaje(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) ListarSolicitudes(ctx context.Context, params *ListarSolicitudesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarSolicitudesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearSolicitudWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearSolicitudRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CrearSolicitud(ctx context.Context, body CrearSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCrearSolicitudRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ObtenerSolicitud(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerSolicitudRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AprobarSolicitud(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAprobarSolicitudRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CancelarSolicitudWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCancelarSolicitudRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CancelarSolicitud(ctx context.Context, id Id, body CancelarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCancelarSolicitudRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CotizarSolicitudWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCotizarSolicitudRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CotizarSolicitud(ctx context.Context, id Id, body CotizarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCotizarSolicitudRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReprogramarSolicitudWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReprogramarSolicitudRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReprogramarSolicitud(ctx context.Context, id Id, body ReprogramarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReprogramarSolicitudRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarHistoricoSolicitud(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarHistoricoSolicitudRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ConfirmarPagoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConfirmarPagoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ConfirmarPago(ctx context.Context, id Id, body ConfirmarPagoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConfirmarPagoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RechazarSolicitudWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRechazarSolicitudRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RechazarSolicitud(ctx context.Context, id Id, body RechazarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRechazarSolicitudRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RechazarCotizacionWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRechazarCotizacionRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RechazarCotizacion(ctx context.Context, id Id, body RechazarCotizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRechazarCotizacionRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RevertirPagoWithBody(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevertirPagoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RevertirPago(ctx context.Context, id Id, body RevertirPagoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevertirPagoRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) ListarUnidades(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1423,6 +1923,542 @@ func (c *Client) TransicionarViaje(ctx context.Context, id Id, body Transicionar
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewListarSolicitudesRequest generates requests for ListarSolicitudes
+func NewListarSolicitudesRequest(server string, params *ListarSolicitudesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Estado != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "estado", runtime.ParamLocationQuery, *params.Estado); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCrearSolicitudRequest calls the generic CrearSolicitud builder with application/json body
+func NewCrearSolicitudRequest(server string, body CrearSolicitudJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCrearSolicitudRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCrearSolicitudRequestWithBody generates requests for CrearSolicitud with any type of body
+func NewCrearSolicitudRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewObtenerSolicitudRequest generates requests for ObtenerSolicitud
+func NewObtenerSolicitudRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAprobarSolicitudRequest generates requests for AprobarSolicitud
+func NewAprobarSolicitudRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes/%s/aprobacion", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCancelarSolicitudRequest calls the generic CancelarSolicitud builder with application/json body
+func NewCancelarSolicitudRequest(server string, id Id, body CancelarSolicitudJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCancelarSolicitudRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewCancelarSolicitudRequestWithBody generates requests for CancelarSolicitud with any type of body
+func NewCancelarSolicitudRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes/%s/cancelacion", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewCotizarSolicitudRequest calls the generic CotizarSolicitud builder with application/json body
+func NewCotizarSolicitudRequest(server string, id Id, body CotizarSolicitudJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCotizarSolicitudRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewCotizarSolicitudRequestWithBody generates requests for CotizarSolicitud with any type of body
+func NewCotizarSolicitudRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes/%s/cotizacion", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewReprogramarSolicitudRequest calls the generic ReprogramarSolicitud builder with application/json body
+func NewReprogramarSolicitudRequest(server string, id Id, body ReprogramarSolicitudJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReprogramarSolicitudRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewReprogramarSolicitudRequestWithBody generates requests for ReprogramarSolicitud with any type of body
+func NewReprogramarSolicitudRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes/%s/fecha-hora", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListarHistoricoSolicitudRequest generates requests for ListarHistoricoSolicitud
+func NewListarHistoricoSolicitudRequest(server string, id Id) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes/%s/historico", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewConfirmarPagoRequest calls the generic ConfirmarPago builder with application/json body
+func NewConfirmarPagoRequest(server string, id Id, body ConfirmarPagoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewConfirmarPagoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewConfirmarPagoRequestWithBody generates requests for ConfirmarPago with any type of body
+func NewConfirmarPagoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes/%s/pago", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRechazarSolicitudRequest calls the generic RechazarSolicitud builder with application/json body
+func NewRechazarSolicitudRequest(server string, id Id, body RechazarSolicitudJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRechazarSolicitudRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewRechazarSolicitudRequestWithBody generates requests for RechazarSolicitud with any type of body
+func NewRechazarSolicitudRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes/%s/rechazo", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRechazarCotizacionRequest calls the generic RechazarCotizacion builder with application/json body
+func NewRechazarCotizacionRequest(server string, id Id, body RechazarCotizacionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRechazarCotizacionRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewRechazarCotizacionRequestWithBody generates requests for RechazarCotizacion with any type of body
+func NewRechazarCotizacionRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes/%s/rechazo-cotizacion", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRevertirPagoRequest calls the generic RevertirPago builder with application/json body
+func NewRevertirPagoRequest(server string, id Id, body RevertirPagoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRevertirPagoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewRevertirPagoRequestWithBody generates requests for RevertirPago with any type of body
+func NewRevertirPagoRequestWithBody(server string, id Id, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes/%s/reversa-pago", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
 }
 
 // NewListarUnidadesRequest generates requests for ListarUnidades
@@ -2756,6 +3792,58 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// ListarSolicitudesWithResponse request
+	ListarSolicitudesWithResponse(ctx context.Context, params *ListarSolicitudesParams, reqEditors ...RequestEditorFn) (*ListarSolicitudesResponse, error)
+
+	// CrearSolicitudWithBodyWithResponse request with any body
+	CrearSolicitudWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearSolicitudResponse, error)
+
+	CrearSolicitudWithResponse(ctx context.Context, body CrearSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearSolicitudResponse, error)
+
+	// ObtenerSolicitudWithResponse request
+	ObtenerSolicitudWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerSolicitudResponse, error)
+
+	// AprobarSolicitudWithResponse request
+	AprobarSolicitudWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*AprobarSolicitudResponse, error)
+
+	// CancelarSolicitudWithBodyWithResponse request with any body
+	CancelarSolicitudWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CancelarSolicitudResponse, error)
+
+	CancelarSolicitudWithResponse(ctx context.Context, id Id, body CancelarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*CancelarSolicitudResponse, error)
+
+	// CotizarSolicitudWithBodyWithResponse request with any body
+	CotizarSolicitudWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CotizarSolicitudResponse, error)
+
+	CotizarSolicitudWithResponse(ctx context.Context, id Id, body CotizarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*CotizarSolicitudResponse, error)
+
+	// ReprogramarSolicitudWithBodyWithResponse request with any body
+	ReprogramarSolicitudWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReprogramarSolicitudResponse, error)
+
+	ReprogramarSolicitudWithResponse(ctx context.Context, id Id, body ReprogramarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*ReprogramarSolicitudResponse, error)
+
+	// ListarHistoricoSolicitudWithResponse request
+	ListarHistoricoSolicitudWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ListarHistoricoSolicitudResponse, error)
+
+	// ConfirmarPagoWithBodyWithResponse request with any body
+	ConfirmarPagoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConfirmarPagoResponse, error)
+
+	ConfirmarPagoWithResponse(ctx context.Context, id Id, body ConfirmarPagoJSONRequestBody, reqEditors ...RequestEditorFn) (*ConfirmarPagoResponse, error)
+
+	// RechazarSolicitudWithBodyWithResponse request with any body
+	RechazarSolicitudWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RechazarSolicitudResponse, error)
+
+	RechazarSolicitudWithResponse(ctx context.Context, id Id, body RechazarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*RechazarSolicitudResponse, error)
+
+	// RechazarCotizacionWithBodyWithResponse request with any body
+	RechazarCotizacionWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RechazarCotizacionResponse, error)
+
+	RechazarCotizacionWithResponse(ctx context.Context, id Id, body RechazarCotizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*RechazarCotizacionResponse, error)
+
+	// RevertirPagoWithBodyWithResponse request with any body
+	RevertirPagoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RevertirPagoResponse, error)
+
+	RevertirPagoWithResponse(ctx context.Context, id Id, body RevertirPagoJSONRequestBody, reqEditors ...RequestEditorFn) (*RevertirPagoResponse, error)
+
 	// ListarUnidadesWithResponse request
 	ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error)
 
@@ -2869,6 +3957,318 @@ type ClientWithResponsesInterface interface {
 	TransicionarViajeWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
 
 	TransicionarViajeWithResponse(ctx context.Context, id Id, body TransicionarViajeJSONRequestBody, reqEditors ...RequestEditorFn) (*TransicionarViajeResponse, error)
+}
+
+type ListarSolicitudesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PaginaSolicitudes
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarSolicitudesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarSolicitudesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CrearSolicitudResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *Solicitud
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+}
+
+// Status returns HTTPResponse.Status
+func (r CrearSolicitudResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CrearSolicitudResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ObtenerSolicitudResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Solicitud
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerSolicitudResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerSolicitudResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AprobarSolicitudResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Solicitud
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r AprobarSolicitudResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AprobarSolicitudResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CancelarSolicitudResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Solicitud
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *SolicitudTransicionNoPermitida
+}
+
+// Status returns HTTPResponse.Status
+func (r CancelarSolicitudResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CancelarSolicitudResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CotizarSolicitudResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Solicitud
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *SolicitudTransicionNoPermitida
+}
+
+// Status returns HTTPResponse.Status
+func (r CotizarSolicitudResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CotizarSolicitudResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ReprogramarSolicitudResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Solicitud
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *SolicitudTransicionNoPermitida
+}
+
+// Status returns HTTPResponse.Status
+func (r ReprogramarSolicitudResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReprogramarSolicitudResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarHistoricoSolicitudResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *HistoricoSolicitud
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarHistoricoSolicitudResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarHistoricoSolicitudResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ConfirmarPagoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Solicitud
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r ConfirmarPagoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ConfirmarPagoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RechazarSolicitudResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Solicitud
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *SolicitudTransicionNoPermitida
+}
+
+// Status returns HTTPResponse.Status
+func (r RechazarSolicitudResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RechazarSolicitudResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RechazarCotizacionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Solicitud
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *SolicitudTransicionNoPermitida
+}
+
+// Status returns HTTPResponse.Status
+func (r RechazarCotizacionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RechazarCotizacionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RevertirPagoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Solicitud
+	JSON400      *SolicitudInvalida
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *SolicitudTransicionNoPermitida
+}
+
+// Status returns HTTPResponse.Status
+func (r RevertirPagoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RevertirPagoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type ListarUnidadesResponse struct {
@@ -3591,6 +4991,178 @@ func (r TransicionarViajeResponse) StatusCode() int {
 	return 0
 }
 
+// ListarSolicitudesWithResponse request returning *ListarSolicitudesResponse
+func (c *ClientWithResponses) ListarSolicitudesWithResponse(ctx context.Context, params *ListarSolicitudesParams, reqEditors ...RequestEditorFn) (*ListarSolicitudesResponse, error) {
+	rsp, err := c.ListarSolicitudes(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarSolicitudesResponse(rsp)
+}
+
+// CrearSolicitudWithBodyWithResponse request with arbitrary body returning *CrearSolicitudResponse
+func (c *ClientWithResponses) CrearSolicitudWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CrearSolicitudResponse, error) {
+	rsp, err := c.CrearSolicitudWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearSolicitudResponse(rsp)
+}
+
+func (c *ClientWithResponses) CrearSolicitudWithResponse(ctx context.Context, body CrearSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*CrearSolicitudResponse, error) {
+	rsp, err := c.CrearSolicitud(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCrearSolicitudResponse(rsp)
+}
+
+// ObtenerSolicitudWithResponse request returning *ObtenerSolicitudResponse
+func (c *ClientWithResponses) ObtenerSolicitudWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ObtenerSolicitudResponse, error) {
+	rsp, err := c.ObtenerSolicitud(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerSolicitudResponse(rsp)
+}
+
+// AprobarSolicitudWithResponse request returning *AprobarSolicitudResponse
+func (c *ClientWithResponses) AprobarSolicitudWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*AprobarSolicitudResponse, error) {
+	rsp, err := c.AprobarSolicitud(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAprobarSolicitudResponse(rsp)
+}
+
+// CancelarSolicitudWithBodyWithResponse request with arbitrary body returning *CancelarSolicitudResponse
+func (c *ClientWithResponses) CancelarSolicitudWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CancelarSolicitudResponse, error) {
+	rsp, err := c.CancelarSolicitudWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCancelarSolicitudResponse(rsp)
+}
+
+func (c *ClientWithResponses) CancelarSolicitudWithResponse(ctx context.Context, id Id, body CancelarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*CancelarSolicitudResponse, error) {
+	rsp, err := c.CancelarSolicitud(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCancelarSolicitudResponse(rsp)
+}
+
+// CotizarSolicitudWithBodyWithResponse request with arbitrary body returning *CotizarSolicitudResponse
+func (c *ClientWithResponses) CotizarSolicitudWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CotizarSolicitudResponse, error) {
+	rsp, err := c.CotizarSolicitudWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCotizarSolicitudResponse(rsp)
+}
+
+func (c *ClientWithResponses) CotizarSolicitudWithResponse(ctx context.Context, id Id, body CotizarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*CotizarSolicitudResponse, error) {
+	rsp, err := c.CotizarSolicitud(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCotizarSolicitudResponse(rsp)
+}
+
+// ReprogramarSolicitudWithBodyWithResponse request with arbitrary body returning *ReprogramarSolicitudResponse
+func (c *ClientWithResponses) ReprogramarSolicitudWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReprogramarSolicitudResponse, error) {
+	rsp, err := c.ReprogramarSolicitudWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReprogramarSolicitudResponse(rsp)
+}
+
+func (c *ClientWithResponses) ReprogramarSolicitudWithResponse(ctx context.Context, id Id, body ReprogramarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*ReprogramarSolicitudResponse, error) {
+	rsp, err := c.ReprogramarSolicitud(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReprogramarSolicitudResponse(rsp)
+}
+
+// ListarHistoricoSolicitudWithResponse request returning *ListarHistoricoSolicitudResponse
+func (c *ClientWithResponses) ListarHistoricoSolicitudWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*ListarHistoricoSolicitudResponse, error) {
+	rsp, err := c.ListarHistoricoSolicitud(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarHistoricoSolicitudResponse(rsp)
+}
+
+// ConfirmarPagoWithBodyWithResponse request with arbitrary body returning *ConfirmarPagoResponse
+func (c *ClientWithResponses) ConfirmarPagoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConfirmarPagoResponse, error) {
+	rsp, err := c.ConfirmarPagoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConfirmarPagoResponse(rsp)
+}
+
+func (c *ClientWithResponses) ConfirmarPagoWithResponse(ctx context.Context, id Id, body ConfirmarPagoJSONRequestBody, reqEditors ...RequestEditorFn) (*ConfirmarPagoResponse, error) {
+	rsp, err := c.ConfirmarPago(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConfirmarPagoResponse(rsp)
+}
+
+// RechazarSolicitudWithBodyWithResponse request with arbitrary body returning *RechazarSolicitudResponse
+func (c *ClientWithResponses) RechazarSolicitudWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RechazarSolicitudResponse, error) {
+	rsp, err := c.RechazarSolicitudWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRechazarSolicitudResponse(rsp)
+}
+
+func (c *ClientWithResponses) RechazarSolicitudWithResponse(ctx context.Context, id Id, body RechazarSolicitudJSONRequestBody, reqEditors ...RequestEditorFn) (*RechazarSolicitudResponse, error) {
+	rsp, err := c.RechazarSolicitud(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRechazarSolicitudResponse(rsp)
+}
+
+// RechazarCotizacionWithBodyWithResponse request with arbitrary body returning *RechazarCotizacionResponse
+func (c *ClientWithResponses) RechazarCotizacionWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RechazarCotizacionResponse, error) {
+	rsp, err := c.RechazarCotizacionWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRechazarCotizacionResponse(rsp)
+}
+
+func (c *ClientWithResponses) RechazarCotizacionWithResponse(ctx context.Context, id Id, body RechazarCotizacionJSONRequestBody, reqEditors ...RequestEditorFn) (*RechazarCotizacionResponse, error) {
+	rsp, err := c.RechazarCotizacion(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRechazarCotizacionResponse(rsp)
+}
+
+// RevertirPagoWithBodyWithResponse request with arbitrary body returning *RevertirPagoResponse
+func (c *ClientWithResponses) RevertirPagoWithBodyWithResponse(ctx context.Context, id Id, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RevertirPagoResponse, error) {
+	rsp, err := c.RevertirPagoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevertirPagoResponse(rsp)
+}
+
+func (c *ClientWithResponses) RevertirPagoWithResponse(ctx context.Context, id Id, body RevertirPagoJSONRequestBody, reqEditors ...RequestEditorFn) (*RevertirPagoResponse, error) {
+	rsp, err := c.RevertirPago(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevertirPagoResponse(rsp)
+}
+
 // ListarUnidadesWithResponse request returning *ListarUnidadesResponse
 func (c *ClientWithResponses) ListarUnidadesWithResponse(ctx context.Context, params *ListarUnidadesParams, reqEditors ...RequestEditorFn) (*ListarUnidadesResponse, error) {
 	rsp, err := c.ListarUnidades(ctx, params, reqEditors...)
@@ -3961,6 +5533,654 @@ func (c *ClientWithResponses) TransicionarViajeWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseTransicionarViajeResponse(rsp)
+}
+
+// ParseListarSolicitudesResponse parses an HTTP response from a ListarSolicitudesWithResponse call
+func ParseListarSolicitudesResponse(rsp *http.Response) (*ListarSolicitudesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarSolicitudesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PaginaSolicitudes
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCrearSolicitudResponse parses an HTTP response from a CrearSolicitudWithResponse call
+func ParseCrearSolicitudResponse(rsp *http.Response) (*CrearSolicitudResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CrearSolicitudResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Solicitud
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerSolicitudResponse parses an HTTP response from a ObtenerSolicitudWithResponse call
+func ParseObtenerSolicitudResponse(rsp *http.Response) (*ObtenerSolicitudResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerSolicitudResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Solicitud
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAprobarSolicitudResponse parses an HTTP response from a AprobarSolicitudWithResponse call
+func ParseAprobarSolicitudResponse(rsp *http.Response) (*AprobarSolicitudResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AprobarSolicitudResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Solicitud
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCancelarSolicitudResponse parses an HTTP response from a CancelarSolicitudWithResponse call
+func ParseCancelarSolicitudResponse(rsp *http.Response) (*CancelarSolicitudResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CancelarSolicitudResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Solicitud
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest SolicitudTransicionNoPermitida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCotizarSolicitudResponse parses an HTTP response from a CotizarSolicitudWithResponse call
+func ParseCotizarSolicitudResponse(rsp *http.Response) (*CotizarSolicitudResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CotizarSolicitudResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Solicitud
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest SolicitudTransicionNoPermitida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReprogramarSolicitudResponse parses an HTTP response from a ReprogramarSolicitudWithResponse call
+func ParseReprogramarSolicitudResponse(rsp *http.Response) (*ReprogramarSolicitudResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReprogramarSolicitudResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Solicitud
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest SolicitudTransicionNoPermitida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarHistoricoSolicitudResponse parses an HTTP response from a ListarHistoricoSolicitudWithResponse call
+func ParseListarHistoricoSolicitudResponse(rsp *http.Response) (*ListarHistoricoSolicitudResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarHistoricoSolicitudResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest HistoricoSolicitud
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseConfirmarPagoResponse parses an HTTP response from a ConfirmarPagoWithResponse call
+func ParseConfirmarPagoResponse(rsp *http.Response) (*ConfirmarPagoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ConfirmarPagoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Solicitud
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRechazarSolicitudResponse parses an HTTP response from a RechazarSolicitudWithResponse call
+func ParseRechazarSolicitudResponse(rsp *http.Response) (*RechazarSolicitudResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RechazarSolicitudResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Solicitud
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest SolicitudTransicionNoPermitida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRechazarCotizacionResponse parses an HTTP response from a RechazarCotizacionWithResponse call
+func ParseRechazarCotizacionResponse(rsp *http.Response) (*RechazarCotizacionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RechazarCotizacionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Solicitud
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest SolicitudTransicionNoPermitida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRevertirPagoResponse parses an HTTP response from a RevertirPagoWithResponse call
+func ParseRevertirPagoResponse(rsp *http.Response) (*RevertirPagoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RevertirPagoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Solicitud
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest SolicitudInvalida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest SolicitudTransicionNoPermitida
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseListarUnidadesResponse parses an HTTP response from a ListarUnidadesWithResponse call

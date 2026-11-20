@@ -108,6 +108,22 @@ var Tipos = []TipoEvento{
 		Sensibilidad:         SensibilidadAmplia,
 	},
 	{
+		Tipo:                 "solicitud.creada",
+		Version:              1,
+		Productor:            "operacion",
+		ConsumidoresDurables: []string{"mensajeria"},
+		Agregado:             "solicitud_id",
+		Sensibilidad:         SensibilidadAmplia,
+	},
+	{
+		Tipo:                 "solicitud.estado_cambiado",
+		Version:              1,
+		Productor:            "operacion",
+		ConsumidoresDurables: []string{"mensajeria"},
+		Agregado:             "solicitud_id",
+		Sensibilidad:         SensibilidadAmplia,
+	},
+	{
 		Tipo:                 "sesion.revocada",
 		Version:              1,
 		Productor:            "identidad",

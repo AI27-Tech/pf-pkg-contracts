@@ -645,10 +645,10 @@ export interface components {
         /** @description Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato. */
         Cursor: string;
         /**
-         * @description Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+         * @description Rol del sujeto dentro del tenant. Los nueve identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. `cotizacion` (V2, DEC-148 #1) es un rol interno y global: ve todas las solicitudes, las cotiza y confirma su pago; el `administrador` hereda sus facultades (#20). El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros ocho roles a `Interno`.
          * @enum {string}
          */
-        Rol: "cliente" | "jefe_operativo" | "monitorista" | "supervisor" | "coordinador" | "ejecutivo" | "reaccion" | "administrador";
+        Rol: "cliente" | "jefe_operativo" | "monitorista" | "supervisor" | "coordinador" | "ejecutivo" | "reaccion" | "administrador" | "cotizacion";
     };
     responses: {
         /** @description La petición no cumple el contrato (validación de cuerpo o parámetros). */

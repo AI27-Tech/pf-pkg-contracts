@@ -197,7 +197,8 @@ mano; se cambia la fuente y se regenera.
 `tools/gen-estados` genera desde ella **tanto Go como TypeScript**, así que el
 enum es idéntico en su origen. Nadie copia el enum.
 
-- 13 estados de progreso, incluidos los de V2 **declarados e inalcanzables** en
+- 10 estados de progreso (ADR 19, enmendado por ADR 38: el viaje nace en
+  `APROBADO`), incluidos los de V2 **declarados e inalcanzables** en
   V1 (`PATRULLA_EN_CAMINO`), para que V2 no sea una migración de máquina de
   estados. `EN_BASE_CLIENTE` es un **alias histórico** de `EN_EMBARQUE` para leer
   filas legadas, no un estado nuevo.
@@ -207,8 +208,12 @@ enum es idéntico en su origen. Nadie copia el enum.
 - El backbone es un **bucle multi-parada**: `EN_DESTINO → EN_DESCARGA →
   EN_TRANSITO` (más paradas) o `→ CERRADO` (última), con descarga opcional.
 
-`make check-estados` verifica que el enum `EstadoViaje` del spec de `operacion`
-coincida con esta fuente; CI falla si divergen.
+`contracts/estados/solicitud.estados.yaml` es la fuente de la `solicitud`, previa
+al viaje (cotización, pago y aprobación; ADR 38). Mismo generador, mismo
+mecanismo; el viaje nace de una solicitud aprobada con el mismo id.
+
+`make check-estados` verifica que los enums `EstadoViaje` y `EstadoSolicitud` del
+spec de `operacion` coincidan con sus fuentes; CI falla si divergen.
 
 ---
 

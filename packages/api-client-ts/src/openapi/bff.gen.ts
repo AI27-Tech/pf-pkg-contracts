@@ -82,8 +82,8 @@ export interface paths {
         get: operations["listarViajes"];
         put?: never;
         /**
-         * Crear un viaje (cliente o Operación dentro de alcance).
-         * @description El cliente crea en `SOLICITADO`; Operación en `APROBADO` y puede asignar atómicamente para dejarlo `ASIGNADO` (DEC-026). El estado inicial lo fija el rol del token. `bff` reenvía a `operacion`.
+         * Crear un viaje (Operación dentro de alcance).
+         * @description Solo Operación (`jefe_operativo` y `administrador`): crea en `APROBADO` y puede asignar atómicamente para dejarlo `ASIGNADO` (DEC-026). El cliente ya no crea viajes: crea una solicitud (`crearSolicitud`, ADR 38) y el viaje nace al aprobarse, con el mismo id. Un Cliente que llame aquí recibe `403`. `bff` reenvía a `operacion`.
          */
         post: operations["crearViaje"];
         delete?: never;
@@ -218,8 +218,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Cancelar o rechazar el viaje (audiencia cliente).
-         * @description Reenvía a `operacion.transicionarViaje` con audiencia Cliente. El cliente solo puede llevar SU viaje a `CANCELADO` (ya no lo quiere, hasta antes de la salida) o `RECHAZADO_POR_CLIENTE` (no acepta el servicio asignado), DEC-005/DEC-111. El `motivo` (campo `causa`) es OBLIGATORIO en ambas acciones (DEC-111, supera DEC-020 #7). El aislamiento por tenant y la máquina de estados se validan en `operacion`; el `bff` no replica el grafo. Devuelve la vista de seguimiento del cliente para refrescar sin un segundo GET; nunca el estado canónico ni las condiciones (DEC-006).
+         * Cancelar el viaje (audiencia cliente).
+         * @description Reenvía a `operacion.transicionarViaje` con audiencia Cliente. El cliente solo puede llevar SU viaje a `CANCELADO_POR_CLIENTE` (ya no lo quiere, hasta antes de la salida: `APROBADO`, `ASIGNADO` o `APTO_PARA_SALIDA`), DEC-005/DEC-111. Ya no puede rechazar el servicio asignado: un viaje solo existe si el cliente ya aceptó y pagó la cotización (DEC-148 #14). La cancelación lleva marca de penalización si el viaje nació de una solicitud pagada, y no la lleva si lo creó Operación (DEC-148 #14, #27). El `motivo` (campo `causa`) es OBLIGATORIO (DEC-111, supera DEC-020 #7). El aislamiento por tenant y la máquina de estados se validan en `operacion`; el `bff` no replica el grafo. Devuelve la vista de seguimiento del cliente para refrescar sin un segundo GET; nunca el estado canónico ni las condiciones (DEC-006).
          */
         post: operations["transicionarViajeCliente"];
         delete?: never;
@@ -270,6 +270,318 @@ export interface paths {
          * @description Reenvía a `operacion.completarFechaHora`. Escribe `fecha_hora_servicio` sobre un viaje ya creado para satisfacer la guarda de aprobación (`fecha_hora_servicio_definida`, DEC-010 #2): si el cliente no lo puso al crear, el operador lo completa antes de aprobar (E1-HU-003). No es un cambio de estado; sólo exige que el viaje no esté en un estado terminal. Devuelve el detalle interno recompuesto para refrescar la vista sin un segundo GET.
          */
         patch: operations["completarFechaHora"];
+        trace?: never;
+    };
+    "/api/v1/solicitudes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar solicitudes por alcance.
+         * @description Reenvía a `operacion.listarSolicitudes` (proyección espejo). Cliente: las de su tenant. `cotizacion` y `administrador`: todas, en cualquier estado. `jefe_operativo`: solo las que están en `PAGADO` (su bandeja, DEC-148 #22). Cualquier otro rol recibe `403`. Cada fila lleva las marcas de aviso que le tocan al llamante (`avisos`, DEC-148 #53 a #57).
+         */
+        get: operations["listarSolicitudes"];
+        put?: never;
+        /**
+         * Crear una solicitud (cliente).
+         * @description Reenvía a `operacion.crearSolicitud` (proyección espejo). Solo el Cliente. Nace en `SOLICITADO`. La fecha y hora del servicio es opcional (DEC-148 #38); si falta, `cotizacion` la fija al cotizar (#39). La organización de la solicitud es la del token; no se acepta en el cuerpo. Operación no crea solicitudes: sus viajes nacen en `APROBADO` (`crearViaje`, DEC-026). El id de la solicitud es el que heredará el viaje al aprobarse. Publica `solicitud.creada`.
+         */
+        post: operations["crearSolicitud"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Obtener una solicitud con su cotización vigente.
+         * @description Reenvía a `operacion.obtenerSolicitud` (proyección espejo). Devuelve la solicitud con la cotización vigente. Las versiones anteriores de la cotización no se exponen aquí: están en `listarHistoricoSolicitud` para el personal interno (DEC-148 #42). Fuera de alcance responde `404`.
+         */
+        get: operations["obtenerSolicitud"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/historico": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Histórico de la solicitud (audiencia interna).
+         * @description Reenvía a `operacion.listarHistoricoSolicitud` (proyección espejo). Cada transición y cada acción sin cambio de estado (recotizar, reprogramar), en orden cronológico, con actor, motivo y marca de tiempo. Las entradas de cotización llevan la versión completa (DEC-148 #42). Solo `cotizacion`, `jefe_operativo` (en `PAGADO`) y `administrador`; el Cliente recibe `403`.
+         */
+        get: operations["listarHistoricoSolicitud"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/cotizacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Cotizar o recotizar la solicitud.
+         * @description Reenvía a `operacion.cotizarSolicitud` (proyección espejo). Solo `cotizacion` y `administrador`. En `SOLICITADO` envía la primera cotización y la solicitud pasa a `COTIZADO`; en `COTIZADO` recotiza sin cambiar de estado. Cada llamada crea una versión nueva y conserva las anteriores (DEC-148 #42). Exige monto, moneda y fecha y hora del servicio (DEC-148 #39, #41); la fecha puede diferir de la que pidió el cliente. La vigencia es de 15 días desde esta entrega, contados en `America/Mexico_City` (DEC-148 #15, #50). No valida disponibilidad de unidades (DEC-148 #23). El cambio de fecha no requiere aceptación del cliente en el sistema (DEC-148 #40).
+         */
+        put: operations["cotizarSolicitud"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/fecha-hora": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Reprogramar la fecha y hora de una solicitud pagada.
+         * @description Reenvía a `operacion.reprogramarSolicitud` (proyección espejo). Solo `cotizacion` y `administrador`, con la solicitud en `PAGADO`. El motivo es obligatorio. No hay pago nuevo ni cambio de estado; el cambio queda en el histórico con actor, motivo y marca de tiempo. Se hace después de acordarlo con el cliente en la conversación de la solicitud (DEC-148 #24, #40).
+         */
+        put: operations["reprogramarSolicitud"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/rechazo-cotizacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rechazar la cotización (cliente).
+         * @description Reenvía a `operacion.rechazarCotizacion` (proyección espejo). Solo el Cliente dueño de la solicitud, en `COTIZADO`. "No acepto este precio o estas condiciones": la solicitud termina en `RECHAZADO_POR_CLIENTE`, sin marca de penalización y sin crear viaje (DEC-148 #9, #18). Distinta de `cancelarSolicitud`.
+         */
+        post: operations["rechazarCotizacion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/cancelacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancelar la solicitud (cliente).
+         * @description Reenvía a `operacion.cancelarSolicitud` (proyección espejo). Solo el Cliente dueño de la solicitud, en `SOLICITADO`, `COTIZADO` o `PAGADO`. "Ya no necesito el servicio": termina en `CANCELADO_POR_CLIENTE`. Lleva marca de penalización solo si estaba en `PAGADO`; sin ella en los otros dos casos (DEC-148 #6, #17). Argos solo marca; no calcula ni guarda monto. No se crea viaje. La respuesta confirma la marca (`marca_penalizacion`).
+         */
+        post: operations["cancelarSolicitud"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/pago": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Confirmar el pago de la solicitud.
+         * @description Reenvía a `operacion.confirmarPago` (proyección espejo). Solo `cotizacion` y `administrador`. El pago ocurre fuera de Argos; esto registra su confirmación. Exige la fecha del pago, que debe caer dentro de la vigencia de la última cotización: gana la fecha del pago, no la de la confirmación (DEC-148 #34, #43). Desde `COTIZADO` pasa a `PAGADO`. Desde `VENCIDA` también pasa a `PAGADO`, solo si la fecha del pago cae dentro de la vigencia, y queda registrado como excepción (DEC-148 #35). No genera aviso al cliente (#56).
+         */
+        put: operations["confirmarPago"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/reversa-pago": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revertir una confirmación de pago hecha por error.
+         * @description Reenvía a `operacion.revertirPago` (proyección espejo). Solo `administrador`, con motivo obligatorio y mientras la solicitud siga en `PAGADO`. Regresa a `COTIZADO` y queda en el histórico (DEC-148 #37). Si la vigencia ya terminó al revertir, el resultado está pendiente de decisión (ADR 38).
+         */
+        post: operations["revertirPago"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/aprobacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprobar la solicitud pagada y crear el viaje.
+         * @description Reenvía a `operacion.aprobarSolicitud` (proyección espejo). Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`. La aprobación es explícita, nunca automática. Exige la fecha y hora del servicio (DEC-010 #2). En la misma transacción la solicitud pasa a `APROBADO` y nace el viaje en `APROBADO` con el MISMO id de la solicitud (DEC-148 #3, #52; ADR 39): no existe una solicitud aprobada sin su viaje. El viaje se consulta después con `obtenerViaje` usando ese id.
+         */
+        post: operations["aprobarSolicitud"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/rechazo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rechazar la solicitud pagada (AI27).
+         * @description Reenvía a `operacion.rechazarSolicitud` (proyección espejo). Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`. Motivo obligatorio (DEC-020 #2). Termina en `RECHAZADO_POR_AI27`, sin marca de reembolso (el reembolso se maneja fuera de Argos, DEC-148 #19) y sin crear viaje. El cliente ve el motivo.
+         */
+        post: operations["rechazarSolicitud"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/conversacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Obtener la conversación de la solicitud (audiencia cliente).
+         * @description Reenvía a `mensajeria.obtenerConversacionDeSolicitud` con audiencia Cliente, resolviendo la conversación por la solicitud. Vista mínima del cliente: sin bandeja, reclamo, pool ni actor interno. Nace con la solicitud (DEC-148 #5) y acepta mensajes hasta 3 días después de que la solicitud termina por cualquier vía, incluido pasar a `APROBADO`; después queda en solo lectura (DEC-148 #30, #48).
+         */
+        get: operations["obtenerConversacionSolicitud"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/conversacion/mensajes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Listar los mensajes de la conversación de la solicitud (audiencia cliente).
+         * @description Igual que `listarMensajesViaje`, sobre la conversación de la solicitud. El cliente nunca ve `actor_real` ni el rol interno: solo `de_cliente` (true = cliente, false = AI27, alias "AI27 Operations").
+         */
+        get: operations["listarMensajesSolicitud"];
+        put?: never;
+        /**
+         * Enviar un mensaje a la conversación de la solicitud (audiencia cliente).
+         * @description Igual que `enviarMensajeViaje`, sobre la conversación de la solicitud. Idempotente por `client_message_id`.
+         */
+        post: operations["enviarMensajeSolicitud"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bandeja/solicitudes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar el trabajo de la bandeja de solicitudes de `cotizacion` (bootstrap y catch-up).
+         * @description Reenvía a `mensajeria.listarTrabajoMiBandejaSolicitudes`. Cola única e implícita resuelta de los claims, sin `{id}` en la ruta, como `listarTrabajoBandeja`. La ven los usuarios con rol `cotizacion`, que forman un solo pool, y el `administrador` (DEC-148 #20, #31). El `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` no tienen esta bandeja y reciben `404` (DEC-148 #12, #28). Mismo bootstrap, catch-up por `desde_revision` y `409 stream_resync_required` que la bandeja de chat (ADR 28). El reclamo, la liberación y la transferencia usan las operaciones por conversación existentes; la transferencia solo admite como destino a un usuario con rol `cotizacion`. Aquí también llega la marca de mensaje sin respuesta (DEC-148 #54).
+         */
+        get: operations["listarTrabajoBandejaSolicitudes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/viajes/{id}/emergencias": {
@@ -590,7 +902,7 @@ export interface paths {
         put?: never;
         /**
          * El monitoreo activa una emergencia sobre el viaje (idempotente).
-         * @description Solo audiencia Interno. Activan `monitorista`, `supervisor` y `coordinador` (DEC-045 #9); otro rol interno responde `403`. El `bff` lee el viaje y, si está en `CERRADO`, `CANCELADO`, `RECHAZADO_POR_AI27` o `RECHAZADO_POR_CLIENTE`, responde 409 `viaje_en_estado_terminal` sin reenviar (DEC-135 #5; carrera en DT-16). Si no, reenvía a `mensajeria.activarEmergencia`, que registra origen `operacion` y deja el caso bajo la empresa del viaje (DEC-133). Idempotente por `activacion_id`: la reentrega devuelve el mismo caso con 200; una pulsación nueva con otro `activacion_id` crea otro caso con 201.
+         * @description Solo audiencia Interno. Activan `monitorista`, `supervisor` y `coordinador` (DEC-045 #9); otro rol interno responde `403`. El `bff` lee el viaje y, si está en `CERRADO` o `CANCELADO_POR_CLIENTE`, responde 409 `viaje_en_estado_terminal` sin reenviar (DEC-135 #5; carrera en DT-16). Si no, reenvía a `mensajeria.activarEmergencia`, que registra origen `operacion` y deja el caso bajo la empresa del viaje (DEC-133). Idempotente por `activacion_id`: la reentrega devuelve el mismo caso con 200; una pulsación nueva con otro `activacion_id` crea otro caso con 201.
          */
         post: operations["activarEmergenciaInterno"];
         delete?: never;
@@ -2629,6 +2941,146 @@ export interface components {
             url_descarga: string;
             expira_en: components["schemas"]["MarcaTiempo"];
         };
+        Destino: {
+            /** @description Destino en texto libre (DEC-010 */
+            nombre: string;
+            numero_envio?: string;
+            /**
+             * Format: date-time
+             * @description Opcional; mismo formato que `MarcaTiempo`. null si no aplica.
+             */
+            fecha_cita?: string | null;
+            /** @description Si la unidad arribó a este destino (DEC-012). Captura del operador, no derivado del estado. */
+            arribo?: boolean;
+        };
+        /**
+         * @description Estado de la solicitud. Espejo del enum canónico de `contracts/estados/solicitud.estados.yaml` (ADR 38). CI verifica la equivalencia; la fuente canónica es el archivo de estados.
+         * @enum {string}
+         */
+        EstadoSolicitud: "SOLICITADO" | "COTIZADO" | "PAGADO" | "APROBADO" | "RECHAZADO_POR_AI27" | "RECHAZADO_POR_CLIENTE" | "CANCELADO_POR_CLIENTE" | "VENCIDA";
+        /** @description Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148). */
+        Monto: string;
+        /** @description Solicitud mínima del cliente (E1-HU-001). La organización la fija el token, no el cuerpo. */
+        CrearSolicitudEntrada: {
+            /** @description Origen en texto libre (DEC-010 */
+            origen: string;
+            /** @description Uno o más destinos (multi-parada, DEC-013). */
+            destinos: components["schemas"]["Destino"][];
+            /**
+             * Format: date-time
+             * @description Fecha y hora deseada del servicio. Opcional para el cliente (DEC-148 #38); si falta, `cotizacion` la fija al cotizar.
+             */
+            fecha_hora_servicio?: string | null;
+            tipo_servicio?: string;
+            /** @description Tracto del cliente. Opcional (DEC-104 */
+            tracto?: components["schemas"]["Tracto"] | null;
+        };
+        CotizacionEntrada: {
+            monto: components["schemas"]["Monto"];
+            /** @description Código de moneda. `string` y no enum porque el catálogo de monedas sigue pendiente (DEC-148); estrechar a enum después es incompatible. */
+            moneda: string;
+            /**
+             * Format: date-time
+             * @description Fecha y hora del servicio que ofrece la cotización. Obligatoria (DEC-148 #39); puede diferir de la que pidió el cliente.
+             */
+            fecha_hora_servicio: string;
+            /** @description Texto libre. Sin desglose estructurado en V2 (DEC-148 */
+            notas?: string | null;
+        };
+        Cotizacion: {
+            /** @description Número de versión; la recotización incrementa. */
+            version: number;
+            monto: components["schemas"]["Monto"];
+            moneda: string;
+            fecha_hora_servicio: components["schemas"]["MarcaTiempo"];
+            notas?: string | null;
+            entregada_en: components["schemas"]["MarcaTiempo"];
+            /**
+             * Format: date
+             * @description Último día de vigencia: 15 días calendario desde la entrega, en `America/Mexico_City` (DEC-148 #15, #50). La solicitud pasa a `VENCIDA` un día después.
+             */
+            vigente_hasta: string;
+        };
+        ReprogramacionEntrada: {
+            /** Format: date-time */
+            fecha_hora_servicio: string;
+            /** @description Obligatorio (DEC-148 */
+            motivo: string;
+        };
+        PagoEntrada: {
+            /**
+             * Format: date
+             * @description Cuándo pagó el cliente (día calendario en `America/Mexico_City`). Debe caer dentro de la vigencia de la última cotización (DEC-148 #34, #43).
+             */
+            fecha_pago: string;
+            /** @description Folio o nota en texto. Opcional; sin archivo adjunto (DEC-148 */
+            referencia?: string | null;
+        };
+        Pago: {
+            /** Format: date */
+            fecha_pago: string;
+            referencia?: string | null;
+            confirmado_en: components["schemas"]["MarcaTiempo"];
+        };
+        MotivoEntrada: {
+            /** @description Obligatorio en esta acción. */
+            motivo: string;
+        };
+        /** @description Cuerpo opcional de las acciones del cliente. El `motivo` es opcional: DEC-148 no lo exige para la solicitud (a diferencia de DEC-111 para el viaje); queda pendiente de confirmación. */
+        AccionClienteEntrada: {
+            motivo?: string | null;
+        };
+        Solicitud: {
+            /** @description Id de la solicitud. Es también el id del viaje que nace al aprobarse (DEC-148 #3). */
+            id: components["schemas"]["Id"];
+            estado: components["schemas"]["EstadoSolicitud"];
+            cliente_id?: components["schemas"]["Id"];
+            /** @description Cliente de la solicitud con su nombre, compuesto por el `bff` desde `catalogos`. Solo audiencia Interno: se omite para el Cliente, igual que en `ViajeResumen` (DEC-149 #14). */
+            readonly cliente?: components["schemas"]["ClienteViajeResumen"];
+            origen: string;
+            destinos: components["schemas"]["Destino"][];
+            /**
+             * Format: date-time
+             * @description Fecha y hora vigente del servicio: la del cliente, la de la última cotización o la de la última reprogramación.
+             */
+            fecha_hora_servicio?: string | null;
+            tipo_servicio?: string | null;
+            tracto?: components["schemas"]["Tracto"] | null;
+            /** @description Cotización vigente; null mientras no se ha cotizado. */
+            cotizacion?: components["schemas"]["Cotizacion"] | null;
+            /** @description Pago confirmado; null mientras no lo hay. */
+            pago?: components["schemas"]["Pago"] | null;
+            /** @description `true` si el cliente canceló estando en `PAGADO` (DEC-148 #6). Argos solo marca; no calcula ni guarda el monto. */
+            marca_penalizacion: boolean;
+            /** @description Motivo del rechazo de AI27. Lo ve el cliente (DEC-148 #55). null en cualquier otro estado. */
+            motivo_rechazo?: string | null;
+            /** @description Marcas de aviso dentro de Argos que le tocan al llamante (DEC-148 #53 a #57). Se derivan del estado y la hora; no se almacenan. Valores: `nueva` (para `cotizacion`: está en `SOLICITADO`), `cotizacion_nueva` (para el cliente: se entregó o recotizó), `por_vencer` (para ambos: faltan 3 días o menos para el último día de vigencia), `cancelacion_con_penalizacion` (para `cotizacion`) y `rechazo_de_ai27` (para el cliente). `string` y no enum para poder ampliar la lista sin ruptura. Cuándo se apaga cada aviso sigue pendiente (salvo el de mensaje sin respuesta, que produce `mensajeria`). */
+            avisos: string[];
+            creado_en: components["schemas"]["MarcaTiempo"];
+        };
+        PaginaSolicitudes: {
+            items: components["schemas"]["Solicitud"][];
+            /** @description Opcional; mismo formato que `Cursor`. null si no aplica. */
+            cursor_siguiente: string | null;
+        };
+        HistoricoSolicitudItem: {
+            /** @description Qué ocurrió: `creada`, `cotizada`, `recotizada`, `reprogramada`, `pago_confirmado`, `pago_confirmado_tardio` (excepción `VENCIDA → PAGADO`), `pago_revertido`, `cotizacion_rechazada`, `cancelada`, `vencida`, `aprobada`, `rechazada`. `string` y no enum para poder ampliar sin ruptura. */
+            accion: string;
+            de_estado?: string | null;
+            a_estado?: string | null;
+            /** @description null cuando lo hizo el sistema (el vencimiento). */
+            actor_id?: components["schemas"]["Id"] | null;
+            motivo?: string | null;
+            /** @description Versión completa, solo en `cotizada` y `recotizada` (DEC-148 */
+            cotizacion?: components["schemas"]["Cotizacion"] | null;
+            /** @description Solo en `cancelada`. */
+            marca_penalizacion?: boolean | null;
+            en: components["schemas"]["MarcaTiempo"];
+        };
+        HistoricoSolicitud: {
+            /** @description En orden cronológico. */
+            items: components["schemas"]["HistoricoSolicitudItem"][];
+        };
         /**
          * Format: uuid
          * @description Identificador único (UUID). Nunca un correlativo expuesto.
@@ -2656,12 +3108,21 @@ export interface components {
         /** @description Cursor opaco de paginación o de catch-up. El cliente lo devuelve tal cual; su forma interna no es contrato. */
         Cursor: string;
         /**
-         * @description Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+         * @description Rol del sujeto dentro del tenant. Los nueve identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. `cotizacion` (V2, DEC-148 #1) es un rol interno y global: ve todas las solicitudes, las cotiza y confirma su pago; el `administrador` hereda sus facultades (#20). El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros ocho roles a `Interno`.
          * @enum {string}
          */
-        Rol: "cliente" | "jefe_operativo" | "monitorista" | "supervisor" | "coordinador" | "ejecutivo" | "reaccion" | "administrador";
+        Rol: "cliente" | "jefe_operativo" | "monitorista" | "supervisor" | "coordinador" | "ejecutivo" | "reaccion" | "administrador" | "cotizacion";
     };
     responses: {
+        /** @description La acción no es válida para el estado actual de la solicitud. `codigo` de máquina `transicion_no_permitida` (la arista no existe: la solicitud ya es terminal, `VENCIDA` no se recotiza, o hay una carrera). */
+        SolicitudTransicionNoPermitida: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description La versión esperada del reclamo no coincide con la vigente. `codigo` de máquina `conflicto_version_reclamo`. */
         ConflictoVersion: {
             headers: {
@@ -3071,7 +3532,7 @@ export interface operations {
                     "application/json": components["schemas"]["ViajeSeguimiento"];
                 };
             };
-            /** @description Cuerpo inválido, o falta el `motivo` obligatorio al cancelar o rechazar (DEC-111). */
+            /** @description Cuerpo inválido, o falta el `motivo` obligatorio al cancelar (DEC-111). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3081,7 +3542,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["NoAutorizado"];
-            /** @description El cliente pidió una arista que no le corresponde (solo `CANCELADO` o `RECHAZADO_POR_CLIENTE`), o el viaje está fuera de su alcance. */
+            /** @description El cliente pidió una arista que no le corresponde (solo `CANCELADO_POR_CLIENTE`), o el viaje está fuera de su alcance. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3178,6 +3639,499 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    listarSolicitudes: {
+        parameters: {
+            query?: {
+                /** @description Filtro por estado de la solicitud. */
+                estado?: components["schemas"]["EstadoSolicitud"];
+                cursor?: components["schemas"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de solicitudes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaSolicitudes"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    crearSolicitud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrearSolicitudEntrada"];
+            };
+        };
+        responses: {
+            /** @description Solicitud creada en `SOLICITADO`. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Solicitud"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+        };
+    };
+    obtenerSolicitud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description La solicitud. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Solicitud"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    listarHistoricoSolicitud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Histórico de la solicitud. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoricoSolicitud"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    cotizarSolicitud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CotizacionEntrada"];
+            };
+        };
+        responses: {
+            /** @description Cotización registrada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Solicitud"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["SolicitudTransicionNoPermitida"];
+        };
+    };
+    reprogramarSolicitud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReprogramacionEntrada"];
+            };
+        };
+        responses: {
+            /** @description Fecha y hora actualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Solicitud"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["SolicitudTransicionNoPermitida"];
+        };
+    };
+    rechazarCotizacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AccionClienteEntrada"];
+            };
+        };
+        responses: {
+            /** @description Cotización rechazada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Solicitud"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["SolicitudTransicionNoPermitida"];
+        };
+    };
+    cancelarSolicitud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AccionClienteEntrada"];
+            };
+        };
+        responses: {
+            /** @description Solicitud cancelada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Solicitud"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["SolicitudTransicionNoPermitida"];
+        };
+    };
+    confirmarPago: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PagoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Pago confirmado; la solicitud queda en `PAGADO`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Solicitud"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description No se puede confirmar. `codigo` de máquina: `transicion_no_permitida` (estado de origen inválido) o `fecha_pago_fuera_de_vigencia` (la fecha del pago es posterior al último día de vigencia). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revertirPago: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MotivoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Pago revertido; la solicitud regresa a `COTIZADO`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Solicitud"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["SolicitudTransicionNoPermitida"];
+        };
+    };
+    aprobarSolicitud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Solicitud aprobada; el viaje ya existe con el mismo id. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Solicitud"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description No se puede aprobar. `codigo` de máquina: `transicion_no_permitida` (no está en `PAGADO`) o `fecha_hora_servicio_requerida` (falta la fecha y hora del servicio). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rechazarSolicitud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MotivoEntrada"];
+            };
+        };
+        responses: {
+            /** @description Solicitud rechazada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Solicitud"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["SolicitudTransicionNoPermitida"];
+        };
+    };
+    obtenerConversacionSolicitud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversación de la solicitud. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversacionCliente"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    listarMensajesSolicitud: {
+        parameters: {
+            query?: {
+                /** @description Devuelve mensajes con secuencia menor a este valor. */
+                antes_de?: number;
+                /** @description Devuelve mensajes con secuencia mayor a este valor. */
+                despues_de?: number;
+                limite?: number;
+            };
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de mensajes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginaMensajesCliente"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    enviarMensajeSolicitud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnviarMensajeClienteEntrada"];
+            };
+        };
+        responses: {
+            /** @description Reintento idempotente; mensaje original. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MensajeCliente"];
+                };
+            };
+            /** @description Mensaje creado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MensajeCliente"];
+                };
+            };
+            400: components["responses"]["SolicitudInvalida"];
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            /** @description La conversación no admite escritura (venció la ventana de 3 días tras terminar la solicitud). `codigo` de máquina `conversacion_solo_lectura`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listarTrabajoBandejaSolicitudes: {
+        parameters: {
+            query?: {
+                /** @description Cursor de paginación. No es el cursor de cambios de ADR 28. */
+                cursor?: components["schemas"]["Cursor"];
+                /** @description Catch-up: devuelve los cambios de la colección con revisión mayor a este valor. Es la `revision` de una respuesta previa, no el cursor de paginación. */
+                desde_revision?: components["schemas"]["RevisionBandeja"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trabajo de la bandeja con la revisión de la colección. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrabajoBandeja"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ResyncRequerido"];
         };
     };
     listarEmergenciasCliente: {

@@ -54,6 +54,7 @@ const (
 	Administrador Rol = "administrador"
 	Cliente       Rol = "cliente"
 	Coordinador   Rol = "coordinador"
+	Cotizacion    Rol = "cotizacion"
 	Ejecutivo     Rol = "ejecutivo"
 	JefeOperativo Rol = "jefe_operativo"
 	Monitorista   Rol = "monitorista"
@@ -125,6 +126,9 @@ type Conversacion struct {
 
 	// ReclamoActivo Reclamo vigente. Solo para audiencia Interno; null si está en el pool.
 	ReclamoActivo *Reclamo `json:"reclamo_activo"`
+
+	// Tipo `viaje` (conversación entre el cliente y el `ejecutivo`, nace en `APROBADO`) o `solicitud` (entre el cliente y el pool de `cotizacion`, nace con la solicitud; DEC-148 #29). Ausente se lee como `viaje` (valor de V1). En una conversación de tipo `solicitud`, `viaje_id` es el id de la solicitud, que el viaje hereda al aprobarse (DEC-148 #3), así que coincide con el de la conversación del viaje. `string` y no enum para poder ampliar sin ruptura.
+	Tipo *string `json:"tipo,omitempty"`
 
 	// UltimaSecuencia Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una versión de reclamo ni el `seq` de transporte de `realtime`.
 	UltimaSecuencia SecuenciaMensaje `json:"ultima_secuencia"`
@@ -390,7 +394,7 @@ type ResolucionEmergenciaEntrada struct {
 // RevisionBandeja Revisión monotónica de la COLECCIÓN de trabajo de una bandeja (ADR 28 §3): avanza con cada cambio de la colección (alta, baja, reenrutamiento, reclamo, atención). Es el cursor de dominio del bootstrap y el catch-up de bandeja. No es el cursor de paginación, ni una secuencia de mensaje, ni el `seq` de transporte de `realtime`.
 type RevisionBandeja = int64
 
-// Rol Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+// Rol Rol del sujeto dentro del tenant. Los nueve identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. `cotizacion` (V2, DEC-148 #1) es un rol interno y global: ve todas las solicitudes, las cotiza y confirma su pago; el `administrador` hereda sus facultades (#20). El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros ocho roles a `Interno`.
 type Rol string
 
 // SecuenciaMensaje Secuencia canónica de mensaje, monotónica POR CONVERSACIÓN. No es una versión de reclamo ni el `seq` de transporte de `realtime`.
@@ -463,6 +467,15 @@ type ListarAuditoriaConversacionParams struct {
 type ListarBandejaEmergenciasParams struct {
 	// Cursor Cursor de paginación. No es el cursor de cambios de ADR 28.
 	Cursor *CursorPagina `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListarTrabajoMiBandejaSolicitudesParams defines parameters for ListarTrabajoMiBandejaSolicitudes.
+type ListarTrabajoMiBandejaSolicitudesParams struct {
+	// Cursor Cursor de paginación. No es el cursor de cambios de ADR 28.
+	Cursor *CursorPagina `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// DesdeRevision Catch-up: devuelve los cambios de la colección con revisión mayor a este valor. Es la `revision` de una respuesta previa, no el cursor de paginación.
+	DesdeRevision *RevisionBandeja `form:"desde_revision,omitempty" json:"desde_revision,omitempty"`
 }
 
 // ListarTrabajoMiBandejaParams defines parameters for ListarTrabajoMiBandeja.
@@ -644,6 +657,9 @@ type ClientInterface interface {
 	// ListarBandejaEmergencias request
 	ListarBandejaEmergencias(ctx context.Context, params *ListarBandejaEmergenciasParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListarTrabajoMiBandejaSolicitudes request
+	ListarTrabajoMiBandejaSolicitudes(ctx context.Context, params *ListarTrabajoMiBandejaSolicitudesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListarTrabajoMiBandeja request
 	ListarTrabajoMiBandeja(ctx context.Context, params *ListarTrabajoMiBandejaParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -724,6 +740,9 @@ type ClientInterface interface {
 
 	TransferirEmergenciaPorId(ctx context.Context, eid EmergenciaRuta, body TransferirEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ObtenerConversacionDeSolicitud request
+	ObtenerConversacionDeSolicitud(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ObtenerConversacionDeViaje request
 	ObtenerConversacionDeViaje(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -776,6 +795,18 @@ func (c *Client) ListarAuditoriaConversacion(ctx context.Context, id IdRuta, par
 
 func (c *Client) ListarBandejaEmergencias(ctx context.Context, params *ListarBandejaEmergenciasParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListarBandejaEmergenciasRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListarTrabajoMiBandejaSolicitudes(ctx context.Context, params *ListarTrabajoMiBandejaSolicitudesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListarTrabajoMiBandejaSolicitudesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1146,6 +1177,18 @@ func (c *Client) TransferirEmergenciaPorId(ctx context.Context, eid EmergenciaRu
 	return c.Client.Do(req)
 }
 
+func (c *Client) ObtenerConversacionDeSolicitud(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewObtenerConversacionDeSolicitudRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ObtenerConversacionDeViaje(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewObtenerConversacionDeViajeRequest(c.Server, id)
 	if err != nil {
@@ -1395,6 +1438,71 @@ func NewListarBandejaEmergenciasRequest(server string, params *ListarBandejaEmer
 		if params.Cursor != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListarTrabajoMiBandejaSolicitudesRequest generates requests for ListarTrabajoMiBandejaSolicitudes
+func NewListarTrabajoMiBandejaSolicitudesRequest(server string, params *ListarTrabajoMiBandejaSolicitudesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/bandeja/solicitudes")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.DesdeRevision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "desde_revision", runtime.ParamLocationQuery, *params.DesdeRevision); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -2439,6 +2547,40 @@ func NewTransferirEmergenciaPorIdRequestWithBody(server string, eid EmergenciaRu
 	return req, nil
 }
 
+// NewObtenerConversacionDeSolicitudRequest generates requests for ObtenerConversacionDeSolicitud
+func NewObtenerConversacionDeSolicitudRequest(server string, id IdRuta) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/solicitudes/%s/conversacion", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewObtenerConversacionDeViajeRequest generates requests for ObtenerConversacionDeViaje
 func NewObtenerConversacionDeViajeRequest(server string, id IdRuta) (*http.Request, error) {
 	var err error
@@ -2926,6 +3068,9 @@ type ClientWithResponsesInterface interface {
 	// ListarBandejaEmergenciasWithResponse request
 	ListarBandejaEmergenciasWithResponse(ctx context.Context, params *ListarBandejaEmergenciasParams, reqEditors ...RequestEditorFn) (*ListarBandejaEmergenciasResponse, error)
 
+	// ListarTrabajoMiBandejaSolicitudesWithResponse request
+	ListarTrabajoMiBandejaSolicitudesWithResponse(ctx context.Context, params *ListarTrabajoMiBandejaSolicitudesParams, reqEditors ...RequestEditorFn) (*ListarTrabajoMiBandejaSolicitudesResponse, error)
+
 	// ListarTrabajoMiBandejaWithResponse request
 	ListarTrabajoMiBandejaWithResponse(ctx context.Context, params *ListarTrabajoMiBandejaParams, reqEditors ...RequestEditorFn) (*ListarTrabajoMiBandejaResponse, error)
 
@@ -3005,6 +3150,9 @@ type ClientWithResponsesInterface interface {
 	TransferirEmergenciaPorIdWithBodyWithResponse(ctx context.Context, eid EmergenciaRuta, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TransferirEmergenciaPorIdResponse, error)
 
 	TransferirEmergenciaPorIdWithResponse(ctx context.Context, eid EmergenciaRuta, body TransferirEmergenciaPorIdJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferirEmergenciaPorIdResponse, error)
+
+	// ObtenerConversacionDeSolicitudWithResponse request
+	ObtenerConversacionDeSolicitudWithResponse(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*ObtenerConversacionDeSolicitudResponse, error)
 
 	// ObtenerConversacionDeViajeWithResponse request
 	ObtenerConversacionDeViajeWithResponse(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*ObtenerConversacionDeViajeResponse, error)
@@ -3088,6 +3236,32 @@ func (r ListarBandejaEmergenciasResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ListarBandejaEmergenciasResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListarTrabajoMiBandejaSolicitudesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TrabajoBandeja
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+	JSON409      *ResyncRequerido
+}
+
+// Status returns HTTPResponse.Status
+func (r ListarTrabajoMiBandejaSolicitudesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListarTrabajoMiBandejaSolicitudesResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3606,6 +3780,31 @@ func (r TransferirEmergenciaPorIdResponse) StatusCode() int {
 	return 0
 }
 
+type ObtenerConversacionDeSolicitudResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Conversacion
+	JSON401      *NoAutorizado
+	JSON403      *Prohibido
+	JSON404      *NoEncontrado
+}
+
+// Status returns HTTPResponse.Status
+func (r ObtenerConversacionDeSolicitudResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ObtenerConversacionDeSolicitudResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ObtenerConversacionDeViajeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3858,6 +4057,15 @@ func (c *ClientWithResponses) ListarBandejaEmergenciasWithResponse(ctx context.C
 		return nil, err
 	}
 	return ParseListarBandejaEmergenciasResponse(rsp)
+}
+
+// ListarTrabajoMiBandejaSolicitudesWithResponse request returning *ListarTrabajoMiBandejaSolicitudesResponse
+func (c *ClientWithResponses) ListarTrabajoMiBandejaSolicitudesWithResponse(ctx context.Context, params *ListarTrabajoMiBandejaSolicitudesParams, reqEditors ...RequestEditorFn) (*ListarTrabajoMiBandejaSolicitudesResponse, error) {
+	rsp, err := c.ListarTrabajoMiBandejaSolicitudes(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListarTrabajoMiBandejaSolicitudesResponse(rsp)
 }
 
 // ListarTrabajoMiBandejaWithResponse request returning *ListarTrabajoMiBandejaResponse
@@ -4120,6 +4328,15 @@ func (c *ClientWithResponses) TransferirEmergenciaPorIdWithResponse(ctx context.
 	return ParseTransferirEmergenciaPorIdResponse(rsp)
 }
 
+// ObtenerConversacionDeSolicitudWithResponse request returning *ObtenerConversacionDeSolicitudResponse
+func (c *ClientWithResponses) ObtenerConversacionDeSolicitudWithResponse(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*ObtenerConversacionDeSolicitudResponse, error) {
+	rsp, err := c.ObtenerConversacionDeSolicitud(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseObtenerConversacionDeSolicitudResponse(rsp)
+}
+
 // ObtenerConversacionDeViajeWithResponse request returning *ObtenerConversacionDeViajeResponse
 func (c *ClientWithResponses) ObtenerConversacionDeViajeWithResponse(ctx context.Context, id IdRuta, reqEditors ...RequestEditorFn) (*ObtenerConversacionDeViajeResponse, error) {
 	rsp, err := c.ObtenerConversacionDeViaje(ctx, id, reqEditors...)
@@ -4329,6 +4546,60 @@ func ParseListarBandejaEmergenciasResponse(rsp *http.Response) (*ListarBandejaEm
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListarTrabajoMiBandejaSolicitudesResponse parses an HTTP response from a ListarTrabajoMiBandejaSolicitudesWithResponse call
+func ParseListarTrabajoMiBandejaSolicitudesResponse(rsp *http.Response) (*ListarTrabajoMiBandejaSolicitudesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListarTrabajoMiBandejaSolicitudesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TrabajoBandeja
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ResyncRequerido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
@@ -5353,6 +5624,53 @@ func ParseTransferirEmergenciaPorIdResponse(rsp *http.Response) (*TransferirEmer
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseObtenerConversacionDeSolicitudResponse parses an HTTP response from a ObtenerConversacionDeSolicitudWithResponse call
+func ParseObtenerConversacionDeSolicitudResponse(rsp *http.Response) (*ObtenerConversacionDeSolicitudResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ObtenerConversacionDeSolicitudResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Conversacion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest NoAutorizado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Prohibido
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NoEncontrado
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
