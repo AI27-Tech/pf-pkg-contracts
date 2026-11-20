@@ -35,12 +35,22 @@ ROMPIMIENTOS_DIR="$RAIZ/rompimientos"
 
 SERVICIOS=(identidad catalogos operacion bff reportes mensajeria realtime)
 
-# --- Línea base: último tag de tracer publicada -------------------------------
-base="$(git tag --list 'v*-tracer.*' --sort=-v:refname | head -1 || true)"
+# --- Línea base: la última release publicada ANTERIOR a esta versión ----------
+# Se excluye el tag de la propia VERSION. Cuando el job corre sobre el tag de esta
+# versión (el release), el tag existe y no es una línea base: es lo que se está
+# publicando. Antes se comparaba contra `<tag>^`, el commit anterior al tag, que
+# en `pf-contracts-m` puede ser una versión SIN PUBLICAR de esta misma ola (una
+# promoción previa), y el release fallaba por diferencias entre dos borradores de
+# la misma versión (tracer.45). La base correcta es lo que un consumidor ya pudo
+# fijar: la release anterior.
+ultima_release() {
+  git tag --list 'v*-tracer.*' --sort=-v:refname | grep -vxF "$VERSION" | head -1 || true
+}
+base="$(ultima_release)"
 if [ -z "$base" ]; then
   # Puede haber tags sólo en origin (CI con fetch más completo).
   git fetch --no-tags --quiet origin 'refs/tags/v*-tracer.*:refs/tags/v*-tracer.*' 2>/dev/null || true
-  base="$(git tag --list 'v*-tracer.*' --sort=-v:refname | head -1 || true)"
+  base="$(ultima_release)"
 fi
 
 if [ -z "$base" ]; then
@@ -49,13 +59,7 @@ if [ -z "$base" ]; then
   exit 0
 fi
 
-if [ "$base" = "$(cat VERSION)" ]; then
-  echo "La línea base ($base) es esta misma versión; se compara contra el commit"
-  echo "anterior para que el propio release detecte su propia incompatibilidad."
-  base_commit="${base}^"
-else
-  base_commit="$base"
-fi
+base_commit="$base"
 
 echo "==> breaking check de OpenAPI contra $base (commit ${base_commit:0:12})"
 
