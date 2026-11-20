@@ -31,6 +31,10 @@ message SujetoDesactivado {
   string sujeto_id = 1;
   string tenant_id = 2;
   google.protobuf.Timestamp desactivado_en = 3;
+  // Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual al
+  // `sub` de su token. Con él `mensajeria` resuelve el sujeto del token sin
+  // consultar a `identidad` (DEC-148 #59, `tracer.46`).
+  string idp_subject = 4;
 }
 
 // sujeto.reactivado — al comprometer la reactivación del sujeto. Hecho propio,
@@ -39,6 +43,10 @@ message SujetoReactivado {
   string sujeto_id = 1;
   string tenant_id = 2;
   google.protobuf.Timestamp reactivado_en = 3;
+  // Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual al
+  // `sub` de su token. Con él `mensajeria` resuelve el sujeto del token sin
+  // consultar a `identidad` (DEC-148 #59, `tracer.46`).
+  string idp_subject = 4;
 }
 
 // rol.asignado — al comprometer la asignación de un rol a un sujeto.
@@ -48,6 +56,10 @@ message RolAsignado {
   // Identificador canónico del rol (enum `Rol` de _comunes.yaml, DEC-053).
   string rol = 3;
   google.protobuf.Timestamp asignado_en = 4;
+  // Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual al
+  // `sub` de su token. Con él `mensajeria` resuelve el sujeto del token sin
+  // consultar a `identidad` (DEC-148 #59, `tracer.46`).
+  string idp_subject = 5;
 }
 
 // rol.revocado — al comprometer la revocación de un rol de un sujeto.
@@ -56,6 +68,10 @@ message RolRevocado {
   string tenant_id = 2;
   string rol = 3;
   google.protobuf.Timestamp revocado_en = 4;
+  // Subject OIDC opaco del IdP del sujeto (`Sujeto.idp_subject`), igual al
+  // `sub` de su token. Con él `mensajeria` resuelve el sujeto del token sin
+  // consultar a `identidad` (DEC-148 #59, `tracer.46`).
+  string idp_subject = 5;
 }
 
 // alcance.cambiado — al comprometer un cambio en los clientes efectivos de
