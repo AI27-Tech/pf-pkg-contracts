@@ -22,11 +22,15 @@ generate: ## Genera todos los artefactos Go y TS desde las fuentes
 	./scripts/generar.sh
 
 .PHONY: generate-estados
-generate-estados: ## Genera solo los tipos de estados (Go + TS)
+generate-estados: ## Genera solo los tipos de estados del viaje y de la solicitud (Go + TS)
 	cd tools/gen-estados && go run . \
 	  -src ../../contracts/estados/viaje.estados.yaml \
 	  -go ../../packages/api-client-go/estados/viaje_estados.gen.go \
 	  -ts ../../packages/api-client-ts/src/estados/viajeEstados.gen.ts
+	cd tools/gen-estados && go run . \
+	  -src ../../contracts/estados/solicitud.estados.yaml \
+	  -go ../../packages/api-client-go/estados/solicitud_estados.gen.go \
+	  -ts ../../packages/api-client-ts/src/estados/solicitudEstados.gen.ts
 
 .PHONY: generate-registro
 generate-registro: ## Genera solo el registro de tipos de evento (Go + TS)

@@ -3,6 +3,30 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-19 [tracer.44] — máquina de estados de la solicitud como dato (ADR 38, DEC-148)
+
+**Para quién:** `pf-svc-operacion` (módulo `solicitudes`), `pf-svc-bff`, `pf-svc-reportes`, `pf-svc-mensajeria` y los dos frontends, que reconocerán los estados de la solicitud desde estos tipos. No hay nada que cambiar todavía en los consumidores actuales.
+
+**Resumen:** ola aditiva. Agrega `contracts/estados/solicitud.estados.yaml` y sus tipos Go y TypeScript: 8 estados, 11 transiciones y las funciones para consultarlas. **No modifica el enum del viaje ni ningún OpenAPI.** La enmienda del viaje (salen `SOLICITADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE`; `CANCELADO` pasa a `CANCELADO_POR_CLIENTE`) es incompatible y toca `operacion.yaml`, así que va en una ola aparte junto con el OpenAPI de solicitudes.
+
+**Reglas:**
+- La solicitud tiene estados `SOLICITADO`, `COTIZADO`, `PAGADO`, `APROBADO`, `RECHAZADO_POR_AI27`, `RECHAZADO_POR_CLIENTE`, `CANCELADO_POR_CLIENTE` y `VENCIDA` (ADR 38).
+- `VENCIDA` no es terminal: su única salida es `VENCIDA -> PAGADO` (DEC-148 #35). `APROBADO` es terminal para la solicitud: nace el viaje con el mismo id.
+- Cuatro tokens se llaman igual que en el viaje (`SOLICITADO`, `APROBADO`, `RECHAZADO_POR_AI27`, `RECHAZADO_POR_CLIENTE`) porque son agregados distintos con enums distintos.
+
+**Aviso al subir el pin del cliente Go (git-workflow §8):** sin cambios para quien ya consume. En Go, las constantes de la solicitud llevan el prefijo del tipo (`EstadoSolicitudAprobado`) y no chocan con las del viaje (`EstadoAprobado`). En TypeScript se exporta como `estadosSolicitud` y como subpath `@ai27-tech/contracts/estados/solicitud`.
+
+**Cambios:**
+- `contracts/estados/solicitud.estados.yaml`: fuente nueva.
+- `tools/gen-estados`: genera por agregado (`viaje` o `solicitud`) según el campo `aggregate`; la salida del viaje queda idéntica byte a byte.
+- `packages/api-client-go/estados/solicitud_estados.gen.go` y `packages/api-client-ts/src/estados/solicitudEstados.gen.ts`: generados.
+- `packages/api-client-ts/src/index.ts` y `package.json`: reexport `estadosSolicitud` y subpath `./estados/solicitud`.
+- `scripts/contract-tests.sh`: aserciones de la solicitud (incluida `VENCIDA -> PAGADO`).
+- `Makefile`, `scripts/generar.sh`, `README.md`, `packages/api-client-go/doc.go`: pasan a incluir la solicitud.
+- `VERSION` y `packages/api-client-ts/package.json`: `tracer.44`.
+
+**Verificado:** `make verify`, `make check-version-ts`, `make check-ts-exports`, `tsc --noEmit` del paquete TS, y las aserciones nuevas de `contract-tests.sh` contra el árbol local (el consumidor limpio solo corre con el tag publicado).
+
 ## 2026-11-19 [tracer.43] — el usuario lee su propio alcance; `403` y `400` documentados (DEC-149 #21, #23 y #24, B-04)
 
 **Para quién:** `pf-svc-identidad` (implementar `obtenerMiAlcance`), `pf-svc-bff` (reenviarlo), `pf-svc-core` (pins) y el panel interno (distinguir "sin clientes asignados" de "sin viajes", y el estado "sin permiso" de la ficha técnica).

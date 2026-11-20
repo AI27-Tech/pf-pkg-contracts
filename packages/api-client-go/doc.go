@@ -1,8 +1,9 @@
 // Package apiclientgo es el módulo Go publicado por pf-pkg-contracts.
 //
 // Contiene tipos y clientes generados desde las fuentes contractuales:
-//   - estados/  — máquina de estados del viaje (generado por tools/gen-estados
-//     desde contracts/estados/viaje.estados.yaml).
+//   - estados/  — máquinas de estados del viaje y de la solicitud (generado por
+//     tools/gen-estados desde contracts/estados/viaje.estados.yaml y
+//     solicitud.estados.yaml).
 //   - registro/ — registro contractual de tipos de evento (generado por
 //     tools/gen-registro desde contracts/events/registro.tipos.yaml).
 //   - roles/   — enum de roles (generado por tools/gen-roles desde el esquema
