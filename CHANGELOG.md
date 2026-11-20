@@ -3,6 +3,21 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-20 [tracer.46] — `idp_subject` en los eventos de rol y de ciclo de vida del sujeto (DEC-148 #59)
+
+**Para quién:** `pf-svc-identidad` (llenar `idp_subject` al publicar) y `pf-svc-mensajeria` (resolver el `sub` del token con él; la transferencia de conversación #68 no se habilita hasta publicar esta ola).
+
+**Resumen:** ola aditiva. `rol.asignado`, `rol.revocado`, `sujeto.desactivado` y `sujeto.reactivado` llevan el `idp_subject` del sujeto, igual al `sub` de su token (DEC-072), como ya lo hace `alcance.cambiado` desde `tracer.42`.
+
+**Cambios:**
+- `contracts/events/ai27/eventos/v1/sujeto.proto`: `idp_subject = 4` en `SujetoDesactivado` y `SujetoReactivado`; `idp_subject = 5` en `RolAsignado` y `RolRevocado`. Números nuevos, sin renumerar.
+- `contracts/events/INVENTARIO.md`: nota de la ola.
+- `VERSION` y `packages/api-client-ts/package.json` a `0.1.0-tracer.46`. Regenerados los clientes Go y TS.
+
+**Compatibilidad:** campo nuevo; un consumidor en el pin anterior ignora el campo. Un evento publicado antes de la ola llega con `idp_subject` vacío. No hay OpenAPI afectado. `sujeto.creado` no cambia.
+
+**Aviso al subir el pin del cliente Go (git-workflow §8):** sin enums nuevos ni constantes renombradas.
+
 ## 2026-11-20 [tooling] — el breaking check del release compara contra la release anterior, no contra `tag^`
 
 **Para quién:** quien promueve y taguea olas. No cambia ningún contrato ni genera artefactos: `VERSION` no sube.
