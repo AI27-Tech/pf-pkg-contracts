@@ -437,7 +437,8 @@ type HistoricoSolicitud struct {
 
 // HistoricoSolicitudItem defines model for HistoricoSolicitudItem.
 type HistoricoSolicitudItem struct {
-	AEstado *string `json:"a_estado"`
+	// AEstado Estado de destino; null en las acciones sin cambio de estado (recotizar, reprogramar).
+	AEstado *EstadoSolicitud `json:"a_estado"`
 
 	// Accion Qué ocurrió: `creada`, `cotizada`, `recotizada`, `reprogramada`, `pago_confirmado`, `pago_confirmado_tardio` (excepción `VENCIDA → PAGADO`), `pago_revertido`, `cotizacion_rechazada`, `cancelada`, `vencida`, `aprobada`, `rechazada`. `string` y no enum para poder ampliar sin ruptura.
 	Accion string `json:"accion"`
@@ -447,7 +448,9 @@ type HistoricoSolicitudItem struct {
 
 	// Cotizacion Versión completa, solo en `cotizada` y `recotizada` (DEC-148
 	Cotizacion *Cotizacion `json:"cotizacion"`
-	DeEstado   *string     `json:"de_estado"`
+
+	// DeEstado Estado de origen; null en `creada` y en las acciones sin cambio de estado.
+	DeEstado *EstadoSolicitud `json:"de_estado"`
 
 	// En Instante en UTC, RFC 3339.
 	En MarcaTiempo `json:"en"`
@@ -608,7 +611,7 @@ type Pago struct {
 
 // PagoEntrada defines model for PagoEntrada.
 type PagoEntrada struct {
-	// FechaPago Cuándo pagó el cliente (día calendario en `America/Mexico_City`). Debe caer dentro de la vigencia de la última cotización (DEC-148 #34, #43).
+	// FechaPago Cuándo pagó el cliente (día calendario en `America/Mexico_City`). Debe caer dentro de la vigencia de la última cotización: desde su entrega hasta su último día, ambos incluidos (DEC-148 #34, #43). Una fecha anterior a la entrega o posterior al último día se rechaza.
 	FechaPago openapi_types.Date `json:"fecha_pago"`
 
 	// Referencia Folio o nota en texto. Opcional; sin archivo adjunto (DEC-148
@@ -702,7 +705,7 @@ type TransicionEntrada struct {
 	// AEstado Estado destino. Se valida contra la máquina de estados.
 	AEstado EstadoViaje `json:"a_estado"`
 
-	// Causa Causa de la transición. Obligatoria cuando el destino la requiere (p. ej. motivo de rechazo, DEC-020 #2). La validación fina vive en el servicio.
+	// Causa Causa de la transición. Obligatoria cuando el destino la requiere (p. ej. el motivo de la cancelación del cliente, DEC-111). El motivo del rechazo de AI27 (DEC-020 #2) ya no es del viaje: lo lleva `rechazarSolicitud`. La validación fina vive en el servicio.
 	Causa *string `json:"causa,omitempty"`
 
 	// MotivoCierre Obligatorio al transicionar a `CERRADO` (E8-T14, DEC-113); ignorado en cualquier otra arista. Sustituye el puente previo que leía el motivo de `causa`.
@@ -769,6 +772,9 @@ type UnidadModificacion struct {
 
 // Viaje defines model for Viaje.
 type Viaje struct {
+	// CancelacionConPenalizacion `true` si cancelar este viaje lleva marca de penalización, o ya la lleva por haberse cancelado: el viaje nació de una solicitud pagada (DEC-148 #14). `false` si lo creó Operación (DEC-148 #27). El cliente lo usa para mostrar el aviso del 50% antes de cancelar (DEC-042) y su confirmación después. Argos solo marca; no calcula ni guarda el monto (DEC-148 #6). Ausente se lee como `false`.
+	CancelacionConPenalizacion *bool `json:"cancelacion_con_penalizacion,omitempty"`
+
 	// ClienteId Identificador único (UUID). Nunca un correlativo expuesto.
 	ClienteId *Id `json:"cliente_id,omitempty"`
 

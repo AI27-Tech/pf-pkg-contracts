@@ -2,8 +2,8 @@
 // (módulo `solicitudes`, ADR 38, DEC-148). Todos usan el `Sobre` común y la
 // superficie AMPLIA. Orden por agregado = solicitud_id.
 //
-// NO llevan datos comerciales: ni monto, ni moneda, ni motivos, ni fechas del
-// pago. Viajan por la superficie amplia y esos datos son confidenciales para el
+// NO llevan datos comerciales ni de pago: ni monto, ni moneda, ni motivos, ni
+// fechas del pago, ni la marca de penalización. Viajan por la superficie amplia y esos datos son confidenciales para el
 // resto del equipo (DEC-148 #28); quien los necesita los lee por la API de
 // solicitudes con su rol. Solo identifican la solicitud y su estado.
 //
@@ -39,8 +39,9 @@ message SolicitudEstadoCambiado {
   // Tokens de estado de la solicitud (no del viaje).
   string de_estado = 3;
   string a_estado = 4;
-  // true solo cuando el cliente cancela estando en PAGADO (DEC-148 #6). Es una
-  // marca, no un monto.
-  bool marca_penalizacion = 5;
-  google.protobuf.Timestamp cambiado_en = 6;
+  // Sin marca de penalización: revelaría por la superficie amplia que el
+  // cliente pagó y canceló, y ningún consumidor la necesita (`mensajeria` solo
+  // usa `a_estado` y `cambiado_en`). Quien deba verla la lee por la API de
+  // solicitudes con su rol (`Solicitud.marca_penalizacion`).
+  google.protobuf.Timestamp cambiado_en = 5;
 }
