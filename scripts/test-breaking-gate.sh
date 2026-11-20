@@ -110,6 +110,42 @@ else
   ok "OpenAPI: retirar un valor no declarado del mismo filtro sigue fallando"
 fi
 
+# --- Caso 9: `breaking-eventos.sh` compara contra la línea base pedida -------
+# Regresión: buf trata `ref=FETCH_HEAD` como HEAD, así que un evento roto pasaba
+# en verde porque se comparaba el commit contra sí mismo. El caso reproduce el
+# escenario real de CI en un clon temporal: FETCH_HEAD = la base; HEAD = un commit
+# que elimina un campo de un evento. Debe FALLAR. Con el comportamiento viejo
+# pasaba. Y un ref que no resuelve debe fallar, no compararse contra otra cosa.
+if command -v buf >/dev/null 2>&1; then
+  tmp="$(mktemp -d)"
+  git clone -q --no-hardlinks "$RAIZ" "$tmp/r"
+  (
+    cd "$tmp/r"
+    git fetch -q --no-tags origin HEAD            # FETCH_HEAD = la línea base
+    cp "$RAIZ/scripts/breaking-eventos.sh" scripts/   # prueba el script de esta copia de trabajo
+    python3 - <<'PY'
+p = "contracts/events/ai27/eventos/v1/viaje.proto"
+s = open(p).read()
+a = "message ViajeCreado {\n  string viaje_id = 1;\n  string cliente_id = 2;\n"
+assert a in s
+open(p, "w").write(s.replace(a, "message ViajeCreado {\n  string viaje_id = 1;\n", 1))
+PY
+    git -c user.name=t -c user.email=t@t commit -q -am "rompe ViajeCreado"
+    if ./scripts/breaking-eventos.sh '.git#ref=FETCH_HEAD' >/dev/null 2>&1; then
+      echo "FALLO: un campo eliminado pasó contra ref=FETCH_HEAD (comparó HEAD contra HEAD)" >&2
+      exit 1
+    fi
+    if ./scripts/breaking-eventos.sh '.git#ref=no-existe-este-ref' >/dev/null 2>&1; then
+      echo "FALLO: un ref que no resuelve debería fallar, no omitirse" >&2
+      exit 1
+    fi
+  ) && ok "Eventos: el chequeo compara contra la línea base pedida (FETCH_HEAD) y no contra HEAD" \
+    || bad "Eventos: el chequeo no compara contra la línea base pedida"
+  rm -rf "$tmp"
+else
+  echo "    (omitido: buf no está instalado)"
+fi
+
 if [ "$fallos" -ne 0 ]; then
   echo "ERROR: el mecanismo de allowlist no se comporta como se espera." >&2
   exit 1
