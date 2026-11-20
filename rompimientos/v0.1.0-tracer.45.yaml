@@ -56,3 +56,30 @@ openapi:
   - servicio: operacion
     match: "POST /api/v1/viajes/{id}/transiciones | removed the enum value 'CANCELADO' of the request property 'a_estado/allOf[#/components/schemas/EstadoViaje]/'"
     fuente: ADR 38 / DEC-148 #4, #13, #14 — el `a_estado` de `transicionarViaje` pierde CANCELADO; sin datos de producción de V1
+
+# --- Rupturas de eventos (buf breaking). `match` es una subcadena del mensaje
+#     que imprime buf. ---
+#
+# `solicitud.estado_cambiado` perdió `marca_penalizacion` (campo 5) y
+# `cambiado_en` pasó del campo 6 al 5 (revisión de tracer.45, PR #153): la marca
+# de penalización revelaba por la superficie amplia que el cliente pagó y
+# canceló, y ningún consumidor la necesitaba.
+#
+# Ruptura segura: `tracer.45` NO está publicado (sin tag; `pf-contracts-m` solo
+# trae la versión previa a la corrección, que ningún consumidor pudo fijar
+# porque los consumidores fijan por tag). Se declara porque, con el chequeo de
+# eventos comparando de verdad contra `pf-contracts-m` (antes `FETCH_HEAD` se
+# resolvía a HEAD y el chequeo no comparaba nada), la promoción de la corrección
+# a `-m` lo detecta. Una vez publicado `tracer.45`, esta ruptura deja de existir:
+# la línea base ya trae el campo corregido.
+eventos:
+  - match: 'Previously present field "6" with name "cambiado_en" on message "SolicitudEstadoCambiado" was deleted.'
+    fuente: PR #153 (revisión de tracer.45) — `cambiado_en` pasa del campo 6 al 5; tracer.45 sin publicar
+  - match: 'Field "5" with name "cambiado_en" on message "SolicitudEstadoCambiado" changed cardinality'
+    fuente: PR #153 — el campo 5 pasa de `marca_penalizacion` (bool) a `cambiado_en` (Timestamp); tracer.45 sin publicar
+  - match: 'Field "5" with name "cambiado_en" on message "SolicitudEstadoCambiado" changed option "json_name" from "marcaPenalizacion" to "cambiadoEn"'
+    fuente: PR #153 — el campo 5 pasa de `marca_penalizacion` a `cambiado_en`; tracer.45 sin publicar
+  - match: 'Field "5" with name "cambiado_en" on message "SolicitudEstadoCambiado" changed type from "bool" to "message"'
+    fuente: PR #153 — el campo 5 pasa de bool a Timestamp; tracer.45 sin publicar
+  - match: 'Field "5" on message "SolicitudEstadoCambiado" changed name from "marca_penalizacion" to "cambiado_en"'
+    fuente: PR #153 — se retira `marca_penalizacion` de la superficie amplia; tracer.45 sin publicar
