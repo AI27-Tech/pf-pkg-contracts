@@ -1,0 +1,177 @@
+# =============================================================================
+# contracts/estados/solicitud.estados.yaml
+# -----------------------------------------------------------------------------
+# Máquina de estados de la `solicitud` como DATO. Fuente única desde la que se
+# generan los tipos de Go y TypeScript (tools/gen-estados). Nadie copia este
+# enum: `operacion` es su dueño (módulo `solicitudes`, DEC-148 #8) y `bff`,
+# `reportes`, `mensajeria` y los dos frontends reconocen los mismos tokens
+# generados desde aquí.
+#
+# Autoridad del contenido: ADR 38 (la solicitud tiene su propia máquina y el
+# viaje nace aprobado), sobre DEC-148 #2 a #4, #6, #9, #14 a #19, #22, #24 y #33
+# a #51. Los estados y transiciones de aquí son los del ADR 38; si divergen, gana
+# el ADR.
+#
+# La solicitud es previa al viaje: el cliente la crea, `cotizacion` la cotiza y
+# confirma el pago, y el Jefe Operativo la aprueba. Al aprobarse nace el viaje
+# con el MISMO id (DEC-148 #3), cuya máquina vive en `viaje.estados.yaml`.
+#
+# Esta ola es ADITIVA: no modifica `viaje.estados.yaml`. La enmienda del enum del
+# viaje (salen `SOLICITADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE`;
+# `CANCELADO` pasa a `CANCELADO_POR_CLIENTE`) es una ola rompiente aparte, junto
+# con el OpenAPI de solicitudes.
+#
+# Los nombres de estado coinciden con tokens del viaje (`APROBADO`,
+# `RECHAZADO_POR_AI27`, `RECHAZADO_POR_CLIENTE`, `CANCELADO_POR_CLIENTE`) porque
+# son agregados distintos con enums distintos. En Go las constantes se generan
+# con el nombre del tipo como prefijo (`EstadoSolicitudAprobado`) para no chocar
+# con las del viaje (`EstadoAprobado`).
+#
+# Convención de idioma: sustantivos de dominio en español (ADR 22 / DEC-024).
+# =============================================================================
+
+version: 1
+aggregate: solicitud
+canonical_source: contracts/estados/solicitud.estados.yaml
+authority:
+  - ADR-0038  # máquina de estados de la solicitud
+  - DEC-148   # cotización y pago previos a la aprobación (#2 a #4, #6, #9, #14 a #19, #22, #24, #33 a #51)
+  - DEC-010   # fecha y hora del servicio definida antes de aprobar (#2)
+  - DEC-020   # motivo obligatorio del rechazo (#2)
+
+# -----------------------------------------------------------------------------
+# Estados. Una sola dimensión con transiciones controladas.
+# `terminal: true` — sin transiciones de salida. `VENCIDA` NO es terminal: tiene
+# una única salida, `VENCIDA -> PAGADO` (DEC-148 #35).
+# `APROBADO` es terminal PARA LA SOLICITUD: entrega el trabajo al viaje, que nace
+# con el mismo id; la solicitud ya no se mueve.
+# -----------------------------------------------------------------------------
+estados:
+  - token: SOLICITADO
+    nombre_negocio: Solicitada
+    availability: v2
+    descripcion: >-
+      Estado inicial. Solo la crea el cliente. Operación no pasa por aquí: sus
+      viajes nacen en `APROBADO` del viaje (DEC-026). La fecha y hora del
+      servicio es opcional para el cliente (DEC-148 #38).
+
+  - token: COTIZADO
+    nombre_negocio: Cotizada
+    availability: v2
+    descripcion: >-
+      Hay una cotización vigente (15 días desde su última entrega, DEC-148 #15).
+      Recotizar y cambiar la fecha no cambian el estado.
+
+  - token: PAGADO
+    nombre_negocio: Pagada
+    availability: v2
+    descripcion: >-
+      `cotizacion` confirmó el pago, con la fecha del pago dentro de la vigencia
+      (DEC-148 #34). Desde aquí la solicitud aparece al Jefe Operativo (#22).
+      Reprogramar la fecha no cambia el estado (#24).
+
+  - token: APROBADO
+    nombre_negocio: Aprobada
+    availability: v2
+    terminal: true
+    descripcion: >-
+      El Jefe Operativo aprobó la solicitud pagada. Nace el viaje en su estado
+      `APROBADO` con el mismo id (DEC-148 #3). Terminal para la solicitud.
+
+  - token: RECHAZADO_POR_AI27
+    nombre_negocio: Rechazada por AI27
+    availability: v2
+    terminal: true
+    descripcion: >-
+      AI27 no acepta prestar el servicio, desde `PAGADO`. Motivo obligatorio
+      (DEC-020 #2). Sin marca de reembolso (DEC-148 #19). No se crea viaje.
+
+  - token: RECHAZADO_POR_CLIENTE
+    nombre_negocio: Rechazada por el cliente
+    availability: v2
+    terminal: true
+    descripcion: >-
+      El cliente rechaza la cotización ("no acepto este precio o estas
+      condiciones"). Sin marca de penalización (DEC-148 #9, #18).
+
+  - token: CANCELADO_POR_CLIENTE
+    nombre_negocio: Cancelada por el cliente
+    availability: v2
+    terminal: true
+    descripcion: >-
+      El cliente ya no necesita el servicio. Lleva marca de penalización si la
+      solicitud estaba `PAGADO`; sin ella si estaba `SOLICITADO` o `COTIZADO`
+      (DEC-148 #6, #17). La marca es un atributo de la solicitud, no un estado.
+
+  - token: VENCIDA
+    nombre_negocio: Vencida
+    availability: v2
+    descripcion: >-
+      La cotización venció sin pago. La marca el sistema, sin intervención de
+      nadie, un día después del último día de vigencia (DEC-148 #15), contando
+      días calendario en `America/Mexico_City` (#50). Sin penalización. No se
+      recotiza: el cliente crea una solicitud nueva (#36). Única salida:
+      `VENCIDA -> PAGADO` si el pago se hizo dentro de la vigencia (#35).
+
+# -----------------------------------------------------------------------------
+# Transiciones permitidas. Todo lo que no está aquí está prohibido.
+# `disparador`: quién la origina — cliente | cotizacion | jefe_operativo |
+#               administrador | sistema. El `administrador` hereda siempre las
+#               facultades de `cotizacion` y del Jefe Operativo (DEC-148 #20).
+# `guarda`: condición previa obligatoria. La guarda vive en `operacion`; aquí se
+#           nombra para que el grafo la reconozca.
+# -----------------------------------------------------------------------------
+transiciones:
+  # --- Cotización ---
+  - de: SOLICITADO
+    a: COTIZADO
+    disparador: cotizacion
+    guarda: fecha_hora_servicio_y_monto_y_moneda   # DEC-148 #39 y #41
+  - de: SOLICITADO
+    a: CANCELADO_POR_CLIENTE
+    disparador: cliente
+    nota: sin_marca_de_penalizacion                # DEC-148 #17
+
+  # --- Respuesta del cliente, pago y vencimiento ---
+  - de: COTIZADO
+    a: PAGADO
+    disparador: cotizacion
+    guarda: fecha_pago_en_vigencia                 # DEC-148 #34 y #43
+  - de: COTIZADO
+    a: RECHAZADO_POR_CLIENTE
+    disparador: cliente
+  - de: COTIZADO
+    a: CANCELADO_POR_CLIENTE
+    disparador: cliente
+    nota: sin_marca_de_penalizacion                # DEC-148 #17 y #18
+  - de: COTIZADO
+    a: VENCIDA
+    disparador: sistema
+    guarda: vigencia_vencida                       # un día después del último día, America/Mexico_City (DEC-148 #15 y #50)
+
+  # --- Excepción de pago tardío (DEC-148 #35) ---
+  - de: VENCIDA
+    a: PAGADO
+    disparador: cotizacion
+    guarda: fecha_pago_en_vigencia
+    nota: excepcion_registrada_en_historico        # única salida de VENCIDA
+
+  # --- Reversa de un pago confirmado por error (DEC-148 #37) ---
+  - de: PAGADO
+    a: COTIZADO
+    disparador: administrador
+    guarda: motivo_obligatorio
+
+  # --- Aprobación, rechazo y cancelación de una solicitud pagada ---
+  - de: PAGADO
+    a: APROBADO
+    disparador: jefe_operativo
+    guarda: fecha_hora_servicio_definida           # DEC-010 #2. Crea el viaje con el mismo id (DEC-148 #3)
+  - de: PAGADO
+    a: RECHAZADO_POR_AI27
+    disparador: jefe_operativo
+    guarda: motivo_obligatorio                     # DEC-020 #2
+  - de: PAGADO
+    a: CANCELADO_POR_CLIENTE
+    disparador: cliente
+    nota: con_marca_de_penalizacion                # DEC-148 #6. No se crea viaje

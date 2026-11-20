@@ -37,6 +37,10 @@ echo "==> 1/5  Estados (fuente única -> Go + TS)"
     -src ../../contracts/estados/viaje.estados.yaml \
     -go ../../"$GO_PKG_DIR"/estados/viaje_estados.gen.go \
     -ts ../../"$TS_SRC_DIR"/estados/viajeEstados.gen.ts )
+( cd tools/gen-estados && go run . \
+    -src ../../contracts/estados/solicitud.estados.yaml \
+    -go ../../"$GO_PKG_DIR"/estados/solicitud_estados.gen.go \
+    -ts ../../"$TS_SRC_DIR"/estados/solicitudEstados.gen.ts )
 
 echo "==> 2/5  OpenAPI (bundle -> Go cliente + TS tipos)"
 for s in "${SERVICIOS[@]}"; do
