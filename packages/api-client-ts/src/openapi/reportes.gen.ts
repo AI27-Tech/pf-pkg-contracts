@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Reporte operativo de viajes por periodo y alcance.
-         * @description Filas del reporte de viajes. Sin `en_curso`, `desde` y `hasta` son obligatorios y acotan por la fecha de creación del viaje (400 si falta alguno). Con `en_curso=true`, devuelve los viajes en un estado NO terminal (todo lo que no es `CERRADO`, `CANCELADO` ni `RECHAZADO_POR_*`) sin importar cuándo se crearon; `desde` y `hasta` son entonces opcionales y, si se mandan, se intersecan con la fecha de creación. Los estados terminales los fija `contracts/estados/` (ADR 19).
+         * @description Filas del reporte de viajes. Sin `en_curso`, `desde` y `hasta` son obligatorios y acotan por la fecha de creación del viaje (400 si falta alguno). Con `en_curso=true`, devuelve los viajes en un estado NO terminal (todo lo que no es `CERRADO` ni `CANCELADO_POR_CLIENTE`) sin importar cuándo se crearon; `desde` y `hasta` son entonces opcionales y, si se mandan, se intersecan con la fecha de creación. Los estados terminales los fija `contracts/estados/` (ADR 19).
          */
         get: operations["reporteViajes"];
         put?: never;

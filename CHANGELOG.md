@@ -3,6 +3,55 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-19 [tracer.45] — la solicitud entra al contrato y sale del viaje (ADR 38 y 39, DEC-148) — INCOMPATIBLE
+
+**Para quién:** `pf-svc-operacion` (módulo `solicitudes`, enum del viaje), `pf-svc-bff`, `pf-svc-mensajeria` (conversación de la solicitud), `pf-svc-identidad` (rol `cotizacion`), `pf-svc-reportes`, `pf-svc-core` (pins) y los dos frontends. **Cada uno adapta su código en su propio PR al subir el pin.**
+
+**Resumen:** ola **incompatible**, intencional. La `solicitud` pasa a tener API, eventos y rol propios, y el enum de estados del viaje pierde las etapas previas a la aprobación. Es una sola ola porque el enum del viaje, `POST /api/v1/viajes` y la API de solicitudes deben cambiar juntos: si no, el contrato diría "el cliente crea un viaje en `SOLICITADO`" con un estado que ya no existe. No hay datos de producción de V1 que migrar (DEC-148 #7).
+
+**Lo que rompe:**
+- `EstadoViaje` (enum de `contracts/estados/viaje.estados.yaml`, `operacion.yaml` y los tipos generados) pierde `SOLICITADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE`, y `CANCELADO` pasa a `CANCELADO_POR_CLIENTE`. `APROBADO` es el único estado inicial.
+- Por eso `listarViajes` (filtro `estado`) y `transicionarViaje` (`a_estado`) dejan de aceptar esos valores. Oasdiff lo reporta como ruptura y está declarado en `rompimientos/v0.1.0-tracer.45.yaml`.
+- El cliente ya no llama `crearViaje`: ahora crea una solicitud. Solo Operación crea viajes (DEC-026). El viaje nace al aprobar la solicitud, con el mismo id.
+- `transicionarViajeCliente` (bff) solo acepta `CANCELADO_POR_CLIENTE`; el cliente ya no rechaza la escolta asignada (DEC-148 #14).
+
+**Qué se agrega:**
+- **API de solicitudes** (`operacion.yaml` y su espejo en `bff.yaml`): `crearSolicitud`, `listarSolicitudes`, `obtenerSolicitud`, `listarHistoricoSolicitud`, `cotizarSolicitud`, `reprogramarSolicitud`, `rechazarCotizacion`, `cancelarSolicitud`, `confirmarPago`, `revertirPago`, `aprobarSolicitud`, `rechazarSolicitud`. Una acción por endpoint porque cada una lleva datos propios.
+- **Conversación de la solicitud** (`mensajeria.yaml` y `bff.yaml`): `obtenerConversacionDeSolicitud`, `listarTrabajoMiBandejaSolicitudes` (pool de `cotizacion`), y en el `bff` `obtenerConversacionSolicitud`, `listarMensajesSolicitud`, `enviarMensajeSolicitud` y `listarTrabajoBandejaSolicitudes`. `Conversacion.tipo` distingue `viaje` de `solicitud`; las dos comparten `viaje_id` porque el viaje hereda el id de la solicitud.
+- **Rol `cotizacion`** (noveno rol, interno y global, DEC-148 #1).
+- **Eventos** `solicitud.creada` y `solicitud.estado_cambiado` (`solicitud.proto`, registro, inventario). Sin datos comerciales en el payload (DEC-148 #28).
+- **Enum `EstadoSolicitud`** en `operacion.yaml`, verificado contra `solicitud.estados.yaml` por `make check-estados`.
+
+**Reglas:**
+- El viaje se crea en la misma transacción que aprueba la solicitud (DEC-148 #52, ADR 39). `aprobarSolicitud` devuelve la solicitud; el viaje se consulta con `obtenerViaje` usando el mismo id.
+- Los avisos son marcas dentro de Argos (`Solicitud.avisos`), derivadas del estado y la hora (DEC-148 #53 a #57). Ya no hay aviso por pago confirmado ni por aprobación.
+- Fuera de alcance responde `404`; `403` es para la acción que el rol no tiene.
+
+**Aviso al subir el pin del cliente Go (git-workflow §8):**
+- Las constantes del viaje en `operacion` conservan sus nombres (`APROBADO`, `ASIGNADO`, ...), **salvo** que desaparecen `SOLICITADO`, `RECHAZADOPORAI27` y `RECHAZADOPORCLIENTE`, y `CANCELADO` pasa a `CANCELADOPORCLIENTE`. Las constantes de `EstadoSolicitud` llevan nombres propios (`SolicitudAprobado`, ...) con `x-enum-varnames`; sin eso el generador habría prefijado **todas** las del viaje por compartir valores.
+- En el paquete `estados`: se retiran `EstadoSolicitado`, `EstadoRechazadoPorAi27` y `EstadoRechazadoPorCliente`, y `EstadoCancelado` pasa a `EstadoCanceladoPorCliente`. En TypeScript, las mismas claves de `EstadoViaje`.
+- `roles.Todos` pasa de 8 a 9 elementos (`cotizacion`); quien enumere roles lo ve.
+- El valor en el cable de los estados que se conservan no cambia.
+
+**Supuestos a confirmar** (DEC-148 no los fija; el contrato los declara así y se pueden ajustar antes de tagear):
+- `motivo` es **opcional** al rechazar la cotización y al cancelar la solicitud (`AccionClienteEntrada`); DEC-111 lo exige para el viaje.
+- `Monto` es un decimal en texto sin signo; los límites (cero, decimales) y el catálogo de `moneda` siguen pendientes.
+- `listarHistoricoSolicitud` lo ven `cotizacion`, `jefe_operativo` (en `PAGADO`) y `administrador`.
+- La reversa de un pago es `POST .../reversa-pago` (no `DELETE`) porque necesita un cuerpo con el motivo.
+- Qué pasa al revertir un pago con la vigencia ya terminada, y si `VENCIDA → PAGADO` puede repetirse, siguen pendientes (ADR 38).
+
+**Cambios:**
+- `contracts/estados/viaje.estados.yaml`: enum y transiciones enmendados; los estados retirados quedan en `removed`.
+- `contracts/openapi/operacion.yaml`, `bff.yaml`, `mensajeria.yaml`, `reportes.yaml`, `_comunes.yaml`: rutas, esquemas, rol y descripciones.
+- `contracts/events/`: `solicitud.proto`, `registro.tipos.yaml`, `INVENTARIO.md`; comentario de `viaje.proto`.
+- `tools/check-estados` y `Makefile`: el chequeo cubre `EstadoSolicitud`.
+- `scripts/contract-tests.sh`: mapa de estados del viaje, mapa de la solicitud y nueve roles.
+- `rompimientos/v0.1.0-tracer.45.yaml`: allowlist de las dos rupturas de OpenAPI.
+- `VERSION` y `packages/api-client-ts/package.json`: `tracer.45`.
+- `packages/api-client-go` y `packages/api-client-ts`: regenerados con `make generate`.
+
+**Verificado:** `make generate`, `check-reproducible`, `lint-openapi`, `check-estados`, `check-registro`, `buf lint`, `buf breaking` (compatible), `breaking-openapi` con la allowlist, `test-breaking-gate`, `verify`, `check-version-ts`, `check-ts-exports`, `tsc --noEmit`, y el `main.go` del consumidor limpio de `contract-tests.sh` ejecutado contra el árbol local (el job real corre con el tag publicado).
+
 ## 2026-11-19 [tracer.44] — máquina de estados de la solicitud como dato (ADR 38, DEC-148)
 
 **Para quién:** `pf-svc-operacion` (módulo `solicitudes`), `pf-svc-bff`, `pf-svc-reportes`, `pf-svc-mensajeria` y los dos frontends, que reconocerán los estados de la solicitud desde estos tipos. No hay nada que cambiar todavía en los consumidores actuales.

@@ -24,6 +24,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bandeja/solicitudes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar el trabajo de la bandeja de solicitudes del sujeto (bootstrap y catch-up).
+         * @description `mensajeria` resuelve la bandeja de solicitudes por el rol del sujeto: todo usuario con rol `cotizacion` es miembro (un solo pool, DEC-148 #31) y el `administrador` la lee por herencia (DEC-148 #20). `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` no tienen esta bandeja y reciben `404`, igual que una bandeja inexistente (DEC-148 #12, #28). Sin acotar por el tenant de quien pregunta (DEC-129). `desde_revision` y `cursor` funcionan igual que en `listarTrabajoMiBandeja`; el `409 stream_resync_required` también.
+         *     Cada elemento lleva la marca de mensaje sin respuesta (DEC-148 #54): se activa de inmediato cuando se acepta un mensaje del cliente sin respuesta posterior de AI27 y se detiene con la respuesta. La marca llega al pool de `cotizacion`, no al Supervisor, que no ve estas conversaciones.
+         */
+        get: operations["listarTrabajoMiBandejaSolicitudes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bandejas/{id}/trabajo": {
         parameters: {
             query?: never;
@@ -104,6 +125,29 @@ export interface paths {
          *     Audiencia: el Cliente de la empresa dueña del viaje y, por audiencia Interno, los mismos roles que `obtenerConversacion` (`ejecutivo`; `supervisor`/`coordinador` solo leen, DEC-131), sin acotar por el tenant de quien pregunta (DEC-129). Poseer el `viaje_id` no autoriza (Addendum §7): el Cliente de otra empresa recibe 404, igual que si el viaje todavía no tuviera conversación; otro rol interno recibe `403`.
          */
         get: operations["obtenerConversacionDeViaje"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/solicitudes/{id}/conversacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdRuta"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Conversación de una solicitud, resuelta por el id de la solicitud.
+         * @description `{id}` es el id de la solicitud, no el de la conversación. Devuelve la conversación de tipo `solicitud` con la misma forma que `obtenerConversacion`. La conversación nace con la solicitud (DEC-148 #5) y acepta mensajes hasta 3 días después de que la solicitud termina por cualquier vía, incluido pasar a `APROBADO`; después queda en solo lectura para el cliente, `cotizacion` y `administrador` (DEC-148 #30, #48).
+         *     Audiencia: el Cliente de la empresa dueña de la solicitud y, por audiencia Interno, los usuarios con rol `cotizacion` y el `administrador` (DEC-148 #1, #20). `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` reciben `403` (DEC-148 #12, #28). Un usuario de `cotizacion` recién agregado lee el historial previo (DEC-148 #46). El Cliente de otra empresa recibe `404`.
+         */
+        get: operations["obtenerConversacionDeSolicitud"];
         put?: never;
         post?: never;
         delete?: never;
@@ -311,7 +355,7 @@ export interface paths {
         put?: never;
         /**
          * Activar una emergencia sobre el viaje (idempotente por activacion_id).
-         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por cliente (DEC-149 #6), activan el caso (ADR 21 §1, DEC-045 #9); otro rol interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde `SOLICITADO` en estados no terminales; denegada en `CERRADO`, `CANCELADO`, `RECHAZADO_POR_AI27` y `RECHAZADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje (DT-16).
+         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por cliente (DEC-149 #6), activan el caso (ADR 21 §1, DEC-045 #9); otro rol interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde `APROBADO` (el viaje nace ahí, DEC-148 #5) en estados no terminales; denegada en `CERRADO` y `CANCELADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje (DT-16).
          *     Idempotente por `activacion_id` del llamante (ADR 21 §2, mismo patrón que `enviarMensaje`): reentregar la misma activación devuelve el MISMO caso con 200 y no crea un duplicado; una pulsación nueva con otro `activacion_id` crea OTRO caso con 201, aunque ya exista uno abierto. No crea incidencia ni condición.
          */
         post: operations["activarEmergencia"];
@@ -706,6 +750,8 @@ export interface components {
         Conversacion: {
             id: components["schemas"]["Id"];
             viaje_id: components["schemas"]["Id"];
+            /** @description `viaje` (conversación entre el cliente y el `ejecutivo`, nace en `APROBADO`) o `solicitud` (entre el cliente y el pool de `cotizacion`, nace con la solicitud; DEC-148 #29). Ausente se lee como `viaje` (valor de V1). En una conversación de tipo `solicitud`, `viaje_id` es el id de la solicitud, que el viaje hereda al aprobarse (DEC-148 #3), así que coincide con el de la conversación del viaje. `string` y no enum para poder ampliar sin ruptura. */
+            tipo?: string;
             cliente_id: components["schemas"]["Id"];
             /**
              * Format: uuid
@@ -944,10 +990,10 @@ export interface components {
             }[];
         };
         /**
-         * @description Rol del sujeto dentro del tenant. Los ocho identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros siete roles a `Interno`.
+         * @description Rol del sujeto dentro del tenant. Los nueve identificadores son canónicos y no se traducen (ADR 22 / DEC-024): `reaccion` existe en el modelo pero queda fuera del tracer (E7); el resto sí se ejercita. `cotizacion` (V2, DEC-148 #1) es un rol interno y global: ve todas las solicitudes, las cotiza y confirma su pago; el `administrador` hereda sus facultades (#20). El token lleva identidad, tenant, `rol` y `Audiencia`; el ALCANCE no viaja en el token, se resuelve en servidor. `Audiencia` es un valor de dominio distinto del claim técnico `aud` del JWT: mapea `cliente` a `Cliente` y los otros ocho roles a `Interno`.
          * @enum {string}
          */
-        Rol: "cliente" | "jefe_operativo" | "monitorista" | "supervisor" | "coordinador" | "ejecutivo" | "reaccion" | "administrador";
+        Rol: "cliente" | "jefe_operativo" | "monitorista" | "supervisor" | "coordinador" | "ejecutivo" | "reaccion" | "administrador" | "cotizacion";
     };
     responses: {
         /** @description La versión esperada del reclamo no coincide con la vigente. `codigo` de máquina `conflicto_version_reclamo`. */
@@ -1033,6 +1079,35 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Trabajo de la bandeja del sujeto con la revisión de la colección. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrabajoBandeja"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+            409: components["responses"]["ResyncRequerido"];
+        };
+    };
+    listarTrabajoMiBandejaSolicitudes: {
+        parameters: {
+            query?: {
+                /** @description Cursor de paginación. No es el cursor de cambios de ADR 28. */
+                cursor?: components["parameters"]["CursorPagina"];
+                /** @description Catch-up: devuelve los cambios de la colección con revisión mayor a este valor. Es la `revision` de una respuesta previa, no el cursor de paginación. */
+                desde_revision?: components["schemas"]["RevisionBandeja"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trabajo de la bandeja de solicitudes con la revisión de la colección. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1139,6 +1214,31 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Conversación del viaje. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conversacion"];
+                };
+            };
+            401: components["responses"]["NoAutorizado"];
+            403: components["responses"]["Prohibido"];
+            404: components["responses"]["NoEncontrado"];
+        };
+    };
+    obtenerConversacionDeSolicitud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["IdRuta"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversación de la solicitud. */
             200: {
                 headers: {
                     [name: string]: unknown;

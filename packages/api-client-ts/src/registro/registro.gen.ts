@@ -107,6 +107,22 @@ export const TIPOS_EVENTO: readonly TipoEvento[] = [
     sensibilidad: Sensibilidad.Amplia,
   },
   {
+    tipo: "solicitud.creada",
+    version: 1,
+    productor: "operacion",
+    consumidoresDurables: ["mensajeria"],
+    agregado: "solicitud_id",
+    sensibilidad: Sensibilidad.Amplia,
+  },
+  {
+    tipo: "solicitud.estado_cambiado",
+    version: 1,
+    productor: "operacion",
+    consumidoresDurables: ["mensajeria"],
+    agregado: "solicitud_id",
+    sensibilidad: Sensibilidad.Amplia,
+  },
+  {
     tipo: "sesion.revocada",
     version: 1,
     productor: "identidad",

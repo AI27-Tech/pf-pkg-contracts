@@ -101,6 +101,22 @@ tipos:
     agregado: viaje_id
     sensibilidad: amplia
 
+  # --- solicitud.* (V2, ADR 38): productor `operacion` (módulo `solicitudes`).
+  #     Sin datos comerciales en el payload (DEC-148 #28). ---
+  - tipo: solicitud.creada
+    version: 1
+    productor: operacion
+    consumidores_durables: [mensajeria]
+    agregado: solicitud_id
+    sensibilidad: amplia
+
+  - tipo: solicitud.estado_cambiado
+    version: 1
+    productor: operacion
+    consumidores_durables: [mensajeria]
+    agregado: solicitud_id
+    sensibilidad: amplia
+
   - tipo: sesion.revocada
     version: 1
     productor: identidad

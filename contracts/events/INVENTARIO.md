@@ -37,6 +37,8 @@ Reglas que este inventario materializa:
 | `viaje.cliente_actualizado` | 1 | `operacion` | `mensajeria` | `viaje_id` | amplia |
 | `viaje.cerrado` | 1 | `operacion` | `mensajeria`, `reportes` | `viaje_id` | amplia |
 | `viaje.acceso_revocado` | 1 | `operacion` | `mensajeria`, `realtime` | `viaje_id` | amplia |
+| `solicitud.creada` | 1 | `operacion` | `mensajeria` | `solicitud_id` | amplia |
+| `solicitud.estado_cambiado` | 1 | `operacion` | `mensajeria` | `solicitud_id` | amplia |
 | `sesion.revocada` | 1 | `identidad` | `bff`, `operacion`, `catalogos`, `reportes`, `mensajeria`, `realtime` | `sesion_id` | amplia |
 | `catalogo.actualizado` | 1 | `catalogos` | `operacion`, `mensajeria` | `entidad` + `entidad_id` | amplia |
 | `sujeto.creado` | 1 | `identidad` | `catalogos`, `mensajeria`, `reportes` | `sujeto_id` | amplia |

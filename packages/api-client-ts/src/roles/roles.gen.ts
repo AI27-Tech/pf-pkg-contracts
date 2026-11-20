@@ -16,6 +16,7 @@ export const Rol = {
   Ejecutivo: "ejecutivo",
   Reaccion: "reaccion",
   Administrador: "administrador",
+  Cotizacion: "cotizacion",
 } as const;
 
 export type Rol = (typeof Rol)[keyof typeof Rol];
@@ -30,6 +31,7 @@ export const ROLES: readonly Rol[] = [
   Rol.Ejecutivo,
   Rol.Reaccion,
   Rol.Administrador,
+  Rol.Cotizacion,
 ];
 
 /** Un rol desconocido se rechaza en servidor; nunca degrada a un permiso. */
