@@ -9,6 +9,7 @@
 // archivos que ningún consumidor podía importar. Ahora están activos, y las
 // rutas `./openapi/*` y `./eventos/*` están declaradas en `exports`.
 export * as estados from "./estados/viajeEstados.gen.js";
+export * as estadosSolicitud from "./estados/solicitudEstados.gen.js";
 export * as registro from "./registro/registro.gen.js";
 export * as roles from "./roles/roles.gen.js";
 
