@@ -3,6 +3,17 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-20 [tooling] — el breaking check del release compara contra la release anterior, no contra `tag^`
+
+**Para quién:** quien promueve y taguea olas. No cambia ningún contrato ni genera artefactos: `VERSION` no sube.
+
+**Resumen:** al empujar el tag de `tracer.45`, el job `verificar` falló en `breaking-openapi` y `publicar` se saltó (sin Release ni paquete npm). Con el tag ya creado, `scripts/breaking-openapi.sh` usaba como línea base el commit anterior al tag (`tag^`). En `pf-contracts-m` ese commit era el `tracer.45` **sin corregir** de la promoción anterior, así que el release comparaba dos borradores de la misma versión y marcaba como ruptura `HistoricoSolicitudItem.de_estado` y `a_estado` (de `string` a `EstadoSolicitud`).
+
+**Cambios:**
+- `scripts/breaking-openapi.sh`: la línea base es la última release anterior a `VERSION`: se excluye el tag de la propia versión. En un PR no cambia nada (el tag de `VERSION` aún no existe). En el job del tag compara contra la release previa, igual que en los PR, con la misma allowlist.
+
+**Verificado:** sobre el árbol de `c4f3c4f` con los tags `tracer.44` y `tracer.45` presentes y `VERSION=tracer.45`: el script anterior reproduce el fallo del release (2 rupturas no declaradas por servicio); el nuevo compara contra `v0.1.0-tracer.44` y pasa con las 8 rupturas declaradas de `tracer.45`.
+
 ## 2026-11-20 [tooling] — el chequeo de eventos compara contra `pf-contracts-m` y no contra `HEAD`
 
 **Para quién:** quien revisa PR de contratos y quien promueve olas. No cambia ningún contrato ni genera artefactos: `VERSION` no sube.
