@@ -711,8 +711,8 @@ paths:
           description: >-
             No se puede confirmar. `codigo` de máquina:
             `transicion_no_permitida` (estado de origen inválido) o
-            `fecha_pago_fuera_de_vigencia` (la fecha del pago es posterior al
-            último día de vigencia).
+            `fecha_pago_fuera_de_vigencia` (la fecha del pago no cae dentro de
+            la vigencia de la última cotización).
           content:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
@@ -765,7 +765,11 @@ paths:
         servicio (DEC-010 #2). En la misma transacción la solicitud pasa a
         `APROBADO` y nace el viaje en `APROBADO` con el MISMO id de la solicitud
         (DEC-148 #3, #52; ADR 39): no existe una solicitud aprobada sin su viaje.
-        El viaje se consulta después con `obtenerViaje` usando ese id.
+        El viaje se consulta después con `obtenerViaje` usando ese id. La respuesta
+        es la última vista de la solicitud para el `jefe_operativo`: como solo ve
+        las que están en `PAGADO`, `obtenerSolicitud` le responde `404` desde que
+        la resuelve. Por la misma razón, una segunda aprobación tras una carrera
+        le da `404`; el `409 transicion_no_permitida` lo ve el `administrador`.
       responses:
         "200":
           description: Solicitud aprobada; el viaje ya existe con el mismo id.
@@ -798,7 +802,8 @@ paths:
         Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`.
         Motivo obligatorio (DEC-020 #2). Termina en `RECHAZADO_POR_AI27`, sin
         marca de reembolso (el reembolso se maneja fuera de Argos, DEC-148 #19) y
-        sin crear viaje. El cliente ve el motivo.
+        sin crear viaje. El cliente ve el motivo. Igual que en `aprobarSolicitud`,
+        el `jefe_operativo` ya no ve la solicitud después de resolverla (`404`).
       requestBody:
         required: true
         content:
@@ -1469,6 +1474,15 @@ components:
             ETA estimado del viaje, capturado a mano (ADR 20). Mismo formato que
             `MarcaTiempo`. null si no se ha fijado. `operacion` no calcula ni
             expone `stale`: eso lo hace el `bff`.
+        cancelacion_con_penalizacion:
+          type: boolean
+          description: >-
+            `true` si cancelar este viaje lleva marca de penalización, o ya la
+            lleva por haberse cancelado: el viaje nació de una solicitud pagada
+            (DEC-148 #14). `false` si lo creó Operación (DEC-148 #27). El cliente
+            lo usa para mostrar el aviso del 50% antes de cancelar (DEC-042) y su
+            confirmación después. Argos solo marca; no calcula ni guarda el monto
+            (DEC-148 #6). Ausente se lee como `false`.
         creado_en: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
 
     ViajeDetalle:
@@ -1576,8 +1590,9 @@ components:
           type: string
           description: >-
             Causa de la transición. Obligatoria cuando el destino la requiere
-            (p. ej. motivo de rechazo, DEC-020 #2). La validación fina vive en
-            el servicio.
+            (p. ej. el motivo de la cancelación del cliente, DEC-111). El motivo
+            del rechazo de AI27 (DEC-020 #2) ya no es del viaje: lo lleva
+            `rechazarSolicitud`. La validación fina vive en el servicio.
         motivo_cierre:
           allOf: [$ref: "#/components/schemas/MotivoCierre"]
           description: >-
@@ -2286,8 +2301,9 @@ components:
           format: date
           description: >-
             Cuándo pagó el cliente (día calendario en `America/Mexico_City`).
-            Debe caer dentro de la vigencia de la última cotización (DEC-148
-            #34, #43).
+            Debe caer dentro de la vigencia de la última cotización: desde su
+            entrega hasta su último día, ambos incluidos (DEC-148 #34, #43).
+            Una fecha anterior a la entrega o posterior al último día se rechaza.
         referencia:
           type: string
           nullable: true
@@ -2412,8 +2428,14 @@ components:
             `VENCIDA → PAGADO`), `pago_revertido`, `cotizacion_rechazada`,
             `cancelada`, `vencida`, `aprobada`, `rechazada`. `string` y no enum
             para poder ampliar sin ruptura.
-        de_estado: {type: string, nullable: true}
-        a_estado: {type: string, nullable: true}
+        de_estado:
+          allOf: [{$ref: "#/components/schemas/EstadoSolicitud"}]
+          nullable: true
+          description: Estado de origen; null en `creada` y en las acciones sin cambio de estado.
+        a_estado:
+          allOf: [{$ref: "#/components/schemas/EstadoSolicitud"}]
+          nullable: true
+          description: Estado de destino; null en las acciones sin cambio de estado (recotizar, reprogramar).
         actor_id:
           allOf: [{$ref: "_comunes.yaml#/components/schemas/Id"}]
           nullable: true

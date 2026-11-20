@@ -127,6 +127,9 @@ type Conversacion struct {
 	// ReclamoActivo Reclamo vigente. Solo para audiencia Interno; null si está en el pool.
 	ReclamoActivo *Reclamo `json:"reclamo_activo"`
 
+	// SinRespuesta `true` si el último mensaje aceptado es del cliente y AI27 no ha respondido después (DEC-148 #54; en V1, la condición de la alerta de E3-HU-016). Se activa de inmediato al aceptar el mensaje y se detiene con la respuesta. Solo audiencia Interno; ausente para el Cliente. Lo ve el pool de la conversación: en `tipo=solicitud`, `cotizacion` (el Supervisor no ve esas conversaciones).
+	SinRespuesta *bool `json:"sin_respuesta,omitempty"`
+
 	// Tipo `viaje` (conversación entre el cliente y el `ejecutivo`, nace en `APROBADO`) o `solicitud` (entre el cliente y el pool de `cotizacion`, nace con la solicitud; DEC-148 #29). Ausente se lee como `viaje` (valor de V1). En una conversación de tipo `solicitud`, `viaje_id` es el id de la solicitud, que el viaje hereda al aprobarse (DEC-148 #3), así que coincide con el de la conversación del viaje. `string` y no enum para poder ampliar sin ruptura.
 	Tipo *string `json:"tipo,omitempty"`
 
@@ -3580,7 +3583,7 @@ type TransferirConversacionResponse struct {
 	JSON401      *NoAutorizado
 	JSON403      *Prohibido
 	JSON404      *NoEncontrado
-	JSON409      *ConflictoVersion
+	JSON409      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -5248,7 +5251,7 @@ func ParseTransferirConversacionResponse(rsp *http.Response) (*TransferirConvers
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ConflictoVersion
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

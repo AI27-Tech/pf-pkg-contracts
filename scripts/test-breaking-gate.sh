@@ -35,6 +35,10 @@ ROMP="$RAIZ/rompimientos"
 VERSION_FIXTURE="v0.1.0-tracer.4"
 
 gate() { ( cd "$GATE_DIR" && go run . -version "$VERSION_FIXTURE" -rompimientos "$ROMP" "$@" ); }
+# La allowlist de tracer.45 ejercita el matcher por detalle (línea `in API` + línea
+# de detalle de oasdiff). Sus entradas se quedan en el repo, así que el fixture es
+# estable aunque VERSION avance.
+gate45() { ( cd "$GATE_DIR" && go run . -version "v0.1.0-tracer.45" -rompimientos "$ROMP" "$@" ); }
 
 fallos=0
 ok()   { echo "    OK: $1"; }
@@ -82,6 +86,30 @@ else
 fi
 
 echo
+# --- Caso 6: OpenAPI, el detalle acota la ruptura (tracer.45) ---------------
+declarada45=$'1 changes: 1 error, 0 warning, 0 info\nerror\t[request-parameter-enum-value-removed] at base.yaml\n\tin API GET /api/v1/viajes\n\t\tremoved the enum value \'SOLICITADO\' from the \'query\' request parameter \'estado\''
+if echo "$declarada45" | gate45 -tipo openapi -servicio operacion >/dev/null 2>&1; then
+  ok "OpenAPI: el valor de enum retirado y declarado pasa"
+else
+  bad "OpenAPI: el valor de enum retirado y declarado debería pasar"
+fi
+
+# --- Caso 7: otra ruptura en la MISMA ruta no queda autorizada --------------
+otra_ruta=$'1 changes: 1 error, 0 warning, 0 info\nerror\t[new-required-request-parameter] at base.yaml\n\tin API GET /api/v1/viajes/{id}\n\t\tadded the new required request parameter X'
+if echo "$otra_ruta" | gate45 -tipo openapi -servicio operacion >/dev/null 2>&1; then
+  bad "OpenAPI: una ruptura nueva en GET /api/v1/viajes/{id} NO debería pasar con la allowlist de tracer.45"
+else
+  ok "OpenAPI: una ruptura nueva en una ruta cercana sigue fallando"
+fi
+
+# --- Caso 8: otro valor de enum en la misma operación no queda autorizado ---
+otro_valor=$'1 changes: 1 error, 0 warning, 0 info\nerror\t[request-parameter-enum-value-removed] at base.yaml\n\tin API GET /api/v1/viajes\n\t\tremoved the enum value \'EN_TRANSITO\' from the \'query\' request parameter \'estado\''
+if echo "$otro_valor" | gate45 -tipo openapi -servicio operacion >/dev/null 2>&1; then
+  bad "OpenAPI: retirar un valor NO declarado del mismo filtro no debería pasar"
+else
+  ok "OpenAPI: retirar un valor no declarado del mismo filtro sigue fallando"
+fi
+
 if [ "$fallos" -ne 0 ]; then
   echo "ERROR: el mecanismo de allowlist no se comporta como se espera." >&2
   exit 1
