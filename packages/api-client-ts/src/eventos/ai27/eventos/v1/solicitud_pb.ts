@@ -2,8 +2,8 @@
 // (módulo `solicitudes`, ADR 38, DEC-148). Todos usan el `Sobre` común y la
 // superficie AMPLIA. Orden por agregado = solicitud_id.
 //
-// NO llevan datos comerciales: ni monto, ni moneda, ni motivos, ni fechas del
-// pago. Viajan por la superficie amplia y esos datos son confidenciales para el
+// NO llevan datos comerciales ni de pago: ni monto, ni moneda, ni motivos, ni
+// fechas del pago, ni la marca de penalización. Viajan por la superficie amplia y esos datos son confidenciales para el
 // resto del equipo (DEC-148 #28); quien los necesita los lee por la API de
 // solicitudes con su rol. Solo identifican la solicitud y su estado.
 //
@@ -107,15 +107,12 @@ export class SolicitudEstadoCambiado extends Message<SolicitudEstadoCambiado> {
   aEstado = "";
 
   /**
-   * true solo cuando el cliente cancela estando en PAGADO (DEC-148 #6). Es una
-   * marca, no un monto.
+   * Sin marca de penalización: revelaría por la superficie amplia que el
+   * cliente pagó y canceló, y ningún consumidor la necesita (`mensajeria` solo
+   * usa `a_estado` y `cambiado_en`). Quien deba verla la lee por la API de
+   * solicitudes con su rol (`Solicitud.marca_penalizacion`).
    *
-   * @generated from field: bool marca_penalizacion = 5;
-   */
-  marcaPenalizacion = false;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp cambiado_en = 6;
+   * @generated from field: google.protobuf.Timestamp cambiado_en = 5;
    */
   cambiadoEn?: Timestamp;
 
@@ -131,8 +128,7 @@ export class SolicitudEstadoCambiado extends Message<SolicitudEstadoCambiado> {
     { no: 2, name: "cliente_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "de_estado", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "a_estado", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 5, name: "marca_penalizacion", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
-    { no: 6, name: "cambiado_en", kind: "message", T: Timestamp },
+    { no: 5, name: "cambiado_en", kind: "message", T: Timestamp },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SolicitudEstadoCambiado {

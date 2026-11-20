@@ -133,9 +133,12 @@ func imprimirNoAutorizadas(ruptturas []string, _ []entrada, _, _ string) {
 // leerRupturas extrae, de la salida de la herramienta, la línea identificadora
 // de cada ruptura que el gate debe autorizar.
 //
-//   - openapi (oasdiff --format text --fail-on ERR): toma la línea `in API
-//     <método ruta>` de cada bloque cuyo severity sea `error`. Las `warning` no
-//     fallan el gate, así que no se incluyen.
+//   - openapi (oasdiff --format text --fail-on ERR): de cada bloque cuyo
+//     severity sea `error` toma la línea `in API <método ruta>` y la línea de
+//     detalle que le sigue, unidas como `<método ruta> | <detalle>`. Así una
+//     entrada de la allowlist puede acotar la ruptura a un valor concreto (p. ej.
+//     el enum retirado) y no autorizar de paso cualquier otra ruptura de la misma
+//     ruta. Las `warning` no fallan el gate, así que no se incluyen.
 //   - eventos (buf breaking): cada línea `archivo:fila:col:mensaje` es una
 //     ruptura; se toma el mensaje.
 func leerRupturas(tipo string, r *os.File) ([]string, error) {
@@ -145,19 +148,35 @@ func leerRupturas(tipo string, r *os.File) ([]string, error) {
 	var out []string
 	if tipo == "openapi" {
 		enError := false
+		api := ""          // `<método ruta>` de la ruptura a la espera de su detalle
+		esperando := false // true entre la línea `in API` y su línea de detalle
+		cerrar := func() {
+			// Una ruptura sin línea de detalle se registra solo con su ruta.
+			if esperando {
+				out = append(out, api)
+				esperando = false
+			}
+		}
 		for sc.Scan() {
 			line := sc.Text()
 			trimmed := strings.TrimSpace(line)
 			switch {
 			case strings.HasPrefix(trimmed, "error\t"), strings.HasPrefix(trimmed, "error ["):
+				cerrar()
 				enError = true
 			case strings.HasPrefix(trimmed, "warning"), strings.HasPrefix(trimmed, "info"):
+				cerrar()
 				enError = false
 			case enError && strings.HasPrefix(trimmed, "in API "):
-				out = append(out, strings.TrimPrefix(trimmed, "in API "))
+				api = strings.TrimPrefix(trimmed, "in API ")
+				esperando = true
 				enError = false
+			case esperando && trimmed != "":
+				out = append(out, api+" | "+trimmed)
+				esperando = false
 			}
 		}
+		cerrar()
 		return out, sc.Err()
 	}
 
