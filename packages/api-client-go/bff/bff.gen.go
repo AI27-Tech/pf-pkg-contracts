@@ -503,9 +503,11 @@ type Cotizacion struct {
 
 	// FechaHoraServicio Instante en UTC, RFC 3339.
 	FechaHoraServicio MarcaTiempo `json:"fecha_hora_servicio"`
-	Moneda            string      `json:"moneda"`
 
-	// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148).
+	// Moneda Siempre `MXN` (DEC-148
+	Moneda string `json:"moneda"`
+
+	// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). El cero se admite (clientes con contrato prepagado) y un monto negativo se rechaza con `400` (DEC-148 #62). El máximo de decimales sigue sin decidirse.
 	Monto Monto   `json:"monto"`
 	Notas *string `json:"notas"`
 
@@ -521,10 +523,10 @@ type CotizacionEntrada struct {
 	// FechaHoraServicio Fecha y hora del servicio que ofrece la cotización. Obligatoria (DEC-148 #39); puede diferir de la que pidió el cliente.
 	FechaHoraServicio time.Time `json:"fecha_hora_servicio"`
 
-	// Moneda Código de moneda. `string` y no enum porque el catálogo de monedas sigue pendiente (DEC-148); estrechar a enum después es incompatible.
+	// Moneda Código de moneda. Solo se acepta `MXN`, exacto (mayúsculas y sin espacios); `operacion` responde `400` con cualquier otra (DEC-148 #62). Sigue siendo `string` y no enum: estrechar a enum después es incompatible.
 	Moneda string `json:"moneda"`
 
-	// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148).
+	// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). El cero se admite (clientes con contrato prepagado) y un monto negativo se rechaza con `400` (DEC-148 #62). El máximo de decimales sigue sin decidirse.
 	Monto Monto `json:"monto"`
 
 	// Notas Texto libre. Sin desglose estructurado en V2 (DEC-148
@@ -966,7 +968,7 @@ type HistoricoSolicitudItem struct {
 	// ActorId null cuando lo hizo el sistema (el vencimiento).
 	ActorId *Id `json:"actor_id"`
 
-	// Cotizacion Versión completa, solo en `cotizada` y `recotizada` (DEC-148
+	// Cotizacion Versión completa, solo en `cotizada` y `recotizada` (DEC-148 #42). Para `jefe_operativo` nunca viene: `null` significa oculto, no "sin cotización" (DEC-148 #67, #73).
 	Cotizacion *Cotizacion `json:"cotizacion"`
 
 	// DeEstado Estado de origen; null en `creada` y en las acciones sin cambio de estado.
@@ -976,8 +978,10 @@ type HistoricoSolicitudItem struct {
 	En MarcaTiempo `json:"en"`
 
 	// MarcaPenalizacion Solo en `cancelada`.
-	MarcaPenalizacion *bool   `json:"marca_penalizacion"`
-	Motivo            *string `json:"motivo"`
+	MarcaPenalizacion *bool `json:"marca_penalizacion"`
+
+	// Motivo Motivo de la acción. Para `jefe_operativo` llega `null` en `pago_revertido` (texto libre que puede nombrar montos o referencias); el de `reprogramada` es operativo y sí se muestra (DEC-148 #73).
+	Motivo *string `json:"motivo"`
 }
 
 // HitoCliente Hito de progreso presentado al cliente. `bff` colapsa el bucle multi-parada en un hito legible (mapeo estado→hito, E2-T2); no expone el enum completo de estados.
@@ -1116,7 +1120,7 @@ type MiAlcance struct {
 	ClientesEfectivosIds []Id `json:"clientes_efectivos_ids"`
 }
 
-// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148).
+// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). El cero se admite (clientes con contrato prepagado) y un monto negativo se rechaza con `400` (DEC-148 #62). El máximo de decimales sigue sin decidirse.
 type Monto = string
 
 // MotivoCierre Motivo del cierre del viaje (DEC-113). Catálogo cerrado de V1: `normal` o `por_incidencia`. Espejo de `MotivoCierre` de `operacion`.
@@ -1365,7 +1369,7 @@ type ReciboEntrada struct {
 	HastaSecuencia SecuenciaMensaje `json:"hasta_secuencia"`
 }
 
-// Reclamo defines model for Reclamo.
+// Reclamo `responsable_id` es el `sub` del token del responsable, NO el id del sujeto en `identidad` (a diferencia de `TransferenciaEntrada.responsable_destino_id`). Con el contrato actual el nombre del responsable no se puede resolver desde este id: es el hueco de DT-28 y esta ola no agrega campos (DEC-148 #74).
 type Reclamo struct {
 	// AbiertoEn Instante en UTC, RFC 3339.
 	AbiertoEn MarcaTiempo `json:"abierto_en"`
@@ -1487,7 +1491,7 @@ type Solicitud struct {
 	// ClienteId Identificador único (UUID). Nunca un correlativo expuesto.
 	ClienteId *Id `json:"cliente_id,omitempty"`
 
-	// Cotizacion Cotización vigente; null mientras no se ha cotizado.
+	// Cotizacion Cotización vigente. Para `cliente`, `cotizacion` y `administrador`, `null` significa que aún no se ha cotizado. Para `jefe_operativo` siempre llega `null`, aunque la solicitud esté cotizada y pagada, y significa OCULTO, no "sin cotizar": ese rol no ve nada comercial (DEC-148 #67).
 	Cotizacion *Cotizacion `json:"cotizacion"`
 
 	// CreadoEn Instante en UTC, RFC 3339.
@@ -1510,7 +1514,7 @@ type Solicitud struct {
 	MotivoRechazo *string `json:"motivo_rechazo"`
 	Origen        string  `json:"origen"`
 
-	// Pago Pago confirmado; null mientras no lo hay.
+	// Pago Pago confirmado. Para `cliente`, `cotizacion` y `administrador`, `null` significa que no hay pago confirmado. Para `jefe_operativo` siempre llega `null`, aunque la solicitud esté pagada, y significa OCULTO, no "sin pago" (DEC-148 #67).
 	Pago         *Pago   `json:"pago"`
 	TipoServicio *string `json:"tipo_servicio"`
 	Tracto       *Tracto `json:"tracto"`
@@ -1554,7 +1558,7 @@ type Tracto struct {
 type TransferenciaEntrada struct {
 	Motivo *string `json:"motivo,omitempty"`
 
-	// ResponsableDestinoId Miembro del pool con membresía efectiva en la bandeja.
+	// ResponsableDestinoId Id del sujeto destino en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token. `mensajeria` lo traduce a `idp_subject`; el destino debe ser miembro del pool con membresía efectiva en la bandeja (DEC-148 #74, DT-28). Cambia el significado de un campo ya publicado, no su forma.
 	ResponsableDestinoId Id `json:"responsable_destino_id"`
 
 	// VersionEsperada Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.

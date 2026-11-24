@@ -57,7 +57,7 @@ export interface paths {
         };
         /**
          * Listar el trabajo de una bandeja (bootstrap y catch-up).
-         * @description Requiere MEMBRESÍA EFECTIVA en el pool de la bandeja. En la bandeja única de chat la membresía es el rol `ejecutivo` (DEC-127), y `supervisor`/`coordinador` la leen (DEC-131); en la de emergencias, el rol `reaccion` (DEC-130).
+         * @description Requiere MEMBRESÍA EFECTIVA en el pool de la bandeja. En la bandeja única de chat la membresía es el rol `ejecutivo` (DEC-127), y `supervisor`/`coordinador` la leen (DEC-131) y el `administrador` la ve y escribe como `ejecutivo` (DEC-152); en la de emergencias, el rol `reaccion` (DEC-130).
          *     Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el CATCH-UP: devuelve los cambios de la colección posteriores a esa revisión. Si la revisión pedida quedó fuera de la ventana retenida, responde `409 stream_resync_required` y el cliente repite el bootstrap (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
          *     Solo conversaciones `tipo=viaje`. Las de solicitud se atienden en `listarTrabajoMiBandejaSolicitudes` y no se mezclan con estas (DEC-148 #12, #28).
          */
@@ -253,6 +253,7 @@ export interface paths {
          * Transferir la responsabilidad a otro miembro del pool.
          * @description Lo hace el responsable; en V1 un `supervisor`/`coordinador` NO transfiere una conversación ajena (DEC-118) y recibe `403` (DEC-131). Cierra el reclamo anterior y abre el siguiente en UNA transacción: no hay ventana sin responsable ni con dos (Addendum §6).
          *     En `tipo=solicitud` el destino debe ser un usuario con rol `cotizacion` (DEC-148 #31; E10-HU-038, escenario 5). Otro destino (por ejemplo un `ejecutivo`) responde `409` con `codigo` `destino_no_es_cotizacion`, y el reclamo del llamante no cambia.
+         *     `responsable_destino_id` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token; `mensajeria` lo traduce a `idp_subject` (DEC-148 #74).
          */
         post: operations["transferirConversacion"];
         delete?: never;
@@ -369,7 +370,7 @@ export interface paths {
         put?: never;
         /**
          * Activar una emergencia sobre el viaje (idempotente por activacion_id).
-         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por cliente (DEC-149 #6), activan el caso (ADR 21 §1, DEC-045 #9); otro rol interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde `APROBADO` (el viaje nace ahí, DEC-148 #5) en estados no terminales; denegada en `CERRADO` y `CANCELADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje (DT-16).
+         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por cliente (DEC-149 #6), o el `administrador` (DEC-152), activan el caso (ADR 21 §1, DEC-045 #9); otro rol interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde `APROBADO` (el viaje nace ahí, DEC-148 #5) en estados no terminales; denegada en `CERRADO` y `CANCELADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje (DT-16).
          *     Idempotente por `activacion_id` del llamante (ADR 21 §2, mismo patrón que `enviarMensaje`): reentregar la misma activación devuelve el MISMO caso con 200 y no crea un duplicado; una pulsación nueva con otro `activacion_id` crea OTRO caso con 201, aunque ya exista uno abierto. No crea incidencia ni condición.
          */
         post: operations["activarEmergencia"];
@@ -468,7 +469,7 @@ export interface paths {
         put?: never;
         /**
          * Transferir la responsabilidad del caso a otro miembro de Reacción.
-         * @description Cierra el reclamo anterior y abre el siguiente en UNA transacción; no hay ventana sin responsable ni con dos. La transferencia conserva el estado del caso (ADR 21 §5).
+         * @description Cierra el reclamo anterior y abre el siguiente en UNA transacción; no hay ventana sin responsable ni con dos. La transferencia conserva el estado del caso (ADR 21 §5). `responsable_destino_id` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token; `mensajeria` lo traduce a `idp_subject` (DEC-148 #74).
          */
         post: operations["transferirEmergencia"];
         delete?: never;
@@ -655,7 +656,7 @@ export interface paths {
         put?: never;
         /**
          * Transferir el caso por su id a otro miembro de Reacción.
-         * @description Gemela de `transferirEmergencia` sin `{id}` de viaje. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso (ADR 21 §5).
+         * @description Gemela de `transferirEmergencia` sin `{id}` de viaje. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso (ADR 21 §5). `responsable_destino_id` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token; `mensajeria` lo traduce a `idp_subject` (DEC-148 #74).
          */
         post: operations["transferirEmergenciaPorId"];
         delete?: never;
@@ -836,6 +837,7 @@ export interface components {
             /** @description Override explícito de supervisor; se audita con este motivo. Ausente en el envío normal. */
             motivo_override?: string;
         };
+        /** @description `responsable_id` es el `sub` del token del responsable, NO el id del sujeto en `identidad` (a diferencia de `TransferenciaEntrada.responsable_destino_id`). Con el contrato actual el nombre del responsable no se puede resolver desde este id: es el hueco de DT-28 y esta ola no agrega campos (DEC-148 #74). */
         Reclamo: {
             id: components["schemas"]["Id"];
             conversacion_id: components["schemas"]["Id"];
@@ -850,7 +852,7 @@ export interface components {
         };
         TransferenciaEntrada: {
             version_esperada: components["schemas"]["VersionReclamo"];
-            /** @description Miembro del pool con membresía efectiva en la bandeja. */
+            /** @description Id del sujeto destino en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token. `mensajeria` lo traduce a `idp_subject`; el destino debe ser miembro del pool con membresía efectiva en la bandeja (DEC-148 #74, DT-28). Cambia el significado de un campo ya publicado, no su forma. */
             responsable_destino_id: components["schemas"]["Id"];
             motivo?: string;
         };

@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Listar viajes por alcance.
-         * @description Solo los viajes del alcance del llamante (ver la descripción del spec, DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los de sus clientes efectivos ("mis clientes", DEC-149 #18) desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). El rol se deriva del token; el alcance se resuelve en servidor (DEC-053).
+         * @description Solo los viajes del alcance del llamante (ver la descripción del spec, DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los de sus clientes efectivos ("mis clientes", DEC-149 #18) desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152). El rol se deriva del token; el alcance se resuelve en servidor (DEC-053).
          */
         get: operations["listarViajes"];
         put?: never;
@@ -39,7 +39,7 @@ export interface paths {
         };
         /**
          * Detalle del viaje.
-         * @description Estado de progreso MÁS condiciones activas como dato separado (§C.2): un viaje puede estar `EN_TRANSITO` y con `INCIDENCIA` abierta a la vez. Fuera del alcance del llamante (DEC-149) responde `404`. `ejecutivo` recibe `403` (DEC-149 #16). `reaccion` lo lee sin filtro por cliente porque el `bff` compone con su token el detalle de su caso (`obtenerEmergencia`, DEC-121 #2); el `403` de Reacción en el detalle interno lo aplica el `bff` en `obtenerViajeInterno`.
+         * @description Estado de progreso MÁS condiciones activas como dato separado (§C.2): un viaje puede estar `EN_TRANSITO` y con `INCIDENCIA` abierta a la vez. Fuera del alcance del llamante (DEC-149) responde `404`. `ejecutivo` recibe `403` (DEC-149 #16). `reaccion` lo lee sin filtro por cliente porque el `bff` compone con su token el detalle de su caso (`obtenerEmergencia`, DEC-121 #2); el `403` de Reacción en el detalle interno lo aplica el `bff` en `obtenerViajeInterno`. `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152).
          */
         get: operations["obtenerViaje"];
         put?: never;
@@ -106,7 +106,7 @@ export interface paths {
         };
         /**
          * Escolta vigente del viaje, con cada unidad del roster.
-         * @description Devuelve las unidades de la asignación vigente del viaje, cada una con su `tipo`, `vehiculo_id` y `custodios_ids` (referencias a `catalogos`). Sin asignación vigente (viaje aún no asignado o ya liberado), `unidades` va vacío con 200; no responde 404 por eso. Solo audiencia Interno: el Cliente recibe `404` (DEC-132). La consume el `bff` para componer la escolta del detalle de Reacción (`obtenerEmergencia`, DEC-121 #2); el nombre y teléfono de los custodios y las placas del vehículo los resuelve el `bff` en `catalogos` (E8-T18).
+         * @description Devuelve las unidades de la asignación vigente del viaje, cada una con su `tipo`, `vehiculo_id` y `custodios_ids` (referencias a `catalogos`). Sin asignación vigente (viaje aún no asignado o ya liberado), `unidades` va vacío con 200; no responde 404 por eso. Solo audiencia Interno: el Cliente recibe `404` (DEC-132). `cotizacion` no entra: recibe `403` (DEC-152). La consume el `bff` para componer la escolta del detalle de Reacción (`obtenerEmergencia`, DEC-121 #2); el nombre y teléfono de los custodios y las placas del vehículo los resuelve el `bff` en `catalogos` (E8-T18).
          */
         get: operations["obtenerAsignacion"];
         put?: never;
@@ -164,7 +164,7 @@ export interface paths {
         head?: never;
         /**
          * Completar o editar la fecha/hora del servicio del viaje.
-         * @description Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. NO valida contra el grafo de transiciones —no es un cambio de estado—; sólo exige que el viaje no esté en un estado terminal, igual que `fijarEta`.
+         * @description Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. NO valida contra el grafo de transiciones —no es un cambio de estado—; sólo exige que el viaje no esté en un estado terminal, igual que `fijarEta`. Solo `jefe_operativo` y `administrador`; `supervisor` y `coordinador` reciben `403` (DEC-152).
          */
         patch: operations["completarFechaHora"];
         trace?: never;
@@ -184,7 +184,7 @@ export interface paths {
         put?: never;
         /**
          * Crear una solicitud (cliente).
-         * @description Solo el Cliente. Nace en `SOLICITADO`. La fecha y hora del servicio es opcional (DEC-148 #38); si falta, `cotizacion` la fija al cotizar (#39). La organización de la solicitud es la del token; no se acepta en el cuerpo. Operación no crea solicitudes: sus viajes nacen en `APROBADO` (`crearViaje`, DEC-026). El id de la solicitud es el que heredará el viaje al aprobarse. Publica `solicitud.creada`.
+         * @description Solo el Cliente. Nace en `SOLICITADO`. La fecha y hora del servicio es opcional (DEC-148 #38); si falta, `cotizacion` la fija al cotizar (#39). La organización de la solicitud es la del token; no se acepta en el cuerpo. Operación no crea solicitudes: sus viajes nacen en `APROBADO` (`crearViaje`, DEC-026). El id de la solicitud es el que heredará el viaje al aprobarse. Publica `solicitud.creada`. Si trae `fecha_hora_servicio`, debe ser posterior al momento de la solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al instante actual responde `400`, sin `codigo` de máquina propio (DEC-148 #66).
          */
         post: operations["crearSolicitud"];
         delete?: never;
@@ -249,7 +249,7 @@ export interface paths {
         get?: never;
         /**
          * Cotizar o recotizar la solicitud.
-         * @description Solo `cotizacion` y `administrador`. En `SOLICITADO` envía la primera cotización y la solicitud pasa a `COTIZADO`; en `COTIZADO` recotiza sin cambiar de estado. Cada llamada crea una versión nueva y conserva las anteriores (DEC-148 #42). Exige monto, moneda y fecha y hora del servicio (DEC-148 #39, #41); la fecha puede diferir de la que pidió el cliente. La vigencia es de 15 días desde esta entrega, contados en `America/Mexico_City` (DEC-148 #15, #50). No valida disponibilidad de unidades (DEC-148 #23). El cambio de fecha no requiere aceptación del cliente en el sistema (DEC-148 #40).
+         * @description Solo `cotizacion` y `administrador`. En `SOLICITADO` envía la primera cotización y la solicitud pasa a `COTIZADO`; en `COTIZADO` recotiza sin cambiar de estado. Cada llamada crea una versión nueva y conserva las anteriores (DEC-148 #42). Exige monto, moneda y fecha y hora del servicio (DEC-148 #39, #41); la fecha puede diferir de la que pidió el cliente. La vigencia es de 15 días desde esta entrega, contados en `America/Mexico_City` (DEC-148 #15, #50). No valida disponibilidad de unidades (DEC-148 #23). El cambio de fecha no requiere aceptación del cliente en el sistema (DEC-148 #40). La moneda solo puede ser `MXN` y el monto admite cero pero no negativos: `400` en otro caso (DEC-148 #62). La fecha y hora del servicio debe ser posterior al momento de la solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al instante actual responde `400`, sin `codigo` de máquina propio (DEC-148 #66).
          */
         put: operations["cotizarSolicitud"];
         post?: never;
@@ -271,7 +271,7 @@ export interface paths {
         get?: never;
         /**
          * Reprogramar la fecha y hora de una solicitud pagada.
-         * @description Solo `cotizacion` y `administrador`, con la solicitud en `PAGADO`. El motivo es obligatorio. No hay pago nuevo ni cambio de estado; el cambio queda en el histórico con actor, motivo y marca de tiempo. Se hace después de acordarlo con el cliente en la conversación de la solicitud (DEC-148 #24, #40).
+         * @description Solo `cotizacion` y `administrador`, con la solicitud en `PAGADO`. El motivo es obligatorio. No hay pago nuevo ni cambio de estado; el cambio queda en el histórico con actor, motivo y marca de tiempo. Se hace después de acordarlo con el cliente en la conversación de la solicitud (DEC-148 #24, #40). La fecha y hora del servicio debe ser posterior al momento de la solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al instante actual responde `400`, sin `codigo` de máquina propio (DEC-148 #66).
          */
         put: operations["reprogramarSolicitud"];
         post?: never;
@@ -337,7 +337,7 @@ export interface paths {
         get?: never;
         /**
          * Confirmar el pago de la solicitud.
-         * @description Solo `cotizacion` y `administrador`. El pago ocurre fuera de Argos; esto registra su confirmación. Exige la fecha del pago, que debe caer dentro de la vigencia de la última cotización: gana la fecha del pago, no la de la confirmación (DEC-148 #34, #43). Desde `COTIZADO` pasa a `PAGADO`. Desde `VENCIDA` también pasa a `PAGADO`, solo si la fecha del pago cae dentro de la vigencia, y queda registrado como excepción (DEC-148 #35). No genera aviso al cliente (#56).
+         * @description Solo `cotizacion` y `administrador`. El pago ocurre fuera de Argos; esto registra su confirmación. Exige la fecha del pago, que debe caer dentro de la vigencia de la última cotización: gana la fecha del pago, no la de la confirmación (DEC-148 #34, #43). Desde `COTIZADO` pasa a `PAGADO`. Desde `VENCIDA` también pasa a `PAGADO`, solo si la fecha del pago cae dentro de la vigencia, y queda registrado como excepción (DEC-148 #35). Ese pago tardío ocurre una sola vez por solicitud: un segundo `VENCIDA → PAGADO` responde `409` con `codigo` `transicion_no_permitida` y no deja cambios (DEC-148 #64). No genera aviso al cliente (#56).
          */
         put: operations["confirmarPago"];
         post?: never;
@@ -382,7 +382,7 @@ export interface paths {
         put?: never;
         /**
          * Aprobar la solicitud pagada y crear el viaje.
-         * @description Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`. La aprobación es explícita, nunca automática. Exige la fecha y hora del servicio (DEC-010 #2). En la misma transacción la solicitud pasa a `APROBADO` y nace el viaje en `APROBADO` con el MISMO id de la solicitud (DEC-148 #3, #52; ADR 39): no existe una solicitud aprobada sin su viaje. El viaje se consulta después con `obtenerViaje` usando ese id. La respuesta es la última vista de la solicitud para el `jefe_operativo`: como solo ve las que están en `PAGADO`, `obtenerSolicitud` le responde `404` desde que la resuelve. Por la misma razón, una segunda aprobación tras una carrera le da `404`; el `409 transicion_no_permitida` lo ve el `administrador`.
+         * @description Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`. La aprobación es explícita, nunca automática. Exige la fecha y hora del servicio (DEC-010 #2). En la misma transacción la solicitud pasa a `APROBADO` y nace el viaje en `APROBADO` con el MISMO id de la solicitud (DEC-148 #3, #52; ADR 39): no existe una solicitud aprobada sin su viaje. El viaje se consulta después con `obtenerViaje` usando ese id. La respuesta es la última vista de la solicitud para el `jefe_operativo`: como solo ve las que están en `PAGADO`, `obtenerSolicitud` le responde `404` desde que la resuelve. Por la misma razón, una segunda aprobación tras una carrera le da `404`; el `409 transicion_no_permitida` lo ve el `administrador`. Si la fecha y hora del servicio ya pasó (no es posterior al instante actual, medido en `America/Mexico_City`) responde `409` con `codigo` `fecha_hora_servicio_pasada`: `cotizacion` la reprograma (`reprogramarSolicitud`) y se vuelve a aprobar (DEC-148 #66, #68).
          */
         post: operations["aprobarSolicitud"];
         delete?: never;
@@ -524,7 +524,7 @@ export interface paths {
         head?: never;
         /**
          * Resolver una incidencia (cierra la condición).
-         * @description Al resolverse, el viaje regresa a su curso normal; el progreso nunca se perdió (§C.2).
+         * @description Al resolverse, el viaje regresa a su curso normal; el progreso nunca se perdió (§C.2). La resuelven `supervisor`, `coordinador` y `administrador` (DEC-152).
          */
         patch: operations["resolverIncidencia"];
         trace?: never;
@@ -635,7 +635,7 @@ export interface paths {
         put?: never;
         /**
          * Intención de subida de un adjunto con autorización de vida corta.
-         * @description Los bytes NO pasan por el servicio: el cliente los sube al almacenamiento de objetos con la URL devuelta. La clave del objeto queda alcanzada por tenant/viaje. Un viaje fuera del alcance del llamante responde 404 antes de emitir la intención (DEC-149).
+         * @description Los bytes NO pasan por el servicio: el cliente los sube al almacenamiento de objetos con la URL devuelta. La clave del objeto queda alcanzada por tenant/viaje. Un viaje fuera del alcance del llamante responde 404 antes de emitir la intención (DEC-149). Suben adjuntos `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-152).
          */
         post: operations["crearIntencionSubidaAdjunto"];
         delete?: never;
@@ -1068,7 +1068,7 @@ export interface components {
          * @enum {string}
          */
         EstadoSolicitud: "SOLICITADO" | "COTIZADO" | "PAGADO" | "APROBADO" | "RECHAZADO_POR_AI27" | "RECHAZADO_POR_CLIENTE" | "CANCELADO_POR_CLIENTE" | "VENCIDA";
-        /** @description Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148). */
+        /** @description Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). El cero se admite (clientes con contrato prepagado) y un monto negativo se rechaza con `400` (DEC-148 #62). El máximo de decimales sigue sin decidirse. */
         Monto: string;
         /** @description Solicitud mínima del cliente (E1-HU-001). La organización la fija el token, no el cuerpo. */
         CrearSolicitudEntrada: {
@@ -1087,7 +1087,7 @@ export interface components {
         };
         CotizacionEntrada: {
             monto: components["schemas"]["Monto"];
-            /** @description Código de moneda. `string` y no enum porque el catálogo de monedas sigue pendiente (DEC-148); estrechar a enum después es incompatible. */
+            /** @description Código de moneda. Solo se acepta `MXN`, exacto (mayúsculas y sin espacios); `operacion` responde `400` con cualquier otra (DEC-148 #62). Sigue siendo `string` y no enum: estrechar a enum después es incompatible. */
             moneda: string;
             /**
              * Format: date-time
@@ -1101,6 +1101,7 @@ export interface components {
             /** @description Número de versión; la recotización incrementa. */
             version: number;
             monto: components["schemas"]["Monto"];
+            /** @description Siempre `MXN` (DEC-148 */
             moneda: string;
             fecha_hora_servicio: components["schemas"]["MarcaTiempo"];
             notas?: string | null;
@@ -1154,9 +1155,9 @@ export interface components {
             fecha_hora_servicio?: string | null;
             tipo_servicio?: string | null;
             tracto?: components["schemas"]["Tracto"] | null;
-            /** @description Cotización vigente; null mientras no se ha cotizado. */
+            /** @description Cotización vigente. Para `cliente`, `cotizacion` y `administrador`, `null` significa que aún no se ha cotizado. Para `jefe_operativo` siempre llega `null`, aunque la solicitud esté cotizada y pagada, y significa OCULTO, no "sin cotizar": ese rol no ve nada comercial (DEC-148 #67). */
             cotizacion?: components["schemas"]["Cotizacion"] | null;
-            /** @description Pago confirmado; null mientras no lo hay. */
+            /** @description Pago confirmado. Para `cliente`, `cotizacion` y `administrador`, `null` significa que no hay pago confirmado. Para `jefe_operativo` siempre llega `null`, aunque la solicitud esté pagada, y significa OCULTO, no "sin pago" (DEC-148 #67). */
             pago?: components["schemas"]["Pago"] | null;
             /** @description `true` si el cliente canceló estando en `PAGADO` (DEC-148 #6). Argos solo marca; no calcula ni guarda el monto. */
             marca_penalizacion: boolean;
@@ -1180,8 +1181,9 @@ export interface components {
             a_estado?: components["schemas"]["EstadoSolicitud"] | null;
             /** @description null cuando lo hizo el sistema (el vencimiento). */
             actor_id?: components["schemas"]["Id"] | null;
+            /** @description Motivo de la acción. Para `jefe_operativo` llega `null` en `pago_revertido` (texto libre que puede nombrar montos o referencias); el de `reprogramada` es operativo y sí se muestra (DEC-148 #73). */
             motivo?: string | null;
-            /** @description Versión completa, solo en `cotizada` y `recotizada` (DEC-148 */
+            /** @description Versión completa, solo en `cotizada` y `recotizada` (DEC-148 #42). Para `jefe_operativo` nunca viene: `null` significa oculto, no "sin cotización" (DEC-148 #67, #73). */
             cotizacion?: components["schemas"]["Cotizacion"] | null;
             /** @description Solo en `cancelada`. */
             marca_penalizacion?: boolean | null;
@@ -1880,7 +1882,7 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
-            /** @description No se puede confirmar. `codigo` de máquina: `transicion_no_permitida` (estado de origen inválido) o `fecha_pago_fuera_de_vigencia` (la fecha del pago no cae dentro de la vigencia de la última cotización). */
+            /** @description No se puede confirmar. `codigo` de máquina: `transicion_no_permitida` (estado de origen inválido, o segundo pago tardío `VENCIDA → PAGADO`; DEC-148 #64) o `fecha_pago_fuera_de_vigencia` (la fecha del pago no cae dentro de la vigencia de la última cotización). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1945,7 +1947,7 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
-            /** @description No se puede aprobar. `codigo` de máquina: `transicion_no_permitida` (no está en `PAGADO`) o `fecha_hora_servicio_requerida` (falta la fecha y hora del servicio). */
+            /** @description No se puede aprobar. `codigo` de máquina: `transicion_no_permitida` (no está en `PAGADO`), `fecha_hora_servicio_requerida` (falta la fecha y hora del servicio) o `fecha_hora_servicio_pasada` (la fecha y hora del servicio ya pasó; DEC-148 #68). */
             409: {
                 headers: {
                     [name: string]: unknown;

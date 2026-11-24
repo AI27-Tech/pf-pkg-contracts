@@ -77,7 +77,7 @@ export interface paths {
         };
         /**
          * Listar viajes con filtros, por alcance.
-         * @description Reenvía a `operacion.listarViajes`, que filtra por el alcance del llamante (DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los viajes de sus clientes efectivos ("mis clientes") desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). Para la audiencia Interno el `bff` agrega a cada fila `cliente` y `unidades`; para el Cliente los omite (DEC-149 #14).
+         * @description Reenvía a `operacion.listarViajes`, que filtra por el alcance del llamante (DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los viajes de sus clientes efectivos ("mis clientes") desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152). Para la audiencia Interno el `bff` agrega a cada fila `cliente` y `unidades`; para el Cliente los omite (DEC-149 #14).
          */
         get: operations["listarViajes"];
         put?: never;
@@ -147,7 +147,7 @@ export interface paths {
         };
         /**
          * Detalle interno del viaje con estado canónico (audiencia interna).
-         * @description Reenvía a `operacion.obtenerViaje`. Devuelve el `estado` canónico (token de `EstadoViaje`, ADR 19) y las condiciones activas como dato separado, para que el frontend interno derive las acciones ofrecidas desde la máquina de estados generada. Audiencia interna. Un viaje inexistente o fuera del alcance del llamante (DEC-149) responde 404. `ejecutivo` y `reaccion` reciben 403 (DEC-149 #16): Reacción ve el viaje de su caso por `obtenerEmergencia`.
+         * @description Reenvía a `operacion.obtenerViaje`. Devuelve el `estado` canónico (token de `EstadoViaje`, ADR 19) y las condiciones activas como dato separado, para que el frontend interno derive las acciones ofrecidas desde la máquina de estados generada. Audiencia interna. Un viaje inexistente o fuera del alcance del llamante (DEC-149) responde 404. `ejecutivo` y `reaccion` reciben 403 (DEC-149 #16): Reacción ve el viaje de su caso por `obtenerEmergencia`. `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152).
          */
         get: operations["obtenerViajeInterno"];
         put?: never;
@@ -267,7 +267,7 @@ export interface paths {
         head?: never;
         /**
          * Completar o editar la fecha/hora del servicio del viaje (audiencia interna).
-         * @description Reenvía a `operacion.completarFechaHora`. Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. No es un cambio de estado; sólo exige que el viaje no esté en un estado terminal. Devuelve el detalle interno recompuesto para refrescar la vista sin un segundo GET.
+         * @description Reenvía a `operacion.completarFechaHora`. Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. No es un cambio de estado; sólo exige que el viaje no esté en un estado terminal. Solo `jefe_operativo` y `administrador`; `supervisor` y `coordinador` reciben `403` (DEC-152). Devuelve el detalle interno recompuesto para refrescar la vista sin un segundo GET.
          */
         patch: operations["completarFechaHora"];
         trace?: never;
@@ -287,7 +287,7 @@ export interface paths {
         put?: never;
         /**
          * Crear una solicitud (cliente).
-         * @description Reenvía a `operacion.crearSolicitud` (proyección espejo). Solo el Cliente. Nace en `SOLICITADO`. La fecha y hora del servicio es opcional (DEC-148 #38); si falta, `cotizacion` la fija al cotizar (#39). La organización de la solicitud es la del token; no se acepta en el cuerpo. Operación no crea solicitudes: sus viajes nacen en `APROBADO` (`crearViaje`, DEC-026). El id de la solicitud es el que heredará el viaje al aprobarse. Publica `solicitud.creada`.
+         * @description Reenvía a `operacion.crearSolicitud` (proyección espejo). Solo el Cliente. Nace en `SOLICITADO`. La fecha y hora del servicio es opcional (DEC-148 #38); si falta, `cotizacion` la fija al cotizar (#39). La organización de la solicitud es la del token; no se acepta en el cuerpo. Operación no crea solicitudes: sus viajes nacen en `APROBADO` (`crearViaje`, DEC-026). El id de la solicitud es el que heredará el viaje al aprobarse. Publica `solicitud.creada`. Si trae `fecha_hora_servicio`, debe ser posterior al momento de la solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al instante actual responde `400`, sin `codigo` de máquina propio (DEC-148 #66).
          */
         post: operations["crearSolicitud"];
         delete?: never;
@@ -352,7 +352,7 @@ export interface paths {
         get?: never;
         /**
          * Cotizar o recotizar la solicitud.
-         * @description Reenvía a `operacion.cotizarSolicitud` (proyección espejo). Solo `cotizacion` y `administrador`. En `SOLICITADO` envía la primera cotización y la solicitud pasa a `COTIZADO`; en `COTIZADO` recotiza sin cambiar de estado. Cada llamada crea una versión nueva y conserva las anteriores (DEC-148 #42). Exige monto, moneda y fecha y hora del servicio (DEC-148 #39, #41); la fecha puede diferir de la que pidió el cliente. La vigencia es de 15 días desde esta entrega, contados en `America/Mexico_City` (DEC-148 #15, #50). No valida disponibilidad de unidades (DEC-148 #23). El cambio de fecha no requiere aceptación del cliente en el sistema (DEC-148 #40).
+         * @description Reenvía a `operacion.cotizarSolicitud` (proyección espejo). Solo `cotizacion` y `administrador`. En `SOLICITADO` envía la primera cotización y la solicitud pasa a `COTIZADO`; en `COTIZADO` recotiza sin cambiar de estado. Cada llamada crea una versión nueva y conserva las anteriores (DEC-148 #42). Exige monto, moneda y fecha y hora del servicio (DEC-148 #39, #41); la fecha puede diferir de la que pidió el cliente. La vigencia es de 15 días desde esta entrega, contados en `America/Mexico_City` (DEC-148 #15, #50). No valida disponibilidad de unidades (DEC-148 #23). El cambio de fecha no requiere aceptación del cliente en el sistema (DEC-148 #40). La moneda solo puede ser `MXN` y el monto admite cero pero no negativos: `400` en otro caso (DEC-148 #62). La fecha y hora del servicio debe ser posterior al momento de la solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al instante actual responde `400`, sin `codigo` de máquina propio (DEC-148 #66).
          */
         put: operations["cotizarSolicitud"];
         post?: never;
@@ -374,7 +374,7 @@ export interface paths {
         get?: never;
         /**
          * Reprogramar la fecha y hora de una solicitud pagada.
-         * @description Reenvía a `operacion.reprogramarSolicitud` (proyección espejo). Solo `cotizacion` y `administrador`, con la solicitud en `PAGADO`. El motivo es obligatorio. No hay pago nuevo ni cambio de estado; el cambio queda en el histórico con actor, motivo y marca de tiempo. Se hace después de acordarlo con el cliente en la conversación de la solicitud (DEC-148 #24, #40).
+         * @description Reenvía a `operacion.reprogramarSolicitud` (proyección espejo). Solo `cotizacion` y `administrador`, con la solicitud en `PAGADO`. El motivo es obligatorio. No hay pago nuevo ni cambio de estado; el cambio queda en el histórico con actor, motivo y marca de tiempo. Se hace después de acordarlo con el cliente en la conversación de la solicitud (DEC-148 #24, #40). La fecha y hora del servicio debe ser posterior al momento de la solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al instante actual responde `400`, sin `codigo` de máquina propio (DEC-148 #66).
          */
         put: operations["reprogramarSolicitud"];
         post?: never;
@@ -440,7 +440,7 @@ export interface paths {
         get?: never;
         /**
          * Confirmar el pago de la solicitud.
-         * @description Reenvía a `operacion.confirmarPago` (proyección espejo). Solo `cotizacion` y `administrador`. El pago ocurre fuera de Argos; esto registra su confirmación. Exige la fecha del pago, que debe caer dentro de la vigencia de la última cotización: gana la fecha del pago, no la de la confirmación (DEC-148 #34, #43). Desde `COTIZADO` pasa a `PAGADO`. Desde `VENCIDA` también pasa a `PAGADO`, solo si la fecha del pago cae dentro de la vigencia, y queda registrado como excepción (DEC-148 #35). No genera aviso al cliente (#56).
+         * @description Reenvía a `operacion.confirmarPago` (proyección espejo). Solo `cotizacion` y `administrador`. El pago ocurre fuera de Argos; esto registra su confirmación. Exige la fecha del pago, que debe caer dentro de la vigencia de la última cotización: gana la fecha del pago, no la de la confirmación (DEC-148 #34, #43). Desde `COTIZADO` pasa a `PAGADO`. Desde `VENCIDA` también pasa a `PAGADO`, solo si la fecha del pago cae dentro de la vigencia, y queda registrado como excepción (DEC-148 #35). Ese pago tardío ocurre una sola vez por solicitud: un segundo `VENCIDA → PAGADO` responde `409` con `codigo` `transicion_no_permitida` y no deja cambios (DEC-148 #64). No genera aviso al cliente (#56).
          */
         put: operations["confirmarPago"];
         post?: never;
@@ -485,7 +485,7 @@ export interface paths {
         put?: never;
         /**
          * Aprobar la solicitud pagada y crear el viaje.
-         * @description Reenvía a `operacion.aprobarSolicitud` (proyección espejo). Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`. La aprobación es explícita, nunca automática. Exige la fecha y hora del servicio (DEC-010 #2). En la misma transacción la solicitud pasa a `APROBADO` y nace el viaje en `APROBADO` con el MISMO id de la solicitud (DEC-148 #3, #52; ADR 39): no existe una solicitud aprobada sin su viaje. El viaje se consulta después con `obtenerViaje` usando ese id. La respuesta es la última vista de la solicitud para el `jefe_operativo`: como solo ve las que están en `PAGADO`, `obtenerSolicitud` le responde `404` desde que la resuelve. Por la misma razón, una segunda aprobación tras una carrera le da `404`; el `409 transicion_no_permitida` lo ve el `administrador`.
+         * @description Reenvía a `operacion.aprobarSolicitud` (proyección espejo). Solo `jefe_operativo` y `administrador`, con la solicitud en `PAGADO`. La aprobación es explícita, nunca automática. Exige la fecha y hora del servicio (DEC-010 #2). En la misma transacción la solicitud pasa a `APROBADO` y nace el viaje en `APROBADO` con el MISMO id de la solicitud (DEC-148 #3, #52; ADR 39): no existe una solicitud aprobada sin su viaje. El viaje se consulta después con `obtenerViaje` usando ese id. La respuesta es la última vista de la solicitud para el `jefe_operativo`: como solo ve las que están en `PAGADO`, `obtenerSolicitud` le responde `404` desde que la resuelve. Por la misma razón, una segunda aprobación tras una carrera le da `404`; el `409 transicion_no_permitida` lo ve el `administrador`. Si la fecha y hora del servicio ya pasó (no es posterior al instante actual, medido en `America/Mexico_City`) responde `409` con `codigo` `fecha_hora_servicio_pasada`: `cotizacion` la reprograma (`reprogramarSolicitud`) y se vuelve a aprobar (DEC-148 #66, #68).
          */
         post: operations["aprobarSolicitud"];
         delete?: never;
@@ -691,7 +691,7 @@ export interface paths {
         };
         /**
          * Listar el trabajo de la bandeja del llamante (bootstrap y catch-up).
-         * @description El `bff` resuelve la bandeja del sujeto desde los claims de la sesión (cola única e implícita, DEC-103) y reenvía a `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja. La bandeja única de chat la ven el rol `ejecutivo` (DEC-127) y, solo en lectura, `supervisor`/`coordinador` (DEC-131); otro rol recibe `404` (no tiene bandeja). Sin acotar por el tenant de quien pregunta (DEC-129).
+         * @description El `bff` resuelve la bandeja del sujeto desde los claims de la sesión (cola única e implícita, DEC-103) y reenvía a `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja. La bandeja única de chat la ven el rol `ejecutivo` (DEC-127) y, solo en lectura, `supervisor`/`coordinador` (DEC-131). El `administrador` la ve y escribe como `ejecutivo` (DEC-152). Otro rol recibe `404` (no tiene bandeja). Sin acotar por el tenant de quien pregunta (DEC-129).
          *     Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el CATCH-UP: devuelve los cambios de la colección posteriores a esa revisión. Si la revisión pedida quedó fuera de la ventana retenida, responde `409 stream_resync_required` y el cliente repite el bootstrap (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
          *     Solo conversaciones `tipo=viaje`. Las de solicitud se atienden en `listarTrabajoMiBandejaSolicitudes` y no se mezclan con estas (DEC-148 #12, #28).
          */
@@ -818,6 +818,7 @@ export interface paths {
          * Transferir la responsabilidad a otro miembro del pool.
          * @description Reenvía a `mensajeria.transferirConversacion`. Lo hace el responsable; `supervisor`/`coordinador` reciben `403` (DEC-118, DEC-131). Cierra el reclamo anterior y abre el siguiente en UNA transacción: no hay ventana sin responsable ni con dos (Addendum §6).
          *     En `tipo=solicitud` el destino debe ser un usuario con rol `cotizacion` (DEC-148 #31; E10-HU-038, escenario 5). Otro destino (por ejemplo un `ejecutivo`) responde `409` con `codigo` `destino_no_es_cotizacion`, y el reclamo del llamante no cambia.
+         *     `responsable_destino_id` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token; `mensajeria` lo traduce a `idp_subject` (DEC-148 #74).
          */
         post: operations["transferirConversacion"];
         delete?: never;
@@ -912,7 +913,7 @@ export interface paths {
         put?: never;
         /**
          * El monitoreo activa una emergencia sobre el viaje (idempotente).
-         * @description Solo audiencia Interno. Activan `monitorista`, `supervisor` y `coordinador` (DEC-045 #9); otro rol interno responde `403`. El `bff` lee el viaje y, si está en `CERRADO` o `CANCELADO_POR_CLIENTE`, responde 409 `viaje_en_estado_terminal` sin reenviar (DEC-135 #5; carrera en DT-16). Si no, reenvía a `mensajeria.activarEmergencia`, que registra origen `operacion` y deja el caso bajo la empresa del viaje (DEC-133). Idempotente por `activacion_id`: la reentrega devuelve el mismo caso con 200; una pulsación nueva con otro `activacion_id` crea otro caso con 201.
+         * @description Solo audiencia Interno. Activan `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-045 #9; el Administrador entra por DEC-152, que enmienda #9); otro rol interno responde `403`. El `bff` lee el viaje y, si está en `CERRADO` o `CANCELADO_POR_CLIENTE`, responde 409 `viaje_en_estado_terminal` sin reenviar (DEC-135 #5; carrera en DT-16). Si no, reenvía a `mensajeria.activarEmergencia`, que registra origen `operacion` y deja el caso bajo la empresa del viaje (DEC-133). Idempotente por `activacion_id`: la reentrega devuelve el mismo caso con 200; una pulsación nueva con otro `activacion_id` crea otro caso con 201.
          */
         post: operations["activarEmergenciaInterno"];
         delete?: never;
@@ -1074,7 +1075,7 @@ export interface paths {
         put?: never;
         /**
          * Transferir el caso por su id a otro miembro de Reacción.
-         * @description Solo audiencia Interno. Reenvía a `mensajeria.transferirEmergenciaPorId`. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso.
+         * @description Solo audiencia Interno. Reenvía a `mensajeria.transferirEmergenciaPorId`. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso. `responsable_destino_id` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token; `mensajeria` lo traduce a `idp_subject` (DEC-148 #74).
          */
         post: operations["transferirEmergenciaPorId"];
         delete?: never;
@@ -1138,7 +1139,7 @@ export interface paths {
         };
         /**
          * Listar clientes seleccionables para crear un viaje (audiencia interna).
-         * @description Reenvía a `catalogos.listarClientes`. Devuelve los clientes `activo` dentro del alcance del `jefe_operativo` (DEC-026 #3): los fuera de alcance no se muestran, y asociar uno por `cliente_id` manipulado se rechaza al crear el viaje. Paginado por cursor. El frontend sólo consume la respuesta y envía el `cliente_id` elegido.
+         * @description Reenvía a `catalogos.listarClientes`. Devuelve los clientes `activo` dentro del alcance del llamante (DEC-026 #3). Lo leen `jefe_operativo` y `administrador` (el Administrador puede todo, DEC-152): los fuera de alcance no se muestran, y asociar uno por `cliente_id` manipulado se rechaza al crear el viaje. Paginado por cursor. El frontend sólo consume la respuesta y envía el `cliente_id` elegido.
          */
         get: operations["listarClientes"];
         put?: never;
@@ -1180,7 +1181,7 @@ export interface paths {
         };
         /**
          * Escolta vigente del viaje, con sus unidades legibles (audiencia interna).
-         * @description Reenvía a `operacion.obtenerAsignacion` y compone cada unidad con el vehículo y los custodios legibles de `catalogos`, como `listarUnidades` (tracer.38). Es la lectura de la ficha técnica y del detalle del viaje: la escolta asignada a ESTE viaje, no el roster completo (DEC-142, E8-T12). La lee cualquier rol interno salvo `ejecutivo` y `reaccion`, que reciben 403 (DEC-149 #16 y #23); un actor Cliente recibe 404. `unidades` vacío con 200 si el viaje no tiene asignación vigente.
+         * @description Reenvía a `operacion.obtenerAsignacion` y compone cada unidad con el vehículo y los custodios legibles de `catalogos`, como `listarUnidades` (tracer.38). Es la lectura de la ficha técnica y del detalle del viaje: la escolta asignada a ESTE viaje, no el roster completo (DEC-142, E8-T12). La lee cualquier rol interno salvo `ejecutivo`, `reaccion` y `cotizacion`, que reciben 403 (DEC-149 #16 y #23; DEC-152); un actor Cliente recibe 404. `unidades` vacío con 200 si el viaje no tiene asignación vigente.
          */
         get: operations["obtenerAsignacion"];
         put?: never;
@@ -1684,7 +1685,7 @@ export interface paths {
         head?: never;
         /**
          * Resolver una incidencia (audiencia interna).
-         * @description Reenvía a `operacion.resolverIncidencia`. Resolver es facultad de Supervisor/Coordinador: un rol sin ella recibe 403 (lo impone el servidor, no el esquema).
+         * @description Reenvía a `operacion.resolverIncidencia`. Resolver es facultad de Supervisor, Coordinador y Administrador (DEC-152): un rol sin ella recibe 403 (lo impone el servidor, no el esquema).
          */
         patch: operations["resolverIncidencia"];
         trace?: never;
@@ -1833,7 +1834,7 @@ export interface paths {
         put?: never;
         /**
          * Intención de subida de un adjunto con autorización de vida corta.
-         * @description Reenvía a `operacion.crearIntencionSubidaAdjunto`. Los bytes NO pasan por el `bff`: el cliente los sube al almacenamiento de objetos con la URL devuelta. Un viaje fuera del alcance del llamante responde 404 antes de emitir la intención (DEC-149).
+         * @description Reenvía a `operacion.crearIntencionSubidaAdjunto`. Los bytes NO pasan por el `bff`: el cliente los sube al almacenamiento de objetos con la URL devuelta. Un viaje fuera del alcance del llamante responde 404 antes de emitir la intención (DEC-149). Suben adjuntos `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-152).
          */
         post: operations["crearIntencionSubidaAdjunto"];
         delete?: never;
@@ -2724,6 +2725,7 @@ export interface components {
             /** @description Obligatoria para audiencia Interno (exige reclamo activo). */
             version_reclamo_esperada?: components["schemas"]["VersionReclamo"];
         };
+        /** @description `responsable_id` es el `sub` del token del responsable, NO el id del sujeto en `identidad` (a diferencia de `TransferenciaEntrada.responsable_destino_id`). Con el contrato actual el nombre del responsable no se puede resolver desde este id: es el hueco de DT-28 y esta ola no agrega campos (DEC-148 #74). */
         Reclamo: {
             id: components["schemas"]["Id"];
             conversacion_id: components["schemas"]["Id"];
@@ -2738,7 +2740,7 @@ export interface components {
         };
         TransferenciaEntrada: {
             version_esperada: components["schemas"]["VersionReclamo"];
-            /** @description Miembro del pool con membresía efectiva en la bandeja. */
+            /** @description Id del sujeto destino en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token. `mensajeria` lo traduce a `idp_subject`; el destino debe ser miembro del pool con membresía efectiva en la bandeja (DEC-148 #74, DT-28). Cambia el significado de un campo ya publicado, no su forma. */
             responsable_destino_id: components["schemas"]["Id"];
             motivo?: string;
         };
@@ -2974,7 +2976,7 @@ export interface components {
          * @enum {string}
          */
         EstadoSolicitud: "SOLICITADO" | "COTIZADO" | "PAGADO" | "APROBADO" | "RECHAZADO_POR_AI27" | "RECHAZADO_POR_CLIENTE" | "CANCELADO_POR_CLIENTE" | "VENCIDA";
-        /** @description Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148). */
+        /** @description Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). El cero se admite (clientes con contrato prepagado) y un monto negativo se rechaza con `400` (DEC-148 #62). El máximo de decimales sigue sin decidirse. */
         Monto: string;
         /** @description Solicitud mínima del cliente (E1-HU-001). La organización la fija el token, no el cuerpo. */
         CrearSolicitudEntrada: {
@@ -2993,7 +2995,7 @@ export interface components {
         };
         CotizacionEntrada: {
             monto: components["schemas"]["Monto"];
-            /** @description Código de moneda. `string` y no enum porque el catálogo de monedas sigue pendiente (DEC-148); estrechar a enum después es incompatible. */
+            /** @description Código de moneda. Solo se acepta `MXN`, exacto (mayúsculas y sin espacios); `operacion` responde `400` con cualquier otra (DEC-148 #62). Sigue siendo `string` y no enum: estrechar a enum después es incompatible. */
             moneda: string;
             /**
              * Format: date-time
@@ -3007,6 +3009,7 @@ export interface components {
             /** @description Número de versión; la recotización incrementa. */
             version: number;
             monto: components["schemas"]["Monto"];
+            /** @description Siempre `MXN` (DEC-148 */
             moneda: string;
             fecha_hora_servicio: components["schemas"]["MarcaTiempo"];
             notas?: string | null;
@@ -3062,9 +3065,9 @@ export interface components {
             fecha_hora_servicio?: string | null;
             tipo_servicio?: string | null;
             tracto?: components["schemas"]["Tracto"] | null;
-            /** @description Cotización vigente; null mientras no se ha cotizado. */
+            /** @description Cotización vigente. Para `cliente`, `cotizacion` y `administrador`, `null` significa que aún no se ha cotizado. Para `jefe_operativo` siempre llega `null`, aunque la solicitud esté cotizada y pagada, y significa OCULTO, no "sin cotizar": ese rol no ve nada comercial (DEC-148 #67). */
             cotizacion?: components["schemas"]["Cotizacion"] | null;
-            /** @description Pago confirmado; null mientras no lo hay. */
+            /** @description Pago confirmado. Para `cliente`, `cotizacion` y `administrador`, `null` significa que no hay pago confirmado. Para `jefe_operativo` siempre llega `null`, aunque la solicitud esté pagada, y significa OCULTO, no "sin pago" (DEC-148 #67). */
             pago?: components["schemas"]["Pago"] | null;
             /** @description `true` si el cliente canceló estando en `PAGADO` (DEC-148 #6). Argos solo marca; no calcula ni guarda el monto. */
             marca_penalizacion: boolean;
@@ -3088,8 +3091,9 @@ export interface components {
             a_estado?: components["schemas"]["EstadoSolicitud"] | null;
             /** @description null cuando lo hizo el sistema (el vencimiento). */
             actor_id?: components["schemas"]["Id"] | null;
+            /** @description Motivo de la acción. Para `jefe_operativo` llega `null` en `pago_revertido` (texto libre que puede nombrar montos o referencias); el de `reprogramada` es operativo y sí se muestra (DEC-148 #73). */
             motivo?: string | null;
-            /** @description Versión completa, solo en `cotizada` y `recotizada` (DEC-148 */
+            /** @description Versión completa, solo en `cotizada` y `recotizada` (DEC-148 #42). Para `jefe_operativo` nunca viene: `null` significa oculto, no "sin cotización" (DEC-148 #67, #73). */
             cotizacion?: components["schemas"]["Cotizacion"] | null;
             /** @description Solo en `cancelada`. */
             marca_penalizacion?: boolean | null;
@@ -3912,7 +3916,7 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
-            /** @description No se puede confirmar. `codigo` de máquina: `transicion_no_permitida` (estado de origen inválido) o `fecha_pago_fuera_de_vigencia` (la fecha del pago no cae dentro de la vigencia de la última cotización). */
+            /** @description No se puede confirmar. `codigo` de máquina: `transicion_no_permitida` (estado de origen inválido, o segundo pago tardío `VENCIDA → PAGADO`; DEC-148 #64) o `fecha_pago_fuera_de_vigencia` (la fecha del pago no cae dentro de la vigencia de la última cotización). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3977,7 +3981,7 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
-            /** @description No se puede aprobar. `codigo` de máquina: `transicion_no_permitida` (no está en `PAGADO`) o `fecha_hora_servicio_requerida` (falta la fecha y hora del servicio). */
+            /** @description No se puede aprobar. `codigo` de máquina: `transicion_no_permitida` (no está en `PAGADO`), `fecha_hora_servicio_requerida` (falta la fecha y hora del servicio) o `fecha_hora_servicio_pasada` (la fecha y hora del servicio ya pasó; DEC-148 #68). */
             409: {
                 headers: {
                     [name: string]: unknown;

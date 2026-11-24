@@ -219,9 +219,11 @@ type Cotizacion struct {
 
 	// FechaHoraServicio Instante en UTC, RFC 3339.
 	FechaHoraServicio MarcaTiempo `json:"fecha_hora_servicio"`
-	Moneda            string      `json:"moneda"`
 
-	// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148).
+	// Moneda Siempre `MXN` (DEC-148
+	Moneda string `json:"moneda"`
+
+	// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). El cero se admite (clientes con contrato prepagado) y un monto negativo se rechaza con `400` (DEC-148 #62). El máximo de decimales sigue sin decidirse.
 	Monto Monto   `json:"monto"`
 	Notas *string `json:"notas"`
 
@@ -237,10 +239,10 @@ type CotizacionEntrada struct {
 	// FechaHoraServicio Fecha y hora del servicio que ofrece la cotización. Obligatoria (DEC-148 #39); puede diferir de la que pidió el cliente.
 	FechaHoraServicio time.Time `json:"fecha_hora_servicio"`
 
-	// Moneda Código de moneda. `string` y no enum porque el catálogo de monedas sigue pendiente (DEC-148); estrechar a enum después es incompatible.
+	// Moneda Código de moneda. Solo se acepta `MXN`, exacto (mayúsculas y sin espacios); `operacion` responde `400` con cualquier otra (DEC-148 #62). Sigue siendo `string` y no enum: estrechar a enum después es incompatible.
 	Moneda string `json:"moneda"`
 
-	// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148).
+	// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). El cero se admite (clientes con contrato prepagado) y un monto negativo se rechaza con `400` (DEC-148 #62). El máximo de decimales sigue sin decidirse.
 	Monto Monto `json:"monto"`
 
 	// Notas Texto libre. Sin desglose estructurado en V2 (DEC-148
@@ -446,7 +448,7 @@ type HistoricoSolicitudItem struct {
 	// ActorId null cuando lo hizo el sistema (el vencimiento).
 	ActorId *Id `json:"actor_id"`
 
-	// Cotizacion Versión completa, solo en `cotizada` y `recotizada` (DEC-148
+	// Cotizacion Versión completa, solo en `cotizada` y `recotizada` (DEC-148 #42). Para `jefe_operativo` nunca viene: `null` significa oculto, no "sin cotización" (DEC-148 #67, #73).
 	Cotizacion *Cotizacion `json:"cotizacion"`
 
 	// DeEstado Estado de origen; null en `creada` y en las acciones sin cambio de estado.
@@ -456,8 +458,10 @@ type HistoricoSolicitudItem struct {
 	En MarcaTiempo `json:"en"`
 
 	// MarcaPenalizacion Solo en `cancelada`.
-	MarcaPenalizacion *bool   `json:"marca_penalizacion"`
-	Motivo            *string `json:"motivo"`
+	MarcaPenalizacion *bool `json:"marca_penalizacion"`
+
+	// Motivo Motivo de la acción. Para `jefe_operativo` llega `null` en `pago_revertido` (texto libre que puede nombrar montos o referencias); el de `reprogramada` es operativo y sí se muestra (DEC-148 #73).
+	Motivo *string `json:"motivo"`
 }
 
 // Id Identificador único (UUID). Nunca un correlativo expuesto.
@@ -532,7 +536,7 @@ type IntencionSubidaAdjuntoEntrada struct {
 // MarcaTiempo Instante en UTC, RFC 3339.
 type MarcaTiempo = time.Time
 
-// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). Los límites (cero, decimales máximos) siguen pendientes de decisión (DEC-148).
+// Monto Importe como decimal en texto, sin signo ni separador de miles (evita errores de punto flotante). El cero se admite (clientes con contrato prepagado) y un monto negativo se rechaza con `400` (DEC-148 #62). El máximo de decimales sigue sin decidirse.
 type Monto = string
 
 // MotivoCierre Motivo del cierre del viaje (DEC-113). Catálogo cerrado de V1: `normal` (cierre tras la última parada) o `por_incidencia` (habilita el cierre anticipado, DEC-020 #6). Se retiró `bitacora` (era una cita a DEC-013 sin respaldo, DEC-113). La ventana de escritura de la conversación la decide `mensajeria` por el motivo (3 días / 6 meses, DEC-030/DEC-041).
@@ -662,7 +666,7 @@ type Solicitud struct {
 	// ClienteId Identificador único (UUID). Nunca un correlativo expuesto.
 	ClienteId *Id `json:"cliente_id,omitempty"`
 
-	// Cotizacion Cotización vigente; null mientras no se ha cotizado.
+	// Cotizacion Cotización vigente. Para `cliente`, `cotizacion` y `administrador`, `null` significa que aún no se ha cotizado. Para `jefe_operativo` siempre llega `null`, aunque la solicitud esté cotizada y pagada, y significa OCULTO, no "sin cotizar": ese rol no ve nada comercial (DEC-148 #67).
 	Cotizacion *Cotizacion `json:"cotizacion"`
 
 	// CreadoEn Instante en UTC, RFC 3339.
@@ -685,7 +689,7 @@ type Solicitud struct {
 	MotivoRechazo *string `json:"motivo_rechazo"`
 	Origen        string  `json:"origen"`
 
-	// Pago Pago confirmado; null mientras no lo hay.
+	// Pago Pago confirmado. Para `cliente`, `cotizacion` y `administrador`, `null` significa que no hay pago confirmado. Para `jefe_operativo` siempre llega `null`, aunque la solicitud esté pagada, y significa OCULTO, no "sin pago" (DEC-148 #67).
 	Pago         *Pago   `json:"pago"`
 	TipoServicio *string `json:"tipo_servicio"`
 	Tracto       *Tracto `json:"tracto"`
