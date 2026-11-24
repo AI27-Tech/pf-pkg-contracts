@@ -347,7 +347,7 @@ type ReciboEntrada struct {
 	HastaSecuencia SecuenciaMensaje `json:"hasta_secuencia"`
 }
 
-// Reclamo `responsable_id` es el `sub` del token del responsable, NO el id del sujeto en `identidad` (a diferencia de `TransferenciaEntrada.responsable_destino_id`). Con el contrato actual el nombre del responsable no se puede resolver desde este id: es el hueco de DT-28 y esta ola no agrega campos (DEC-148 #74).
+// Reclamo `responsable_id` es el `sub` del token del responsable, NO el id del sujeto en `identidad`. Es distinto del `responsable_destino_id` de una transferencia en `tipo=solicitud`, que sí es el id del sujeto (`TransferenciaEntrada.responsable_destino_id`). Con el contrato actual el nombre del responsable no se puede resolver desde este id: es el hueco de DT-28 y esta ola no agrega campos (DEC-148 #74).
 type Reclamo struct {
 	// AbiertoEn Instante en UTC, RFC 3339.
 	AbiertoEn MarcaTiempo `json:"abierto_en"`
@@ -417,7 +417,7 @@ type TrabajoBandeja struct {
 type TransferenciaEntrada struct {
 	Motivo *string `json:"motivo,omitempty"`
 
-	// ResponsableDestinoId Id del sujeto destino en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token. `mensajeria` lo traduce a `idp_subject`; el destino debe ser miembro del pool con membresía efectiva en la bandeja (DEC-148 #74, DT-28). Cambia el significado de un campo ya publicado, no su forma.
+	// ResponsableDestinoId Depende del tipo de conversación. En `transferirConversacion` con `tipo=solicitud` es el id del sujeto en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje`, `transferirEmergencia` y `transferirEmergenciaPorId` es el `sub` del token del destinatario, sin traducción ni validación; ampliar la traducción a esos casos está pendiente (DT-28). Cambia el significado de un campo ya publicado en `tipo=solicitud`, no su forma.
 	ResponsableDestinoId Id `json:"responsable_destino_id"`
 
 	// VersionEsperada Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.

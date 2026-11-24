@@ -253,7 +253,7 @@ export interface paths {
          * Transferir la responsabilidad a otro miembro del pool.
          * @description Lo hace el responsable; en V1 un `supervisor`/`coordinador` NO transfiere una conversación ajena (DEC-118) y recibe `403` (DEC-131). Cierra el reclamo anterior y abre el siguiente en UNA transacción: no hay ventana sin responsable ni con dos (Addendum §6).
          *     En `tipo=solicitud` el destino debe ser un usuario con rol `cotizacion` (DEC-148 #31; E10-HU-038, escenario 5). Otro destino (por ejemplo un `ejecutivo`) responde `409` con `codigo` `destino_no_es_cotizacion`, y el reclamo del llamante no cambia.
-         *     `responsable_destino_id` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token; `mensajeria` lo traduce a `idp_subject` (DEC-148 #74).
+         *     `responsable_destino_id` depende del tipo de conversación. En `tipo=solicitud` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje` es el `sub` del token del destinatario, sin traducción ni validación; ampliar la traducción a ese caso está pendiente (DT-28).
          */
         post: operations["transferirConversacion"];
         delete?: never;
@@ -469,7 +469,7 @@ export interface paths {
         put?: never;
         /**
          * Transferir la responsabilidad del caso a otro miembro de Reacción.
-         * @description Cierra el reclamo anterior y abre el siguiente en UNA transacción; no hay ventana sin responsable ni con dos. La transferencia conserva el estado del caso (ADR 21 §5). `responsable_destino_id` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token; `mensajeria` lo traduce a `idp_subject` (DEC-148 #74).
+         * @description Cierra el reclamo anterior y abre el siguiente en UNA transacción; no hay ventana sin responsable ni con dos. La transferencia conserva el estado del caso (ADR 21 §5). `responsable_destino_id` es el `sub` del token del destinatario, sin traducción ni validación del sujeto. Traducir el id del sujeto en `identidad` aplica solo a `transferirConversacion` en `tipo=solicitud`; ampliarlo a las emergencias está pendiente (DT-28).
          */
         post: operations["transferirEmergencia"];
         delete?: never;
@@ -656,7 +656,7 @@ export interface paths {
         put?: never;
         /**
          * Transferir el caso por su id a otro miembro de Reacción.
-         * @description Gemela de `transferirEmergencia` sin `{id}` de viaje. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso (ADR 21 §5). `responsable_destino_id` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token; `mensajeria` lo traduce a `idp_subject` (DEC-148 #74).
+         * @description Gemela de `transferirEmergencia` sin `{id}` de viaje. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso (ADR 21 §5). `responsable_destino_id` es el `sub` del token del destinatario, sin traducción ni validación del sujeto. Traducir el id del sujeto en `identidad` aplica solo a `transferirConversacion` en `tipo=solicitud`; ampliarlo a las emergencias está pendiente (DT-28).
          */
         post: operations["transferirEmergenciaPorId"];
         delete?: never;
@@ -837,7 +837,7 @@ export interface components {
             /** @description Override explícito de supervisor; se audita con este motivo. Ausente en el envío normal. */
             motivo_override?: string;
         };
-        /** @description `responsable_id` es el `sub` del token del responsable, NO el id del sujeto en `identidad` (a diferencia de `TransferenciaEntrada.responsable_destino_id`). Con el contrato actual el nombre del responsable no se puede resolver desde este id: es el hueco de DT-28 y esta ola no agrega campos (DEC-148 #74). */
+        /** @description `responsable_id` es el `sub` del token del responsable, NO el id del sujeto en `identidad`. Es distinto del `responsable_destino_id` de una transferencia en `tipo=solicitud`, que sí es el id del sujeto (`TransferenciaEntrada.responsable_destino_id`). Con el contrato actual el nombre del responsable no se puede resolver desde este id: es el hueco de DT-28 y esta ola no agrega campos (DEC-148 #74). */
         Reclamo: {
             id: components["schemas"]["Id"];
             conversacion_id: components["schemas"]["Id"];
@@ -852,7 +852,7 @@ export interface components {
         };
         TransferenciaEntrada: {
             version_esperada: components["schemas"]["VersionReclamo"];
-            /** @description Id del sujeto destino en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token. `mensajeria` lo traduce a `idp_subject`; el destino debe ser miembro del pool con membresía efectiva en la bandeja (DEC-148 #74, DT-28). Cambia el significado de un campo ya publicado, no su forma. */
+            /** @description Depende del tipo de conversación. En `transferirConversacion` con `tipo=solicitud` es el id del sujeto en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje`, `transferirEmergencia` y `transferirEmergenciaPorId` es el `sub` del token del destinatario, sin traducción ni validación; ampliar la traducción a esos casos está pendiente (DT-28). Cambia el significado de un campo ya publicado en `tipo=solicitud`, no su forma. */
             responsable_destino_id: components["schemas"]["Id"];
             motivo?: string;
         };
