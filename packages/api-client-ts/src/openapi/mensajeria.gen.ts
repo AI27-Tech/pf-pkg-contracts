@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Listar el trabajo de la bandeja del sujeto (bootstrap y catch-up).
-         * @description Igual que `listarTrabajoBandeja` pero SIN `{id}`: `mensajeria` resuelve la bandeja única de chat (cola única e implícita, DEC-103) por el rol del sujeto: `ejecutivo` es miembro por su rol (DEC-127), y `supervisor` y `coordinador` la leen sin poder reclamar ni escribir (DEC-131). Otro rol responde `404` (no tiene bandeja), igual que una bandeja inexistente. Sin acotar por el tenant de quien pregunta (DEC-129). `desde_revision` y `cursor` funcionan igual que en la ruta con `{id}`; el `409 stream_resync_required` también.
+         * @description Igual que `listarTrabajoBandeja` pero SIN `{id}`: `mensajeria` resuelve la bandeja única de chat (cola única e implícita, DEC-103) por el rol del sujeto: `ejecutivo` es miembro por su rol (DEC-127), el `administrador` ve y atiende los viajes como Ejecutivo (DEC-152), y `supervisor` y `coordinador` la leen sin poder reclamar ni escribir (DEC-131). Otro rol responde `404` (no tiene bandeja), igual que una bandeja inexistente. Sin acotar por el tenant de quien pregunta (DEC-129). `desde_revision` y `cursor` funcionan igual que en la ruta con `{id}`; el `409 stream_resync_required` también.
          *     Solo conversaciones `tipo=viaje`. Las de solicitud se atienden en `listarTrabajoMiBandejaSolicitudes` y no se mezclan con estas (DEC-148 #12, #28).
          */
         get: operations["listarTrabajoMiBandeja"];
@@ -57,7 +57,7 @@ export interface paths {
         };
         /**
          * Listar el trabajo de una bandeja (bootstrap y catch-up).
-         * @description Requiere MEMBRESÍA EFECTIVA en el pool de la bandeja. En la bandeja única de chat la membresía es el rol `ejecutivo` (DEC-127), y `supervisor`/`coordinador` la leen (DEC-131); en la de emergencias, el rol `reaccion` (DEC-130).
+         * @description Requiere MEMBRESÍA EFECTIVA en el pool de la bandeja. En la bandeja única de chat la membresía es el rol `ejecutivo` (DEC-127), y `supervisor`/`coordinador` la leen (DEC-131). La bandeja de trabajo del `administrador` se consulta sin `{id}` con `listarTrabajoMiBandeja` (DEC-152); en emergencias, el rol `reaccion` (DEC-130).
          *     Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el CATCH-UP: devuelve los cambios de la colección posteriores a esa revisión. Si la revisión pedida quedó fuera de la ventana retenida, responde `409 stream_resync_required` y el cliente repite el bootstrap (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
          *     Solo conversaciones `tipo=viaje`. Las de solicitud se atienden en `listarTrabajoMiBandejaSolicitudes` y no se mezclan con estas (DEC-148 #12, #28).
          */
@@ -102,7 +102,7 @@ export interface paths {
         };
         /**
          * Detalle de una conversación (estado inicial para bootstrap).
-         * @description Leen el Cliente de la empresa dueña, el `ejecutivo` y, solo en lectura, `supervisor`/`coordinador` (DEC-131). Poseer el UUID no autoriza (Addendum §7): el Cliente de otra empresa recibe 404, igual que si no existiera. El interno no se acota por tenant (DEC-129): otro rol interno recibe `403`. `ultima_secuencia` es el cursor de dominio del bootstrap (ADR 28 §2).
+         * @description Leen el Cliente de la empresa dueña, el `ejecutivo`, el `administrador` en chats visibles de viaje (DEC-152) y, solo en lectura, `supervisor`/`coordinador` (DEC-131). Poseer el UUID no autoriza (Addendum §7): el Cliente de otra empresa recibe 404, igual que si no existiera. El interno no se acota por tenant (DEC-129): otro rol interno recibe `403`. `ultima_secuencia` es el cursor de dominio del bootstrap (ADR 28 §2).
          *     Conversación `tipo=solicitud` (V2, DEC-148 #12, #28, #31): la leen `cotizacion` y `administrador`; `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` reciben `403`.
          */
         get: operations["obtenerConversacion"];
@@ -126,7 +126,7 @@ export interface paths {
         /**
          * Conversación de un viaje, resuelta por el id del viaje.
          * @description `{id}` es el `viaje_id`, no el id de la conversación. Devuelve la conversación del viaje con la misma forma que `obtenerConversacion`; el `id` de la respuesta es el que usan `listarMensajes`, `enviarMensaje` y demás operaciones por conversación. Si el viaje tiene una conversación no cerrada (a lo más una por tenant, viaje y tipo, Addendum §6) se devuelve ésa; si sólo tiene conversaciones cerradas, la más reciente.
-         *     Audiencia: el Cliente de la empresa dueña del viaje y, por audiencia Interno, los mismos roles que `obtenerConversacion` (`ejecutivo`; `supervisor`/`coordinador` solo leen, DEC-131), sin acotar por el tenant de quien pregunta (DEC-129). Poseer el `viaje_id` no autoriza (Addendum §7): el Cliente de otra empresa recibe 404, igual que si el viaje todavía no tuviera conversación; otro rol interno recibe `403`.
+         *     Audiencia: el Cliente de la empresa dueña del viaje y, por audiencia Interno, los mismos roles que `obtenerConversacion` (`ejecutivo` y `administrador`; `supervisor`/`coordinador` solo leen, DEC-131/152), sin acotar por el tenant de quien pregunta (DEC-129). Poseer el `viaje_id` no autoriza (Addendum §7): el Cliente de otra empresa recibe 404, igual que si el viaje todavía no tuviera conversación; otro rol interno recibe `403`.
          *     Devuelve solo la de `tipo=viaje`. Como el viaje hereda el id de la solicitud (DEC-148 #3), durante los 3 días posteriores a la aprobación la conversación de la solicitud (`tipo=solicitud`) comparte `viaje_id` y puede seguir abierta; no se devuelve aquí, sino en `obtenerConversacionDeSolicitud`.
          */
         get: operations["obtenerConversacionDeViaje"];
@@ -173,14 +173,14 @@ export interface paths {
         };
         /**
          * Historia de mensajes por secuencia canónica.
-         * @description `antes_de` pagina la historia hacia atrás; `despues_de` es la recuperación tras reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin ninguno, devuelve los más recientes. El orden es siempre por `secuencia`, nunca por `creado_en`. Mismo acceso que `obtenerConversacion`: `supervisor`/`coordinador` leen (DEC-131).
+         * @description `antes_de` pagina la historia hacia atrás; `despues_de` es la recuperación tras reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin ninguno, devuelve los más recientes. El orden es siempre por `secuencia`, nunca por `creado_en`. Mismo acceso que `obtenerConversacion`: `administrador` lee los chats visibles de viaje aunque otro los esté atendiendo (DEC-152); también leen `supervisor`/`coordinador` (DEC-131).
          *     Conversación `tipo=solicitud` (V2, DEC-148 #12, #28, #31): la leen `cotizacion` y `administrador`; `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` reciben `403`.
          */
         get: operations["listarMensajes"];
         put?: never;
         /**
          * Enviar un mensaje (idempotente por client_message_id).
-         * @description El cliente puede enviar mientras la conversación admita escritura. Un interno requiere rol `ejecutivo`, RECLAMO ACTIVO y `version_reclamo_esperada`, salvo override explícito de supervisor con `motivo_override` (Addendum §7; cerrado en V1, DEC-107). `supervisor` y `coordinador` solo leen conversaciones (DEC-131): enviar les responde `403`. Reintentar el mismo `client_message_id` devuelve el mensaje original con 200 y nunca crea un segundo mensaje.
+         * @description El cliente puede enviar mientras la conversación admita escritura. Un interno de `tipo=viaje` requiere rol `ejecutivo` o `administrador`, reclamo propio ACTIVO y `version_reclamo_esperada` (Addendum §7). El override de Supervisor permanece cerrado en V1 (DEC-107); `supervisor` y `coordinador` solo leen conversaciones (DEC-131): enviar les responde `403`. Reintentar el mismo `client_message_id` devuelve el mensaje original con 200 y nunca crea un segundo mensaje.
          *     En una conversación `tipo=solicitud` (V2, DEC-148 #31) el interno es `cotizacion`, con RECLAMO ACTIVO y `version_reclamo_esperada`, o el `administrador`, que interviene por herencia (#20). No hay override de `supervisor` ni de `coordinador`; el `ejecutivo` recibe `403`. La intervención del `administrador` se audita como el override de Supervisor (DEC-148 #47).
          */
         post: operations["enviarMensaje"];
@@ -203,7 +203,7 @@ export interface paths {
         put?: never;
         /**
          * Reclamar la conversación con versión esperada.
-         * @description Solo el rol `ejecutivo` (DEC-127); `supervisor`/`coordinador` solo leen y reciben `403` (DEC-131). Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo` (Addendum §4 punto 5).
+         * @description En `tipo=viaje`, `ejecutivo` y `administrador` reclaman del pool (DEC-127, DEC-152); `supervisor`/`coordinador` solo leen y reciben `403` (DEC-131). Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo` (Addendum §4 punto 5).
          *     En `tipo=solicitud` solo reclama `cotizacion`, que forma un solo pool (DEC-148 #31); el `ejecutivo` recibe `403`.
          */
         post: operations["reclamarConversacion"];
@@ -229,7 +229,7 @@ export interface paths {
         post?: never;
         /**
          * Liberar el reclamo y devolver el trabajo al pool.
-         * @description Lo hace el responsable. En V1 un `supervisor`/`coordinador` NO libera una conversación ajena (DEC-118) y recibe `403` (DEC-131).
+         * @description En `tipo=viaje`, `ejecutivo` y `administrador` liberan solo su propio reclamo (DEC-152 #11). Un `supervisor`/`coordinador` NO libera una conversación ajena (DEC-118) y recibe `403` (DEC-131).
          *     En `tipo=solicitud` lo hace el responsable de `cotizacion` y la conversación vuelve al pool de `cotizacion` con su historia (DEC-148 #31).
          */
         delete: operations["liberarReclamo"];
@@ -370,7 +370,7 @@ export interface paths {
         put?: never;
         /**
          * Activar una emergencia sobre el viaje (idempotente por activacion_id).
-         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por cliente (DEC-149 #6), activan el caso (ADR 21 §1, DEC-045 #9); otro rol interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde `APROBADO` (el viaje nace ahí, DEC-148 #5) en estados no terminales; denegada en `CERRADO` y `CANCELADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje (DT-16).
+         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por cliente (DEC-149 #6), o el `administrador` (DEC-152), activan el caso (ADR 21 §1, DEC-045 #9); otro rol interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde `APROBADO` (el viaje nace ahí, DEC-148 #5) en estados no terminales; denegada en `CERRADO` y `CANCELADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje (DT-16).
          *     Idempotente por `activacion_id` del llamante (ADR 21 §2, mismo patrón que `enviarMensaje`): reentregar la misma activación devuelve el MISMO caso con 200 y no crea un duplicado; una pulsación nueva con otro `activacion_id` crea OTRO caso con 201, aunque ya exista uno abierto. No crea incidencia ni condición.
          */
         post: operations["activarEmergencia"];
