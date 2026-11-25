@@ -267,7 +267,7 @@ export interface paths {
         head?: never;
         /**
          * Completar o editar la fecha/hora del servicio del viaje (audiencia interna).
-         * @description Reenvía a `operacion.completarFechaHora`. Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. No es un cambio de estado; sólo exige que el viaje no esté en un estado terminal. Solo `jefe_operativo` y `administrador`; `supervisor` y `coordinador` reciben `403` (DEC-152). Devuelve el detalle interno recompuesto para refrescar la vista sin un segundo GET.
+         * @description Reenvía a `operacion.completarFechaHora`. Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. No es un cambio de estado; sólo exige que el viaje no esté en un estado terminal. La fecha debe ser posterior al instante de guardar; una fecha pasada o igual responde `400` (DEC-152 #14). Solo `jefe_operativo` y `administrador`; `supervisor` y `coordinador` reciben `403` (DEC-152). Devuelve el detalle interno recompuesto para refrescar la vista sin un segundo GET.
          */
         patch: operations["completarFechaHora"];
         trace?: never;
@@ -715,7 +715,7 @@ export interface paths {
         };
         /**
          * Detalle de una conversación (estado inicial para bootstrap).
-         * @description Reenvía a `mensajeria.obtenerConversacion` con audiencia Interno. Leen el `ejecutivo` y, solo en lectura, `supervisor`/`coordinador` (DEC-131), sin acotar por el tenant de quien pregunta (DEC-129); otro rol interno recibe `403`. Poseer el UUID no autoriza (Addendum §7): una conversación inexistente responde 404. `ultima_secuencia` es el cursor de dominio del bootstrap (ADR 28 §2).
+         * @description Reenvía a `mensajeria.obtenerConversacion` con audiencia Interno. Leen el `ejecutivo`, `administrador` (DEC-152) y, solo en lectura, `supervisor`/`coordinador` (DEC-131). El Administrador solo abre chats de viaje visibles en su bandeja, no los dirigidos a otro (DEC-128); no se acota por el tenant de quien pregunta (DEC-129). Otro rol interno recibe `403`. Poseer el UUID no autoriza (Addendum §7): una conversación inexistente responde 404. `ultima_secuencia` es el cursor de dominio del bootstrap (ADR 28 §2).
          *     Conversación `tipo=solicitud` (V2, DEC-148 #12, #28, #31): la leen `cotizacion` y `administrador`; `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` reciben `403`.
          */
         get: operations["obtenerConversacion"];
@@ -738,14 +738,14 @@ export interface paths {
         };
         /**
          * Historia de mensajes por secuencia canónica.
-         * @description Reenvía a `mensajeria.listarMensajes` con audiencia Interno. `antes_de` pagina la historia hacia atrás; `despues_de` es la recuperación tras reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin ninguno, devuelve los más recientes. El orden es siempre por `secuencia`, nunca por `creado_en`. Mismo acceso que `obtenerConversacion`: `supervisor`/`coordinador` leen (DEC-131).
+         * @description Reenvía a `mensajeria.listarMensajes` con audiencia Interno. `antes_de` pagina la historia hacia atrás; `despues_de` es la recuperación tras reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin ninguno, devuelve los más recientes. El orden es siempre por `secuencia`, nunca por `creado_en`. Mismo acceso que `obtenerConversacion`: `supervisor`/`coordinador` y `administrador` leen (DEC-131, DEC-152); el Administrador solo ve chats de viaje visibles en su bandeja.
          *     Conversación `tipo=solicitud` (V2, DEC-148 #12, #28, #31): la leen `cotizacion` y `administrador`; `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` reciben `403`.
          */
         get: operations["listarMensajes"];
         put?: never;
         /**
          * Enviar un mensaje interno (idempotente por client_message_id).
-         * @description Reenvía a `mensajeria.enviarMensaje` con audiencia Interno. El interno requiere rol `ejecutivo`, RECLAMO ACTIVO y `version_reclamo_esperada` (Addendum §7); `supervisor`/`coordinador` solo leen y reciben `403` (DEC-131). Reintentar el mismo `client_message_id` devuelve el mensaje original con 200 y nunca crea un segundo mensaje.
+         * @description Reenvía a `mensajeria.enviarMensaje` con audiencia Interno. El interno requiere rol `ejecutivo` o `administrador`, reclamo propio activo y `version_reclamo_esperada` (Addendum §7, DEC-152 #11); `supervisor`/`coordinador` solo leen y reciben `403` (DEC-131). Reintentar el mismo `client_message_id` devuelve el mensaje original con 200 y nunca crea un segundo mensaje.
          *     En una conversación `tipo=solicitud` (V2, DEC-148 #31) el interno es `cotizacion`, con RECLAMO ACTIVO y `version_reclamo_esperada`, o el `administrador`, que interviene por herencia (#20). No hay override de `supervisor` ni de `coordinador`; el `ejecutivo` recibe `403`. La intervención del `administrador` se audita como el override de Supervisor (DEC-148 #47).
          */
         post: operations["enviarMensaje"];
@@ -768,7 +768,7 @@ export interface paths {
         put?: never;
         /**
          * Reclamar la conversación con versión esperada.
-         * @description Reenvía a `mensajeria.reclamarConversacion`. Solo el rol `ejecutivo` (DEC-127); `supervisor`/`coordinador` reciben `403` (DEC-131). Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo` (Addendum §4 punto 5).
+         * @description Reenvía a `mensajeria.reclamarConversacion`. En `tipo=viaje`, reclaman `ejecutivo` y `administrador` (DEC-127, DEC-152 #11); `supervisor`/`coordinador` reciben `403` (DEC-131). Dos reclamos concurrentes producen un ganador; el perdedor recibe 409 `conflicto_version_reclamo` (Addendum §4 punto 5).
          *     En `tipo=solicitud` solo reclama `cotizacion`, que forma un solo pool (DEC-148 #31); el `ejecutivo` recibe `403`.
          */
         post: operations["reclamarConversacion"];
@@ -794,7 +794,7 @@ export interface paths {
         post?: never;
         /**
          * Liberar el reclamo y devolver el trabajo al pool.
-         * @description Reenvía a `mensajeria.liberarReclamo`. Lo hace el responsable; en V1 un `supervisor`/`coordinador` NO libera una conversación ajena (DEC-118) y recibe `403` (DEC-131).
+         * @description Reenvía a `mensajeria.liberarReclamo`. En `tipo=viaje`, `ejecutivo` y `administrador` liberan solo su reclamo propio (DEC-152 #11); un `supervisor`/`coordinador` NO libera una conversación ajena (DEC-118) y recibe `403` (DEC-131).
          *     En `tipo=solicitud` lo hace el responsable de `cotizacion` y la conversación vuelve al pool de `cotizacion` con su historia (DEC-148 #31).
          */
         delete: operations["liberarReclamo"];
@@ -1138,8 +1138,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Listar clientes seleccionables para crear un viaje (audiencia interna).
-         * @description Reenvía a `catalogos.listarClientes`. Devuelve los clientes `activo` dentro del alcance del llamante (DEC-026 #3). Lo leen `jefe_operativo` y `administrador` (el Administrador puede todo, DEC-152): los fuera de alcance no se muestran, y asociar uno por `cliente_id` manipulado se rechaza al crear el viaje. Paginado por cursor. El frontend sólo consume la respuesta y envía el `cliente_id` elegido.
+         * Listar clientes activos para el selector y la bandeja (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.listarClientes` y devuelve todos los clientes `activo`, paginados por cursor, para el selector de viaje y los nombres de la bandeja (DEC-118 #1, DEC-152 #15). Este listado no filtra por alcance ni autoriza crear o asociar un viaje; esas facultades se comprueban en la operación de escritura.
          */
         get: operations["listarClientes"];
         put?: never;
@@ -1256,13 +1256,13 @@ export interface paths {
         };
         /**
          * Listar vehículos de la flota (audiencia interna).
-         * @description Solo audiencia Interno. Reenvía a `catalogos.listarVehiculos`, paginado por cursor, con vehículos activos e inactivos (`catalogos` no filtra por estado). Leen `jefe_operativo` y `administrador`.
+         * @description Solo audiencia Interno. Reenvía a `catalogos.listarVehiculos`, paginado por cursor, con vehículos activos e inactivos (`catalogos` no filtra por estado). Leen `jefe_operativo`, `coordinador` y `administrador`.
          */
         get: operations["listarVehiculos"];
         put?: never;
         /**
-         * Alta de un vehículo (audiencia interna, solo administrador).
-         * @description Solo audiencia Interno. Reenvía a `catalogos.crearVehiculo`, que crea la versión 1. Escribe solo `administrador` (DEC-142 #6).
+         * Alta de un vehículo (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.crearVehiculo`, que crea la versión 1. Escriben `coordinador` y `administrador` (DEC-152 #3).
          */
         post: operations["crearVehiculo"];
         delete?: never;
@@ -1282,7 +1282,7 @@ export interface paths {
         };
         /**
          * Vehículo vigente (audiencia interna).
-         * @description Solo audiencia Interno. Reenvía a `catalogos.obtenerVehiculo` y devuelve la versión vigente. Leen `jefe_operativo` y `administrador`.
+         * @description Solo audiencia Interno. Reenvía a `catalogos.obtenerVehiculo` y devuelve la versión vigente. Leen `jefe_operativo`, `coordinador` y `administrador`.
          */
         get: operations["obtenerVehiculo"];
         put?: never;
@@ -1291,8 +1291,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Modifica un vehículo creando una nueva versión (audiencia interna, solo administrador).
-         * @description Solo audiencia Interno. Reenvía a `catalogos.actualizarVehiculo`, que no sobrescribe: crea la versión siguiente. Activar o desactivar es cambiar `estado`. Escribe solo `administrador` (DEC-142 #6).
+         * Modifica un vehículo creando una nueva versión (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.actualizarVehiculo`, que no sobrescribe: crea la versión siguiente. Activar o desactivar es cambiar `estado`. Escriben `coordinador` y `administrador` (DEC-152 #3).
          */
         patch: operations["actualizarVehiculo"];
         trace?: never;
@@ -1306,13 +1306,13 @@ export interface paths {
         };
         /**
          * Listar custodios (audiencia interna).
-         * @description Solo audiencia Interno. Reenvía a `catalogos.listarCustodios`, paginado por cursor, con custodios activos e inactivos (`catalogos` no filtra por estado). Leen `jefe_operativo` y `administrador`.
+         * @description Solo audiencia Interno. Reenvía a `catalogos.listarCustodios`, paginado por cursor, con custodios activos e inactivos (`catalogos` no filtra por estado). Leen `jefe_operativo`, `coordinador` y `administrador`.
          */
         get: operations["listarCustodios"];
         put?: never;
         /**
-         * Alta de un custodio (audiencia interna, solo administrador).
-         * @description Solo audiencia Interno. Reenvía a `catalogos.crearCustodio`, que crea la versión 1. Escribe solo `administrador` (DEC-142 #6).
+         * Alta de un custodio (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.crearCustodio`, que crea la versión 1. Escriben `coordinador` y `administrador` (DEC-152 #3).
          */
         post: operations["crearCustodio"];
         delete?: never;
@@ -1332,7 +1332,7 @@ export interface paths {
         };
         /**
          * Custodio vigente (audiencia interna).
-         * @description Solo audiencia Interno. Reenvía a `catalogos.obtenerCustodio` y devuelve la versión vigente. Leen `jefe_operativo` y `administrador`.
+         * @description Solo audiencia Interno. Reenvía a `catalogos.obtenerCustodio` y devuelve la versión vigente. Leen `jefe_operativo`, `coordinador` y `administrador`.
          */
         get: operations["obtenerCustodio"];
         put?: never;
@@ -1341,8 +1341,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Modifica un custodio creando una nueva versión (audiencia interna, solo administrador).
-         * @description Solo audiencia Interno. Reenvía a `catalogos.actualizarCustodio`, que no sobrescribe: crea la versión siguiente. Activar o desactivar es cambiar `estado`. Escribe solo `administrador` (DEC-142 #6).
+         * Modifica un custodio creando una nueva versión (audiencia interna).
+         * @description Solo audiencia Interno. Reenvía a `catalogos.actualizarCustodio`, que no sobrescribe: crea la versión siguiente. Activar o desactivar es cambiar `estado`. Escriben `coordinador` y `administrador` (DEC-152 #3).
          */
         patch: operations["actualizarCustodio"];
         trace?: never;

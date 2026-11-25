@@ -110,8 +110,10 @@ paths:
       description: >-
         Igual que `listarTrabajoBandeja` pero SIN `{id}`: `mensajeria` resuelve
         la bandeja única de chat (cola única e implícita, DEC-103) por el rol
-        del sujeto: `ejecutivo` es miembro por su rol (DEC-127), y `supervisor`
-        y `coordinador` la leen sin poder reclamar ni escribir (DEC-131). Otro
+        del sujeto: `ejecutivo` es miembro por su rol (DEC-127), el
+        `administrador` ve y atiende los viajes como Ejecutivo (DEC-152), y
+        `supervisor` y `coordinador` la leen sin poder reclamar ni escribir
+        (DEC-131). Otro
         rol responde `404` (no tiene bandeja), igual que una bandeja
         inexistente. Sin acotar por el tenant de quien pregunta (DEC-129).
         `desde_revision` y `cursor` funcionan igual que en la ruta con `{id}`;
@@ -192,8 +194,9 @@ paths:
       description: >-
         Requiere MEMBRESÍA EFECTIVA en el pool de la bandeja. En la bandeja
         única de chat la membresía es el rol `ejecutivo` (DEC-127), y
-        `supervisor`/`coordinador` la leen (DEC-131) y el `administrador` la ve
-        y escribe como `ejecutivo` (DEC-152); en la de emergencias, el rol
+        `supervisor`/`coordinador` la leen (DEC-131). La bandeja de trabajo
+        del `administrador` se consulta sin `{id}` con
+        `listarTrabajoMiBandeja` (DEC-152); en emergencias, el rol
         `reaccion` (DEC-130).
 
         Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la
@@ -255,8 +258,9 @@ paths:
       tags: [conversaciones]
       summary: Detalle de una conversación (estado inicial para bootstrap).
       description: >-
-        Leen el Cliente de la empresa dueña, el `ejecutivo` y, solo en lectura,
-        `supervisor`/`coordinador` (DEC-131). Poseer el UUID no autoriza
+        Leen el Cliente de la empresa dueña, el `ejecutivo`, el
+        `administrador` en chats visibles de viaje (DEC-152) y, solo en
+        lectura, `supervisor`/`coordinador` (DEC-131). Poseer el UUID no autoriza
         (Addendum §7): el Cliente de otra empresa recibe 404, igual que si no
         existiera. El interno no se acota por tenant (DEC-129): otro rol interno
         recibe `403`. `ultima_secuencia` es el cursor de dominio del bootstrap
@@ -293,8 +297,9 @@ paths:
         ésa; si sólo tiene conversaciones cerradas, la más reciente.
 
         Audiencia: el Cliente de la empresa dueña del viaje y, por audiencia
-        Interno, los mismos roles que `obtenerConversacion` (`ejecutivo`;
-        `supervisor`/`coordinador` solo leen, DEC-131), sin acotar por el tenant
+        Interno, los mismos roles que `obtenerConversacion` (`ejecutivo` y
+        `administrador`; `supervisor`/`coordinador` solo leen, DEC-131/152),
+        sin acotar por el tenant
         de quien pregunta (DEC-129). Poseer el `viaje_id` no autoriza (Addendum
         §7): el Cliente de otra empresa recibe 404, igual que si el viaje
         todavía no tuviera conversación; otro rol interno recibe `403`.
@@ -364,7 +369,9 @@ paths:
         recuperación tras reconexión y cierra huecos (Addendum §9). Son
         mutuamente excluyentes; sin ninguno, devuelve los más recientes. El
         orden es siempre por `secuencia`, nunca por `creado_en`. Mismo acceso
-        que `obtenerConversacion`: `supervisor`/`coordinador` leen (DEC-131).
+        que `obtenerConversacion`: `administrador` lee los chats visibles de
+        viaje aunque otro los esté atendiendo (DEC-152); también leen
+        `supervisor`/`coordinador` (DEC-131).
 
         Conversación `tipo=solicitud` (V2, DEC-148 #12, #28, #31): la leen `cotizacion` y `administrador`; `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` reciben `403`.
       parameters:
@@ -398,9 +405,10 @@ paths:
       summary: Enviar un mensaje (idempotente por client_message_id).
       description: >-
         El cliente puede enviar mientras la conversación admita escritura. Un
-        interno requiere rol `ejecutivo`, RECLAMO ACTIVO y
-        `version_reclamo_esperada`, salvo override explícito de supervisor con
-        `motivo_override` (Addendum §7; cerrado en V1, DEC-107). `supervisor` y
+        interno de `tipo=viaje` requiere rol `ejecutivo` o `administrador`,
+        reclamo propio ACTIVO y
+        `version_reclamo_esperada` (Addendum §7). El override de Supervisor
+        permanece cerrado en V1 (DEC-107); `supervisor` y
         `coordinador` solo leen conversaciones (DEC-131): enviar les responde
         `403`.
         Reintentar el mismo `client_message_id` devuelve el mensaje original
@@ -447,7 +455,8 @@ paths:
       tags: [reclamos]
       summary: Reclamar la conversación con versión esperada.
       description: >-
-        Solo el rol `ejecutivo` (DEC-127); `supervisor`/`coordinador` solo leen
+        En `tipo=viaje`, `ejecutivo` y `administrador` reclaman del pool
+        (DEC-127, DEC-152); `supervisor`/`coordinador` solo leen
         y reciben `403` (DEC-131). Dos reclamos concurrentes producen un
         ganador; el perdedor recibe 409 `conflicto_version_reclamo` (Addendum
         §4 punto 5).
@@ -482,7 +491,8 @@ paths:
       tags: [reclamos]
       summary: Liberar el reclamo y devolver el trabajo al pool.
       description: >-
-        Lo hace el responsable. En V1 un `supervisor`/`coordinador` NO libera
+        En `tipo=viaje`, `ejecutivo` y `administrador` liberan solo su propio
+        reclamo (DEC-152 #11). Un `supervisor`/`coordinador` NO libera
         una conversación ajena (DEC-118) y recibe `403` (DEC-131).
 
         En `tipo=solicitud` lo hace el responsable de `cotizacion` y la conversación vuelve al pool de `cotizacion` con su historia (DEC-148 #31).

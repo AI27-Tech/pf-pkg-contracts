@@ -164,7 +164,7 @@ export interface paths {
         head?: never;
         /**
          * Completar o editar la fecha/hora del servicio del viaje.
-         * @description Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. NO valida contra el grafo de transiciones —no es un cambio de estado—; sólo exige que el viaje no esté en un estado terminal, igual que `fijarEta`. Solo `jefe_operativo` y `administrador`; `supervisor` y `coordinador` reciben `403` (DEC-152).
+         * @description Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. NO valida contra el grafo de transiciones —no es un cambio de estado—; sólo exige que el viaje no esté en un estado terminal, igual que `fijarEta`. La nueva fecha y hora deben ser posteriores al instante de guardar; una fecha pasada o igual responde `400` (DEC-152 #14). Solo `jefe_operativo` y `administrador`; `supervisor` y `coordinador` reciben `403` (DEC-152).
          */
         patch: operations["completarFechaHora"];
         trace?: never;

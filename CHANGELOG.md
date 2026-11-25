@@ -3,23 +3,27 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
-## 2026-11-24 [tracer.48] — documentación del contrato: roles por operación (DEC-152 #10)
+## 2026-11-25 13:39 [tracer.48] — documentación del contrato: roles por operación (DEC-152)
 
-**EN ESPERA (DEC-148 #78):** no fusionar ni taguear hasta que el backend coincida con DEC-152. Apilada sobre `tracer.47`.
+**EN ESPERA (DEC-148 #78):** no fusionar ni taguear hasta verificar la promoción de los servicios a `-m`. PR basado en `pf-contracts-d` tras la integración de `tracer.47`.
 
-**Para quién:** `pf-web-frontend-internal` (qué rol puede qué operación), `pf-svc-bff`, `pf-svc-operacion` y `pf-svc-mensajeria` (guardas de rol por llevar).
+**Para quién:** `pf-web-frontend-internal` (qué rol puede qué operación), `pf-svc-bff`, `pf-svc-operacion` y `pf-svc-mensajeria` (guardas verificadas en sus ramas `-d`).
 
-**Resumen:** ola aditiva que SOLO cambia descripciones de `operacion.yaml`, `bff.yaml` y `mensajeria.yaml`. Ninguna forma cambia: ni campos, ni tipos, ni enums, ni `required`. Los textos describen lo DECIDIDO en DEC-152, no lo que el backend hace hoy.
+**Resumen:** ola aditiva que SOLO cambia descripciones de `operacion.yaml`, `bff.yaml` y `mensajeria.yaml`. Ninguna forma cambia: ni campos, ni tipos, ni enums, ni `required`. Los textos describen lo decidido en DEC-152 y lo verificado en `-d`.
 
 **Cambios:**
-- Roles por operación (DEC-152): `listarClientes` incluye `administrador`; `listarViajes`, `obtenerViaje`, `obtenerViajeInterno` y `obtenerAsignacion` excluyen `cotizacion`; `resolverIncidencia` la resuelven `supervisor`, `coordinador` y `administrador`; `listarTrabajoBandeja` y `activarEmergencia`/`activarEmergenciaInterno` incluyen `administrador`; `completarFechaHora` solo `jefe_operativo` y `administrador`; `crearIntencionSubidaAdjunto` para `monitorista`, `supervisor`, `coordinador` y `administrador`.
+- Roles por operación (DEC-152): `listarClientes` admite audiencia Interna; `listarViajes`, `obtenerViaje`, `obtenerViajeInterno` y `obtenerAsignacion` excluyen `cotizacion`; `resolverIncidencia` la resuelven `supervisor`, `coordinador` y `administrador`; la bandeja implícita de trabajo y `activarEmergencia`/`activarEmergenciaInterno` incluyen `administrador`; `completarFechaHora` solo `jefe_operativo` y `administrador`; `crearIntencionSubidaAdjunto` para `monitorista`, `supervisor`, `coordinador` y `administrador`.
+- `listarClientes` del BFF es de audiencia Interna: comparte el listado de todos los clientes activos entre el selector de viajes y los nombres de la bandeja (DEC-118 #1, DEC-152 #15). No promete filtro por alcance ni limita el endpoint a dos roles. No cambia la autorización de escritura del viaje.
+- El Coordinador lee y escribe vehículos y custodios; el Jefe Operativo solo lee (DEC-152 #3 y #12). En los chats de viaje visibles, el Administrador lee aunque haya reclamo ajeno y puede reclamar, enviar y liberar únicamente su reclamo propio (DEC-152 #11); no se le habilitan la bandeja por ID, transferencia, atendida ni recibos. `completarFechaHora` exige una fecha posterior al momento de guardar (DEC-152 #14).
 - `VERSION` y `packages/api-client-ts/package.json` a `0.1.0-tracer.48`. Regenerados los clientes TS (solo cambian comentarios; los Go no cambian). `info.version` de los YAML no se toca, igual que en las olas anteriores.
 
 **Compatibilidad:** sin cambio de forma.
 
-**Aviso, spec contra realidad (DEC-152):** hasta que lleguen sus tareas de backend, algunas guardas siguen más abiertas o más cerradas que lo documentado y el panel puede recibir `403`, `404` o `200` distinto. Ver el PR.
+**Aviso de entrega:** las guardas de `bff`, `operacion` y `mensajeria` están en `-d`. No publicar esta ola antes de que sus versiones estén promovidas a `-m`. Después de publicar el contrato, actualizar los pines de `core`.
 
 **Aviso al subir el pin del cliente Go (git-workflow §8):** sin enums nuevos ni constantes renombradas.
+
+**Archivos modificados:** `contracts/openapi/{bff,operacion,mensajeria}.yaml`, `packages/api-client-ts/src/openapi/{bff,operacion,mensajeria}.gen.ts`, `VERSION`, `packages/api-client-ts/package.json` y `CHANGELOG.md`.
 
 ## 2026-11-24 [tracer.47] — documentación del contrato: fecha pasada, pago tardío, `null` oculto, moneda y destino de transferencia (DEC-148 #62 a #77)
 
