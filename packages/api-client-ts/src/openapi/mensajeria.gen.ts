@@ -253,6 +253,7 @@ export interface paths {
          * Transferir la responsabilidad a otro miembro del pool.
          * @description Lo hace el responsable; en V1 un `supervisor`/`coordinador` NO transfiere una conversación ajena (DEC-118) y recibe `403` (DEC-131). Cierra el reclamo anterior y abre el siguiente en UNA transacción: no hay ventana sin responsable ni con dos (Addendum §6).
          *     En `tipo=solicitud` el destino debe ser un usuario con rol `cotizacion` (DEC-148 #31; E10-HU-038, escenario 5). Otro destino (por ejemplo un `ejecutivo`) responde `409` con `codigo` `destino_no_es_cotizacion`, y el reclamo del llamante no cambia.
+         *     `responsable_destino_id` depende del tipo de conversación. En `tipo=solicitud` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje` es el `sub` del token del destinatario, sin traducción y sin validar su rol; un `sub`, conocido o no, se acepta. Si el valor resuelve como id de sujeto y no como `sub` conocido, responde `409` con `codigo` `destino_invalido_en_viaje` y el reclamo del llamante no cambia (DEC-148 #76). Esa guarda corre después de verificar al responsable y la versión esperada: quien no es el responsable recibe `403`, también el `administrador`, cuyo override es solo de la solicitud. Ampliar la traducción a `tipo=viaje` y a las emergencias está pendiente (DT-28).
          */
         post: operations["transferirConversacion"];
         delete?: never;
@@ -468,7 +469,7 @@ export interface paths {
         put?: never;
         /**
          * Transferir la responsabilidad del caso a otro miembro de Reacción.
-         * @description Cierra el reclamo anterior y abre el siguiente en UNA transacción; no hay ventana sin responsable ni con dos. La transferencia conserva el estado del caso (ADR 21 §5).
+         * @description Cierra el reclamo anterior y abre el siguiente en UNA transacción; no hay ventana sin responsable ni con dos. La transferencia conserva el estado del caso (ADR 21 §5). `responsable_destino_id` es el `sub` del token del destinatario, sin traducción del id del sujeto y sin validar su rol ni su pertenencia a Reacción; un `sub`, conocido o no, se acepta. Si el valor resuelve como id de sujeto y no como `sub` conocido, responde `409` con `codigo` `destino_invalido_en_viaje` y el reclamo del llamante no cambia (DEC-148 #77). Esa guarda corre después de verificar el reclamo vigente, la versión esperada y que el actor sea el responsable o tenga mando (quien no lo es recibe `403`) y antes de escribir. El `409` de esta operación trae `conflicto_version_reclamo` o `destino_invalido_en_viaje`. Traducir el id del sujeto en `identidad` aplica solo a `transferirConversacion` en `tipo=solicitud`; ampliarlo a `tipo=viaje` y a las emergencias está pendiente (DT-28).
          */
         post: operations["transferirEmergencia"];
         delete?: never;
@@ -655,7 +656,7 @@ export interface paths {
         put?: never;
         /**
          * Transferir el caso por su id a otro miembro de Reacción.
-         * @description Gemela de `transferirEmergencia` sin `{id}` de viaje. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso (ADR 21 §5).
+         * @description Gemela de `transferirEmergencia` sin `{id}` de viaje. En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131, atajo de DEC-099; DT-06). Un miembro de Reacción que no es el responsable, y cualquier otro rol, recibe `403`. El destino debe ser de rol `reaccion` (DEC-130), pero `mensajeria` no lo verifica. Cierra el reclamo anterior y abre el siguiente en UNA transacción; conserva el estado del caso (ADR 21 §5). `responsable_destino_id` es el `sub` del token del destinatario, sin traducción del id del sujeto y sin validar su rol ni su pertenencia a Reacción; un `sub`, conocido o no, se acepta. Si el valor resuelve como id de sujeto y no como `sub` conocido, responde `409` con `codigo` `destino_invalido_en_viaje` y el reclamo del llamante no cambia (DEC-148 #77). Esa guarda corre después de verificar el reclamo vigente, la versión esperada y que el actor sea el responsable o tenga mando (quien no lo es recibe `403`) y antes de escribir. El `409` de esta operación trae `conflicto_version_reclamo` o `destino_invalido_en_viaje`. Traducir el id del sujeto en `identidad` aplica solo a `transferirConversacion` en `tipo=solicitud`; ampliarlo a `tipo=viaje` y a las emergencias está pendiente (DT-28).
          */
         post: operations["transferirEmergenciaPorId"];
         delete?: never;
@@ -836,6 +837,7 @@ export interface components {
             /** @description Override explícito de supervisor; se audita con este motivo. Ausente en el envío normal. */
             motivo_override?: string;
         };
+        /** @description `responsable_id` es el `sub` del token del responsable, NO el id del sujeto en `identidad`. Es distinto del `responsable_destino_id` de una transferencia en `tipo=solicitud`, que sí es el id del sujeto (`TransferenciaEntrada.responsable_destino_id`). Con el contrato actual el nombre del responsable no se puede resolver desde este id: es el hueco de DT-28 y esta ola no agrega campos (DEC-148 #74). */
         Reclamo: {
             id: components["schemas"]["Id"];
             conversacion_id: components["schemas"]["Id"];
@@ -850,7 +852,7 @@ export interface components {
         };
         TransferenciaEntrada: {
             version_esperada: components["schemas"]["VersionReclamo"];
-            /** @description Miembro del pool con membresía efectiva en la bandeja. */
+            /** @description Depende del tipo de conversación. En `transferirConversacion` con `tipo=solicitud` es el id del sujeto en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje` es el `sub` del token del destinatario, sin traducción y sin validar su rol; si el valor resuelve como id de sujeto y no como `sub` conocido, responde `409` `destino_invalido_en_viaje` (DEC-148 #76). En `transferirEmergencia` y `transferirEmergenciaPorId` es el `sub` sin traducción y sin validar su rol, con el mismo único rechazo: `409` `destino_invalido_en_viaje` si resuelve como id de sujeto y no como `sub` conocido (DEC-148 #77). Traducir el id del sujeto en `tipo=viaje` y en las emergencias está pendiente (DT-28). Cambia el significado de un campo ya publicado en `tipo=solicitud`, no su forma. */
             responsable_destino_id: components["schemas"]["Id"];
             motivo?: string;
         };
@@ -1434,7 +1436,7 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
-            /** @description `codigo` de máquina `conflicto_version_reclamo` (la versión esperada del reclamo no coincide con la vigente) o, en una conversación `tipo=solicitud`, `destino_no_es_cotizacion` (el destino no tiene el rol `cotizacion`; el reclamo del llamante no cambia). */
+            /** @description `codigo` de máquina `conflicto_version_reclamo` (la versión esperada del reclamo no coincide con la vigente), en una conversación `tipo=solicitud`, `destino_no_es_cotizacion` (el destino no tiene el rol `cotizacion`) o, en una conversación `tipo=viaje`, `destino_invalido_en_viaje` (el destino es un id de sujeto y no un `sub` conocido). En los dos últimos el reclamo del llamante no cambia. */
             409: {
                 headers: {
                     [name: string]: unknown;

@@ -3,6 +3,24 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-24 [tracer.47] — documentación del contrato: fecha pasada, pago tardío, `null` oculto, moneda y destino de transferencia (DEC-148 #62 a #77)
+
+**Para quién:** `pf-web-frontend-internal` y `pf-web-frontend-client` (qué significa cada respuesta), `pf-svc-bff`, `pf-svc-operacion` y `pf-svc-mensajeria` (el texto del contrato describe lo que el backend ya hace).
+
+**Resumen:** ola aditiva que SOLO cambia descripciones de `operacion.yaml`, `bff.yaml` y `mensajeria.yaml`. Ninguna forma cambia: ni campos, ni tipos, ni enums, ni `required`. Los textos se verificaron contra `pf-svc-operacion` `v0.1.22`.
+
+**Cambios:**
+- Fecha del servicio en el pasado (DEC-148 #66, #68): crear solicitud con fecha, cotizar y reprogramar responden `400` sin `codigo` propio; aprobar responde `409` con `codigo` `fecha_hora_servicio_pasada`, que se agrega a la lista de códigos del `409` de `aprobarSolicitud`. La regla es "posterior al instante actual", medido en `America/Mexico_City`.
+- Pago tardío (DEC-148 #64): `confirmarPago` documenta que un segundo `VENCIDA → PAGADO` responde `409` con `codigo` `transicion_no_permitida`.
+- `null` es "oculto" (DEC-148 #67, #73): `Solicitud.cotizacion` y `Solicitud.pago` ya no dicen "null mientras no se ha cotizado". Para `jefe_operativo` siempre llegan `null` y significa oculto. En `HistoricoSolicitudItem`, ese rol no recibe el objeto `cotizacion` ni el `motivo` de `pago_revertido`; el `motivo` de `reprogramada` sí.
+- Moneda y monto (DEC-148 #62): la moneda aceptada es solo `MXN` (`operacion` responde `400` con otra); el campo sigue siendo `string`, no enum. Se quita lo de "catálogo pendiente". El monto admite cero y rechaza negativos.
+- Destino de la transferencia (DEC-148 #74, DT-28): `TransferenciaEntrada.responsable_destino_id` pasa a significar el id del sujeto en `identidad` (`UsuarioAdmin.id`) SOLO en `transferirConversacion` con `tipo=solicitud` (E10-HU-038): `mensajeria` lo traduce a `idp_subject` y valida el rol `cotizacion` en la misma transacción. En `tipo=viaje` sigue siendo el `sub` del token, sin traducción ni validar su rol, con un solo rechazo: si el valor resuelve como id de sujeto y no como `sub` conocido, `409` con `codigo` `destino_invalido_en_viaje` (DEC-148 #76; pf-svc-mensajeria #72; el `administrador` recibe `403` antes). En `transferirEmergencia` y `transferirEmergenciaPorId` sigue siendo el `sub`, sin traducción ni validar su rol, con el mismo único rechazo: `409` `destino_invalido_en_viaje` (DEC-148 #77; pf-svc-mensajeria #73), que corre tras verificar el reclamo vigente, la versión y que el actor sea el responsable o tenga mando, y antes de escribir; la traducción del id del sujeto en `tipo=viaje` y en las emergencias sigue pendiente (DT-28). `Reclamo.responsable_id` sigue siendo el `sub`; el nombre del responsable no se puede resolver con el contrato actual (hueco de DT-28, sin campos nuevos).
+- `VERSION` y `packages/api-client-ts/package.json` a `0.1.0-tracer.47`. Regenerados los clientes Go y TS (solo cambian comentarios). `info.version` de los YAML no se toca, igual que en las olas anteriores.
+
+**Compatibilidad:** sin cambio de forma. `responsable_destino_id` cambia de significado en `tipo=solicitud` sin cambio de forma; ningún frontend lo usa todavía (DEC-148 #74).
+
+**Aviso al subir el pin del cliente Go (git-workflow §8):** sin enums nuevos ni constantes renombradas.
+
 ## 2026-11-20 [tracer.46] — `idp_subject` en los eventos de rol y de ciclo de vida del sujeto (DEC-148 #59)
 
 **Para quién:** `pf-svc-identidad` (llenar `idp_subject` al publicar) y `pf-svc-mensajeria` (resolver el `sub` del token con él; la transferencia de conversación #68 no se habilita hasta publicar esta ola).
