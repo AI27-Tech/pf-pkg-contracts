@@ -5,7 +5,7 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 
 ## 2026-11-25 13:39 [tracer.48] — documentación del contrato: roles por operación (DEC-152)
 
-**EN ESPERA (DEC-148 #78):** no fusionar ni taguear hasta verificar la promoción de los servicios a `-m`. PR basado en `pf-contracts-d` tras la integración de `tracer.47`.
+**Condición cumplida (DEC-148 #78):** `bff` `v0.1.26`, `operacion` `v0.1.23` y `mensajeria` `v0.1.12` están en `-m` y tagueados. Ola lista para revisión; el merge y los dos tags de este contrato los hace el Lead.
 
 **Para quién:** `pf-web-frontend-internal` (qué rol puede qué operación), `pf-svc-bff`, `pf-svc-operacion` y `pf-svc-mensajeria` (guardas verificadas en sus ramas `-d`).
 
@@ -19,7 +19,7 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 
 **Compatibilidad:** sin cambio de forma.
 
-**Aviso de entrega:** las guardas de `bff`, `operacion` y `mensajeria` están en `-d`. No publicar esta ola antes de que sus versiones estén promovidas a `-m`. Después de publicar el contrato, actualizar los pines de `core`.
+**Aviso de entrega:** las guardas ya están en `-m` y tagueadas. Al publicar este contrato, actualizar los pines de `core`.
 
 **Aviso al subir el pin del cliente Go (git-workflow §8):** sin enums nuevos ni constantes renombradas.
 
