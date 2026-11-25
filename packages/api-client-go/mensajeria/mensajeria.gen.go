@@ -347,7 +347,7 @@ type ReciboEntrada struct {
 	HastaSecuencia SecuenciaMensaje `json:"hasta_secuencia"`
 }
 
-// Reclamo defines model for Reclamo.
+// Reclamo `responsable_id` es el `sub` del token del responsable, NO el id del sujeto en `identidad`. Es distinto del `responsable_destino_id` de una transferencia en `tipo=solicitud`, que sí es el id del sujeto (`TransferenciaEntrada.responsable_destino_id`). Con el contrato actual el nombre del responsable no se puede resolver desde este id: es el hueco de DT-28 y esta ola no agrega campos (DEC-148 #74).
 type Reclamo struct {
 	// AbiertoEn Instante en UTC, RFC 3339.
 	AbiertoEn MarcaTiempo `json:"abierto_en"`
@@ -417,7 +417,7 @@ type TrabajoBandeja struct {
 type TransferenciaEntrada struct {
 	Motivo *string `json:"motivo,omitempty"`
 
-	// ResponsableDestinoId Miembro del pool con membresía efectiva en la bandeja.
+	// ResponsableDestinoId Depende del tipo de conversación. En `transferirConversacion` con `tipo=solicitud` es el id del sujeto en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje` es el `sub` del token del destinatario, sin traducción y sin validar su rol; si el valor resuelve como id de sujeto y no como `sub` conocido, responde `409` `destino_invalido_en_viaje` (DEC-148 #76). En `transferirEmergencia` y `transferirEmergenciaPorId` es el `sub` sin traducción y sin validar su rol, con el mismo único rechazo: `409` `destino_invalido_en_viaje` si resuelve como id de sujeto y no como `sub` conocido (DEC-148 #77). Traducir el id del sujeto en `tipo=viaje` y en las emergencias está pendiente (DT-28). Cambia el significado de un campo ya publicado en `tipo=solicitud`, no su forma.
 	ResponsableDestinoId Id `json:"responsable_destino_id"`
 
 	// VersionEsperada Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.

@@ -613,6 +613,10 @@ paths:
         cuerpo. Operación no crea solicitudes: sus viajes nacen en `APROBADO`
         (`crearViaje`, DEC-026). El id de la solicitud es el que heredará el
         viaje al aprobarse. Publica `solicitud.creada`.
+        Si trae `fecha_hora_servicio`, debe ser posterior al momento de la
+        solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al
+        instante actual responde `400`, sin `codigo` de máquina propio
+        (DEC-148 #66).
       requestBody:
         required: true
         content:
@@ -725,7 +729,12 @@ paths:
         La vigencia es de 15 días desde esta entrega, contados en
         `America/Mexico_City` (DEC-148 #15, #50). No valida disponibilidad de
         unidades (DEC-148 #23). El cambio de fecha no requiere aceptación del
-        cliente en el sistema (DEC-148 #40).
+        cliente en el sistema (DEC-148 #40). La moneda solo puede ser `MXN` y el
+        monto admite cero pero no negativos: `400` en otro caso (DEC-148 #62).
+        La fecha y hora del servicio debe ser posterior al momento de la
+        solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al
+        instante actual responde `400`, sin `codigo` de máquina propio
+        (DEC-148 #66).
       requestBody:
         required: true
         content:
@@ -759,6 +768,10 @@ paths:
         queda en el histórico con actor, motivo y marca de tiempo. Se hace
         después de acordarlo con el cliente en la conversación de la solicitud
         (DEC-148 #24, #40).
+        La fecha y hora del servicio debe ser posterior al momento de la
+        solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al
+        instante actual responde `400`, sin `codigo` de máquina propio
+        (DEC-148 #66).
       requestBody:
         required: true
         content:
@@ -857,7 +870,9 @@ paths:
         la confirmación (DEC-148 #34, #43). Desde `COTIZADO` pasa a `PAGADO`.
         Desde `VENCIDA` también pasa a `PAGADO`, solo si la fecha del pago cae
         dentro de la vigencia, y queda registrado como excepción (DEC-148 #35).
-        No genera aviso al cliente (#56).
+        Ese pago tardío ocurre una sola vez por solicitud: un segundo
+        `VENCIDA → PAGADO` responde `409` con `codigo` `transicion_no_permitida`
+        y no deja cambios (DEC-148 #64). No genera aviso al cliente (#56).
       requestBody:
         required: true
         content:
@@ -876,7 +891,8 @@ paths:
         "409":
           description: >-
             No se puede confirmar. `codigo` de máquina:
-            `transicion_no_permitida` (estado de origen inválido) o
+            `transicion_no_permitida` (estado de origen inválido, o segundo
+            pago tardío `VENCIDA → PAGADO`; DEC-148 #64) o
             `fecha_pago_fuera_de_vigencia` (la fecha del pago no cae dentro de
             la vigencia de la última cotización).
           content:
@@ -936,6 +952,10 @@ paths:
         las que están en `PAGADO`, `obtenerSolicitud` le responde `404` desde que
         la resuelve. Por la misma razón, una segunda aprobación tras una carrera
         le da `404`; el `409 transicion_no_permitida` lo ve el `administrador`.
+        Si la fecha y hora del servicio ya pasó (no es posterior al instante
+        actual, medido en `America/Mexico_City`) responde `409` con `codigo`
+        `fecha_hora_servicio_pasada`: `cotizacion` la reprograma
+        (`reprogramarSolicitud`) y se vuelve a aprobar (DEC-148 #66, #68).
       responses:
         "200":
           description: Solicitud aprobada; el viaje ya existe con el mismo id.
@@ -948,8 +968,9 @@ paths:
         "409":
           description: >-
             No se puede aprobar. `codigo` de máquina: `transicion_no_permitida`
-            (no está en `PAGADO`) o `fecha_hora_servicio_requerida` (falta la
-            fecha y hora del servicio).
+            (no está en `PAGADO`), `fecha_hora_servicio_requerida` (falta la
+            fecha y hora del servicio) o `fecha_hora_servicio_pasada` (la
+            fecha y hora del servicio ya pasó; DEC-148 #68).
           content:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
@@ -1617,6 +1638,18 @@ paths:
 
         En `tipo=solicitud` el destino debe ser un usuario con rol `cotizacion` (DEC-148 #31; E10-HU-038, escenario 5). Otro
         destino (por ejemplo un `ejecutivo`) responde `409` con `codigo` `destino_no_es_cotizacion`, y el reclamo del llamante no cambia.
+
+        `responsable_destino_id` depende del tipo de conversación. En `tipo=solicitud`
+        es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token:
+        `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la
+        misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje` es el `sub` del
+        token del destinatario, sin traducción y sin validar su rol; un `sub`, conocido
+        o no, se acepta. Si el valor resuelve como id de sujeto y no como `sub` conocido,
+        responde `409` con `codigo` `destino_invalido_en_viaje` y el reclamo del llamante
+        no cambia (DEC-148 #76). Esa guarda corre después de verificar al responsable y
+        la versión esperada: quien no es el responsable recibe `403`, también el
+        `administrador`, cuyo override es solo de la solicitud. Ampliar la traducción a
+        `tipo=viaje` y a las emergencias está pendiente (DT-28).
       requestBody:
         required: true
         content:
@@ -1635,8 +1668,9 @@ paths:
         "409":
           description: >-
             `codigo` de máquina `conflicto_version_reclamo` (la versión esperada del reclamo no coincide con la
-            vigente) o, en una conversación `tipo=solicitud`, `destino_no_es_cotizacion` (el destino no tiene el rol
-            `cotizacion`; el reclamo del llamante no cambia).
+            vigente), en una conversación `tipo=solicitud`, `destino_no_es_cotizacion` (el destino no tiene el rol
+            `cotizacion`) o, en una conversación `tipo=viaje`, `destino_invalido_en_viaje` (el destino es un id de
+            sujeto y no un `sub` conocido). En los dos últimos el reclamo del llamante no cambia.
           content:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
@@ -2039,9 +2073,19 @@ paths:
         En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER
         `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131; DT-06). Un
         miembro de Reacción que no es el responsable, y cualquier otro rol,
-        recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el
+        recibe `403`. El destino debe ser de rol `reaccion` (DEC-130), pero `mensajeria` no lo verifica. Cierra el
         reclamo anterior y abre el siguiente en UNA
-        transacción; conserva el estado del caso.
+        transacción; conserva el estado del caso. `responsable_destino_id` es el `sub` del token del destinatario, sin traducción
+        del id del sujeto y sin validar su rol ni su pertenencia a Reacción; un `sub`,
+        conocido o no, se acepta. Si el valor resuelve como id de sujeto y no como `sub`
+        conocido, responde `409` con `codigo` `destino_invalido_en_viaje` y el reclamo
+        del llamante no cambia (DEC-148 #77). Esa guarda corre después de verificar el
+        reclamo vigente, la versión esperada y que el actor sea el responsable o tenga
+        mando (quien no lo es recibe `403`) y antes de escribir. El `409` de esta
+        operación trae `conflicto_version_reclamo` o `destino_invalido_en_viaje`. Traducir el id del
+        sujeto en `identidad` aplica solo a `transferirConversacion` en
+        `tipo=solicitud`; ampliarlo a `tipo=viaje` y a las emergencias está pendiente
+        (DT-28).
       requestBody:
         required: true
         content:
@@ -5385,6 +5429,13 @@ components:
     Reclamo:
       type: object
       additionalProperties: false
+      description: >-
+        `responsable_id` es el `sub` del token del responsable, NO el id del
+        sujeto en `identidad`. Es distinto del `responsable_destino_id` de una
+        transferencia en `tipo=solicitud`, que sí es el id del sujeto
+        (`TransferenciaEntrada.responsable_destino_id`). Con el contrato actual
+        el nombre del responsable no se puede resolver desde este id: es el
+        hueco de DT-28 y esta ola no agrega campos (DEC-148 #74).
       required: [id, conversacion_id, responsable_id, version, abierto_en]
       properties:
         id: {$ref: "_comunes.yaml#/components/schemas/Id"}
@@ -5412,7 +5463,21 @@ components:
         version_esperada: {$ref: "#/components/schemas/VersionReclamo"}
         responsable_destino_id:
           allOf: [$ref: "_comunes.yaml#/components/schemas/Id"]
-          description: Miembro del pool con membresía efectiva en la bandeja.
+          description: >-
+            Depende del tipo de conversación. En `transferirConversacion` con
+            `tipo=solicitud` es el id del sujeto en `identidad` (el
+            `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token:
+            `mensajeria` lo traduce a su `idp_subject` y valida el rol
+            `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En
+            `tipo=viaje` es el `sub` del token del destinatario, sin traducción y sin
+            validar su rol; si el valor resuelve como id de sujeto y no como `sub`
+            conocido, responde `409` `destino_invalido_en_viaje` (DEC-148 #76). En
+            `transferirEmergencia` y `transferirEmergenciaPorId` es el `sub` sin
+            traducción y sin validar su rol, con el mismo único rechazo: `409`
+            `destino_invalido_en_viaje` si resuelve como id de sujeto y no como `sub`
+            conocido (DEC-148 #77). Traducir el id del sujeto en `tipo=viaje` y en las
+            emergencias está pendiente (DT-28). Cambia el significado de
+            un campo ya publicado en `tipo=solicitud`, no su forma.
         motivo:
           type: string
 
@@ -5926,8 +5991,9 @@ components:
       pattern: "^[0-9]+(\\.[0-9]+)?$"
       description: >-
         Importe como decimal en texto, sin signo ni separador de miles (evita
-        errores de punto flotante). Los límites (cero, decimales máximos) siguen
-        pendientes de decisión (DEC-148).
+        errores de punto flotante). El cero se admite (clientes con contrato
+        prepagado) y un monto negativo se rechaza con `400` (DEC-148 #62). El
+        máximo de decimales sigue sin decidirse.
 
     CrearSolicitudEntrada:
       type: object
@@ -5968,8 +6034,10 @@ components:
           type: string
           minLength: 1
           description: >-
-            Código de moneda. `string` y no enum porque el catálogo de monedas
-            sigue pendiente (DEC-148); estrechar a enum después es incompatible.
+            Código de moneda. Solo se acepta `MXN`, exacto (mayúsculas y sin
+            espacios); `operacion` responde `400` con cualquier otra (DEC-148
+            #62). Sigue siendo `string` y no enum: estrechar a enum después es
+            incompatible.
         fecha_hora_servicio:
           type: string
           format: date-time
@@ -5991,7 +6059,9 @@ components:
           minimum: 1
           description: Número de versión; la recotización incrementa.
         monto: {$ref: "#/components/schemas/Monto"}
-        moneda: {type: string}
+        moneda:
+          type: string
+          description: Siempre `MXN` (DEC-148 #62).
         fecha_hora_servicio: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
         notas:
           type: string
@@ -6104,11 +6174,20 @@ components:
         cotizacion:
           allOf: [{$ref: "#/components/schemas/Cotizacion"}]
           nullable: true
-          description: Cotización vigente; null mientras no se ha cotizado.
+          description: >-
+            Cotización vigente. Para `cliente`, `cotizacion` y `administrador`,
+            `null` significa que aún no se ha cotizado. Para `jefe_operativo`
+            siempre llega `null`, aunque la solicitud esté cotizada y pagada, y
+            significa OCULTO, no "sin cotizar": ese rol no ve nada comercial
+            (DEC-148 #67).
         pago:
           allOf: [{$ref: "#/components/schemas/Pago"}]
           nullable: true
-          description: Pago confirmado; null mientras no lo hay.
+          description: >-
+            Pago confirmado. Para `cliente`, `cotizacion` y `administrador`,
+            `null` significa que no hay pago confirmado. Para `jefe_operativo`
+            siempre llega `null`, aunque la solicitud esté pagada, y significa
+            OCULTO, no "sin pago" (DEC-148 #67).
         marca_penalizacion:
           type: boolean
           description: >-
@@ -6174,11 +6253,21 @@ components:
           allOf: [{$ref: "_comunes.yaml#/components/schemas/Id"}]
           nullable: true
           description: null cuando lo hizo el sistema (el vencimiento).
-        motivo: {type: string, nullable: true}
+        motivo:
+          type: string
+          nullable: true
+          description: >-
+            Motivo de la acción. Para `jefe_operativo` llega `null` en
+            `pago_revertido` (texto libre que puede nombrar montos o
+            referencias); el de `reprogramada` es operativo y sí se muestra
+            (DEC-148 #73).
         cotizacion:
           allOf: [{$ref: "#/components/schemas/Cotizacion"}]
           nullable: true
-          description: Versión completa, solo en `cotizada` y `recotizada` (DEC-148 #42).
+          description: >-
+            Versión completa, solo en `cotizada` y `recotizada` (DEC-148 #42).
+            Para `jefe_operativo` nunca viene: `null` significa oculto, no
+            "sin cotización" (DEC-148 #67, #73).
         marca_penalizacion:
           type: boolean
           nullable: true
