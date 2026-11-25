@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Listar viajes por alcance.
-         * @description Solo los viajes del alcance del llamante (ver la descripción del spec, DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los de sus clientes efectivos ("mis clientes", DEC-149 #18) desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). El rol se deriva del token; el alcance se resuelve en servidor (DEC-053).
+         * @description Solo los viajes del alcance del llamante (ver la descripción del spec, DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los de sus clientes efectivos ("mis clientes", DEC-149 #18) desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152). El rol se deriva del token; el alcance se resuelve en servidor (DEC-053).
          */
         get: operations["listarViajes"];
         put?: never;
@@ -39,7 +39,7 @@ export interface paths {
         };
         /**
          * Detalle del viaje.
-         * @description Estado de progreso MÁS condiciones activas como dato separado (§C.2): un viaje puede estar `EN_TRANSITO` y con `INCIDENCIA` abierta a la vez. Fuera del alcance del llamante (DEC-149) responde `404`. `ejecutivo` recibe `403` (DEC-149 #16). `reaccion` lo lee sin filtro por cliente porque el `bff` compone con su token el detalle de su caso (`obtenerEmergencia`, DEC-121 #2); el `403` de Reacción en el detalle interno lo aplica el `bff` en `obtenerViajeInterno`.
+         * @description Estado de progreso MÁS condiciones activas como dato separado (§C.2): un viaje puede estar `EN_TRANSITO` y con `INCIDENCIA` abierta a la vez. Fuera del alcance del llamante (DEC-149) responde `404`. `ejecutivo` recibe `403` (DEC-149 #16). `reaccion` lo lee sin filtro por cliente porque el `bff` compone con su token el detalle de su caso (`obtenerEmergencia`, DEC-121 #2); el `403` de Reacción en el detalle interno lo aplica el `bff` en `obtenerViajeInterno`. `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152).
          */
         get: operations["obtenerViaje"];
         put?: never;
@@ -106,7 +106,7 @@ export interface paths {
         };
         /**
          * Escolta vigente del viaje, con cada unidad del roster.
-         * @description Devuelve las unidades de la asignación vigente del viaje, cada una con su `tipo`, `vehiculo_id` y `custodios_ids` (referencias a `catalogos`). Sin asignación vigente (viaje aún no asignado o ya liberado), `unidades` va vacío con 200; no responde 404 por eso. Solo audiencia Interno: el Cliente recibe `404` (DEC-132). La consume el `bff` para componer la escolta del detalle de Reacción (`obtenerEmergencia`, DEC-121 #2); el nombre y teléfono de los custodios y las placas del vehículo los resuelve el `bff` en `catalogos` (E8-T18).
+         * @description Devuelve las unidades de la asignación vigente del viaje, cada una con su `tipo`, `vehiculo_id` y `custodios_ids` (referencias a `catalogos`). Sin asignación vigente (viaje aún no asignado o ya liberado), `unidades` va vacío con 200; no responde 404 por eso. Solo audiencia Interno: el Cliente recibe `404` (DEC-132). `cotizacion` no entra: recibe `403` (DEC-152). La consume el `bff` para componer la escolta del detalle de Reacción (`obtenerEmergencia`, DEC-121 #2); el nombre y teléfono de los custodios y las placas del vehículo los resuelve el `bff` en `catalogos` (E8-T18).
          */
         get: operations["obtenerAsignacion"];
         put?: never;
@@ -164,7 +164,7 @@ export interface paths {
         head?: never;
         /**
          * Completar o editar la fecha/hora del servicio del viaje.
-         * @description Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. NO valida contra el grafo de transiciones —no es un cambio de estado—; sólo exige que el viaje no esté en un estado terminal, igual que `fijarEta`.
+         * @description Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. NO valida contra el grafo de transiciones —no es un cambio de estado—; sólo exige que el viaje no esté en un estado terminal, igual que `fijarEta`. La nueva fecha y hora deben ser posteriores al instante de guardar; una fecha pasada o igual responde `400` (DEC-152 #14). Solo `jefe_operativo` y `administrador`; `supervisor` y `coordinador` reciben `403` (DEC-152).
          */
         patch: operations["completarFechaHora"];
         trace?: never;
@@ -524,7 +524,7 @@ export interface paths {
         head?: never;
         /**
          * Resolver una incidencia (cierra la condición).
-         * @description Al resolverse, el viaje regresa a su curso normal; el progreso nunca se perdió (§C.2).
+         * @description Al resolverse, el viaje regresa a su curso normal; el progreso nunca se perdió (§C.2). La resuelven `supervisor`, `coordinador` y `administrador` (DEC-152).
          */
         patch: operations["resolverIncidencia"];
         trace?: never;
@@ -635,7 +635,7 @@ export interface paths {
         put?: never;
         /**
          * Intención de subida de un adjunto con autorización de vida corta.
-         * @description Los bytes NO pasan por el servicio: el cliente los sube al almacenamiento de objetos con la URL devuelta. La clave del objeto queda alcanzada por tenant/viaje. Un viaje fuera del alcance del llamante responde 404 antes de emitir la intención (DEC-149).
+         * @description Los bytes NO pasan por el servicio: el cliente los sube al almacenamiento de objetos con la URL devuelta. La clave del objeto queda alcanzada por tenant/viaje. Un viaje fuera del alcance del llamante responde 404 antes de emitir la intención (DEC-149). Suben adjuntos `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-152).
          */
         post: operations["crearIntencionSubidaAdjunto"];
         delete?: never;

@@ -96,9 +96,9 @@ tags:
     `operacion`; entran `jefe_operativo` y `administrador`.
 - name: recursos
   description: >-
-    Vehículos y custodios para `/catalogos` (adelanto de E8-T16 / DEC-142 #6).
-    Proyección espejo de `catalogos`; leen `jefe_operativo` y `administrador`,
-    escribe solo `administrador`.
+    Vehículos y custodios para `/catalogos` (DEC-152 #3). Proyección espejo
+    de `catalogos`; leen `jefe_operativo`, `coordinador` y `administrador`;
+    escriben `coordinador` y `administrador`. `supervisor` no accede.
 - name: administracion
   description: >-
     Usuarios, alcance de monitoreo y organizaciones para `/administracion`
@@ -218,7 +218,7 @@ paths:
         `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los
         viajes de sus clientes efectivos ("mis clientes") desde `APROBADO`. Un
         viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben
-        `403` (DEC-149 #16). Para la audiencia Interno el `bff` agrega a cada
+        `403` (DEC-149 #16). `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152). Para la audiencia Interno el `bff` agrega a cada
         fila `cliente` y `unidades`; para el Cliente los omite (DEC-149 #14).
       parameters:
       - name: estado
@@ -328,7 +328,7 @@ paths:
         máquina de estados generada. Audiencia interna. Un viaje inexistente o
         fuera del alcance del llamante (DEC-149) responde 404. `ejecutivo` y
         `reaccion` reciben 403 (DEC-149 #16): Reacción ve el viaje de su caso
-        por `obtenerEmergencia`.
+        por `obtenerEmergencia`. `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152).
       responses:
         "200":
           description: Detalle interno del viaje.
@@ -556,7 +556,10 @@ paths:
         sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la
         solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este
         endpoint la corrige después. No es un cambio de estado; sólo exige que el
-        viaje no esté en un estado terminal.
+        viaje no esté en un estado terminal. La fecha debe ser posterior al
+        instante de guardar; una fecha pasada o igual responde `400` (DEC-152
+        #14). Solo `jefe_operativo` y
+        `administrador`; `supervisor` y `coordinador` reciben `403` (DEC-152).
         Devuelve el detalle interno recompuesto para refrescar la vista sin un
         segundo GET.
       requestBody:
@@ -1399,8 +1402,9 @@ paths:
         (cola única e implícita, DEC-103) y reenvía a
         `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja.
         La bandeja única de chat la ven el rol `ejecutivo` (DEC-127) y, solo en
-        lectura, `supervisor`/`coordinador` (DEC-131); otro rol recibe `404`
-        (no tiene bandeja). Sin acotar por el tenant de quien pregunta
+        lectura, `supervisor`/`coordinador` (DEC-131). El `administrador` la ve
+        y escribe como `ejecutivo` (DEC-152). Otro rol recibe `404` (no tiene
+        bandeja). Sin acotar por el tenant de quien pregunta
         (DEC-129).
 
         Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la
@@ -1448,8 +1452,10 @@ paths:
       summary: Detalle de una conversación (estado inicial para bootstrap).
       description: >-
         Reenvía a `mensajeria.obtenerConversacion` con audiencia Interno. Leen el
-        `ejecutivo` y, solo en lectura, `supervisor`/`coordinador` (DEC-131),
-        sin acotar por el tenant de quien pregunta (DEC-129); otro rol interno
+        `ejecutivo`, `administrador` (DEC-152) y, solo en lectura,
+        `supervisor`/`coordinador` (DEC-131). El Administrador solo abre chats
+        de viaje visibles en su bandeja, no los dirigidos a otro (DEC-128);
+        no se acota por el tenant de quien pregunta (DEC-129). Otro rol interno
         recibe `403`. Poseer el UUID no autoriza (Addendum §7): una
         conversación inexistente responde 404. `ultima_secuencia` es el cursor
         de dominio del bootstrap (ADR 28 §2).
@@ -1481,7 +1487,8 @@ paths:
         reconexión y cierra huecos (Addendum §9). Son mutuamente excluyentes; sin
         ninguno, devuelve los más recientes. El orden es siempre por `secuencia`,
         nunca por `creado_en`. Mismo acceso que `obtenerConversacion`:
-        `supervisor`/`coordinador` leen (DEC-131).
+        `supervisor`/`coordinador` y `administrador` leen (DEC-131, DEC-152);
+        el Administrador solo ve chats de viaje visibles en su bandeja.
 
         Conversación `tipo=solicitud` (V2, DEC-148 #12, #28, #31): la leen `cotizacion` y `administrador`; `ejecutivo`, `supervisor`, `coordinador`, `jefe_operativo`, `monitorista` y `reaccion` reciben `403`.
       parameters:
@@ -1515,8 +1522,9 @@ paths:
       summary: Enviar un mensaje interno (idempotente por client_message_id).
       description: >-
         Reenvía a `mensajeria.enviarMensaje` con audiencia Interno. El interno
-        requiere rol `ejecutivo`, RECLAMO ACTIVO y `version_reclamo_esperada`
-        (Addendum §7); `supervisor`/`coordinador` solo leen y reciben `403`
+        requiere rol `ejecutivo` o `administrador`, reclamo propio activo
+        y `version_reclamo_esperada` (Addendum §7, DEC-152 #11);
+        `supervisor`/`coordinador` solo leen y reciben `403`
         (DEC-131).
         Reintentar el mismo `client_message_id` devuelve el mensaje original con
         200 y nunca crea un segundo mensaje.
@@ -1565,8 +1573,9 @@ paths:
       tags: [reclamos]
       summary: Reclamar la conversación con versión esperada.
       description: >-
-        Reenvía a `mensajeria.reclamarConversacion`. Solo el rol `ejecutivo`
-        (DEC-127); `supervisor`/`coordinador` reciben `403` (DEC-131). Dos
+        Reenvía a `mensajeria.reclamarConversacion`. En `tipo=viaje`,
+        reclaman `ejecutivo` y `administrador` (DEC-127, DEC-152 #11);
+        `supervisor`/`coordinador` reciben `403` (DEC-131). Dos
         reclamos concurrentes producen un ganador; el perdedor recibe 409
         `conflicto_version_reclamo` (Addendum §4 punto 5).
 
@@ -1603,7 +1612,8 @@ paths:
       tags: [reclamos]
       summary: Liberar el reclamo y devolver el trabajo al pool.
       description: >-
-        Reenvía a `mensajeria.liberarReclamo`. Lo hace el responsable; en V1 un
+        Reenvía a `mensajeria.liberarReclamo`. En `tipo=viaje`, `ejecutivo`
+        y `administrador` liberan solo su reclamo propio (DEC-152 #11); un
         `supervisor`/`coordinador` NO libera una conversación ajena (DEC-118) y
         recibe `403` (DEC-131).
 
@@ -1801,8 +1811,9 @@ paths:
       tags: [emergencias]
       summary: El monitoreo activa una emergencia sobre el viaje (idempotente).
       description: >-
-        Solo audiencia Interno. Activan `monitorista`, `supervisor` y
-        `coordinador` (DEC-045 #9); otro rol interno responde `403`. El `bff`
+        Solo audiencia Interno. Activan `monitorista`, `supervisor`,
+        `coordinador` y `administrador` (DEC-045 #9; el Administrador entra por
+        DEC-152, que enmienda #9); otro rol interno responde `403`. El `bff`
         lee el viaje y, si está en `CERRADO` o `CANCELADO_POR_CLIENTE`,
         responde 409 `viaje_en_estado_terminal` sin
         reenviar (DEC-135 #5; carrera en DT-16). Si no, reenvía a
@@ -2169,27 +2180,24 @@ paths:
         "409": {$ref: "#/components/responses/ConflictoVersion"}
 
   # ---------------------------------------------------------------------------
-  # Selector de cliente para la creación de viaje por Operación (E8-T11 /
-  # E1-HU-028 / DEC-026 #3-4). Proyección espejo de `catalogos.listarClientes`
-  # por la puerta única; el frontend no llama a `catalogos` directo. El `bff`
-  # reenvía con las guardas de alcance/rol del `jefe_operativo`: la lista queda
-  # limitada a los clientes de su alcance (DEC-026 #3) y SOLO a los `activo`
-  # (un cliente inactivo no es asignable a un viaje nuevo). El filtro de alcance
-  # y de estado lo resuelve el servidor, no el frontend; un `cliente_id` fuera
-  # de alcance se rechaza al crear. No se proyecta el parámetro `ids` de
-  # `catalogos` (es la lectura por lote de `mensajeria`, no un selector).
+  # Listado compartido para el selector de viaje (E8-T11) y para resolver
+  # nombres en la bandeja (DEC-118 #1, DEC-152 #15). Solo audiencia Interno.
+  # Proyección de `catalogos.listarClientes` por la puerta única; devuelve
+  # todos los clientes activos, sin filtrar por el alcance del lector. No
+  # autoriza crear ni asociar un viaje. No proyecta el parámetro `ids` de
+  # `catalogos` (lectura por lote para servicios).
   # ---------------------------------------------------------------------------
   /api/v1/clientes:
     get:
       operationId: listarClientes
       tags: [viajes]
-      summary: Listar clientes seleccionables para crear un viaje (audiencia interna).
+      summary: Listar clientes activos para el selector y la bandeja (audiencia interna).
       description: >-
-        Reenvía a `catalogos.listarClientes`. Devuelve los clientes `activo`
-        dentro del alcance del `jefe_operativo` (DEC-026 #3): los fuera de
-        alcance no se muestran, y asociar uno por `cliente_id` manipulado se
-        rechaza al crear el viaje. Paginado por cursor. El frontend sólo consume
-        la respuesta y envía el `cliente_id` elegido.
+        Solo audiencia Interno. Reenvía a `catalogos.listarClientes` y devuelve
+        todos los clientes `activo`, paginados por cursor, para el selector de
+        viaje y los nombres de la bandeja (DEC-118 #1, DEC-152 #15). Este
+        listado no filtra por alcance ni concede permiso para crear viajes;
+        la autorización por rol se comprueba al crear el viaje.
       parameters:
       - name: cursor
         in: query
@@ -2260,8 +2268,9 @@ paths:
         vehículo y los custodios legibles de `catalogos`, como `listarUnidades`
         (tracer.38). Es la lectura de la ficha técnica y del detalle del viaje:
         la escolta asignada a ESTE viaje, no el roster completo (DEC-142,
-        E8-T12). La lee cualquier rol interno salvo `ejecutivo` y `reaccion`,
-        que reciben 403 (DEC-149 #16 y #23); un actor Cliente recibe 404.
+        E8-T12). La lee cualquier rol interno salvo `ejecutivo`, `reaccion` y
+        `cotizacion`, que reciben 403 (DEC-149 #16 y #23; DEC-152); un actor
+        Cliente recibe 404.
         `unidades` vacío con 200 si el viaje no tiene asignación vigente.
       responses:
         "200":
@@ -2445,9 +2454,10 @@ paths:
   # Vehículos y custodios de `/catalogos` (adelanto de E8-T16 / DEC-142 #6,
   # tracer.39). Proyección espejo de `catalogos`: mismos `operationId`, rutas y
   # formas. Solo audiencia Interno. Leen (`listar*`, `obtener*`)
-  # `jefe_operativo` y `administrador`: el Jefe Operativo los necesita para
-  # armar unidades en `/roster`. Escriben (`crear*`, `actualizar*`) solo
-  # `administrador`. `catalogos` no revisa rol, así que la guarda de rol la
+  # `jefe_operativo`, `coordinador` y `administrador`: el Jefe Operativo los
+  # necesita para armar unidades en `/roster`. Escriben (`crear*`,
+  # `actualizar*`) `coordinador` y `administrador` (DEC-152 #3).
+  # `catalogos` no revisa rol, así que la guarda de rol la
   # aplica el `bff` antes de reenviar. No se proyectan `ids` (lectura por lote
   # para servicios, no un selector; mismo criterio que `listarClientes`) ni
   # `a_fecha` (lectura probatoria, P8): la pantalla no los usa y agregarlos
@@ -2461,7 +2471,7 @@ paths:
       description: >-
         Solo audiencia Interno. Reenvía a `catalogos.listarVehiculos`, paginado
         por cursor, con vehículos activos e inactivos (`catalogos` no filtra por
-        estado). Leen `jefe_operativo` y `administrador`.
+        estado). Leen `jefe_operativo`, `coordinador` y `administrador`.
       parameters:
       - name: cursor
         in: query
@@ -2479,10 +2489,10 @@ paths:
     post:
       operationId: crearVehiculo
       tags: [recursos]
-      summary: Alta de un vehículo (audiencia interna, solo administrador).
+      summary: Alta de un vehículo (audiencia interna).
       description: >-
         Solo audiencia Interno. Reenvía a `catalogos.crearVehiculo`, que crea la
-        versión 1. Escribe solo `administrador` (DEC-142 #6).
+        versión 1. Escriben `coordinador` y `administrador` (DEC-152 #3).
       requestBody:
         required: true
         content:
@@ -2511,7 +2521,8 @@ paths:
       summary: Vehículo vigente (audiencia interna).
       description: >-
         Solo audiencia Interno. Reenvía a `catalogos.obtenerVehiculo` y devuelve
-        la versión vigente. Leen `jefe_operativo` y `administrador`.
+        la versión vigente. Leen `jefe_operativo`, `coordinador` y
+        `administrador`.
       responses:
         "200":
           description: Vehículo.
@@ -2524,11 +2535,11 @@ paths:
     patch:
       operationId: actualizarVehiculo
       tags: [recursos]
-      summary: Modifica un vehículo creando una nueva versión (audiencia interna, solo administrador).
+      summary: Modifica un vehículo creando una nueva versión (audiencia interna).
       description: >-
         Solo audiencia Interno. Reenvía a `catalogos.actualizarVehiculo`, que no
         sobrescribe: crea la versión siguiente. Activar o desactivar es cambiar
-        `estado`. Escribe solo `administrador` (DEC-142 #6).
+        `estado`. Escriben `coordinador` y `administrador` (DEC-152 #3).
       requestBody:
         required: true
         content:
@@ -2554,7 +2565,7 @@ paths:
       description: >-
         Solo audiencia Interno. Reenvía a `catalogos.listarCustodios`, paginado
         por cursor, con custodios activos e inactivos (`catalogos` no filtra por
-        estado). Leen `jefe_operativo` y `administrador`.
+        estado). Leen `jefe_operativo`, `coordinador` y `administrador`.
       parameters:
       - name: cursor
         in: query
@@ -2572,10 +2583,10 @@ paths:
     post:
       operationId: crearCustodio
       tags: [recursos]
-      summary: Alta de un custodio (audiencia interna, solo administrador).
+      summary: Alta de un custodio (audiencia interna).
       description: >-
         Solo audiencia Interno. Reenvía a `catalogos.crearCustodio`, que crea la
-        versión 1. Escribe solo `administrador` (DEC-142 #6).
+        versión 1. Escriben `coordinador` y `administrador` (DEC-152 #3).
       requestBody:
         required: true
         content:
@@ -2604,7 +2615,8 @@ paths:
       summary: Custodio vigente (audiencia interna).
       description: >-
         Solo audiencia Interno. Reenvía a `catalogos.obtenerCustodio` y devuelve
-        la versión vigente. Leen `jefe_operativo` y `administrador`.
+        la versión vigente. Leen `jefe_operativo`, `coordinador` y
+        `administrador`.
       responses:
         "200":
           description: Custodio.
@@ -2617,11 +2629,11 @@ paths:
     patch:
       operationId: actualizarCustodio
       tags: [recursos]
-      summary: Modifica un custodio creando una nueva versión (audiencia interna, solo administrador).
+      summary: Modifica un custodio creando una nueva versión (audiencia interna).
       description: >-
         Solo audiencia Interno. Reenvía a `catalogos.actualizarCustodio`, que no
         sobrescribe: crea la versión siguiente. Activar o desactivar es cambiar
-        `estado`. Escribe solo `administrador` (DEC-142 #6).
+        `estado`. Escriben `coordinador` y `administrador` (DEC-152 #3).
       requestBody:
         required: true
         content:
@@ -3284,8 +3296,8 @@ paths:
       summary: Resolver una incidencia (audiencia interna).
       description: >-
         Reenvía a `operacion.resolverIncidencia`. Resolver es facultad de
-        Supervisor/Coordinador: un rol sin ella recibe 403 (lo impone el
-        servidor, no el esquema).
+        Supervisor, Coordinador y Administrador (DEC-152): un rol sin ella
+        recibe 403 (lo impone el servidor, no el esquema).
       requestBody:
         required: true
         content:
@@ -3534,7 +3546,8 @@ paths:
         Reenvía a `operacion.crearIntencionSubidaAdjunto`. Los bytes NO pasan
         por el `bff`: el cliente los sube al almacenamiento de objetos con la URL
         devuelta. Un viaje fuera del alcance del llamante responde 404 antes de
-        emitir la intención (DEC-149).
+        emitir la intención (DEC-149). Suben adjuntos `monitorista`,
+        `supervisor`, `coordinador` y `administrador` (DEC-152).
       requestBody:
         required: true
         content:
