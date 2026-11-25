@@ -3,9 +3,9 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
-## 2026-11-24 [tracer.47] — documentación del contrato: fecha pasada, pago tardío, `null` oculto, moneda, destino de transferencia y roles (DEC-148 #62 a #75, DEC-152)
+## 2026-11-24 [tracer.47] — documentación del contrato: fecha pasada, pago tardío, `null` oculto, moneda y destino de transferencia (DEC-148 #62 a #77)
 
-**Para quién:** `pf-web-frontend-internal` y `pf-web-frontend-client` (qué significa cada respuesta), `pf-svc-bff`, `pf-svc-operacion` y `pf-svc-mensajeria` (el texto del contrato ya describe lo decidido; ver el aviso de roles).
+**Para quién:** `pf-web-frontend-internal` y `pf-web-frontend-client` (qué significa cada respuesta), `pf-svc-bff`, `pf-svc-operacion` y `pf-svc-mensajeria` (el texto del contrato describe lo que el backend ya hace).
 
 **Resumen:** ola aditiva que SOLO cambia descripciones de `operacion.yaml`, `bff.yaml` y `mensajeria.yaml`. Ninguna forma cambia: ni campos, ni tipos, ni enums, ni `required`. Los textos se verificaron contra `pf-svc-operacion` `v0.1.22`.
 
@@ -15,12 +15,9 @@ Registro de cambios del repositorio. El formato y las reglas están definidos en
 - `null` es "oculto" (DEC-148 #67, #73): `Solicitud.cotizacion` y `Solicitud.pago` ya no dicen "null mientras no se ha cotizado". Para `jefe_operativo` siempre llegan `null` y significa oculto. En `HistoricoSolicitudItem`, ese rol no recibe el objeto `cotizacion` ni el `motivo` de `pago_revertido`; el `motivo` de `reprogramada` sí.
 - Moneda y monto (DEC-148 #62): la moneda aceptada es solo `MXN` (`operacion` responde `400` con otra); el campo sigue siendo `string`, no enum. Se quita lo de "catálogo pendiente". El monto admite cero y rechaza negativos.
 - Destino de la transferencia (DEC-148 #74, DT-28): `TransferenciaEntrada.responsable_destino_id` pasa a significar el id del sujeto en `identidad` (`UsuarioAdmin.id`) SOLO en `transferirConversacion` con `tipo=solicitud` (E10-HU-038): `mensajeria` lo traduce a `idp_subject` y valida el rol `cotizacion` en la misma transacción. En `tipo=viaje` sigue siendo el `sub` del token, sin traducción ni validar su rol, con un solo rechazo: si el valor resuelve como id de sujeto y no como `sub` conocido, `409` con `codigo` `destino_invalido_en_viaje` (DEC-148 #76; pf-svc-mensajeria #72; el `administrador` recibe `403` antes). En `transferirEmergencia` y `transferirEmergenciaPorId` sigue siendo el `sub`, sin traducción ni validar su rol, con el mismo único rechazo: `409` `destino_invalido_en_viaje` (DEC-148 #77; pf-svc-mensajeria #73), que corre tras verificar el reclamo vigente, la versión y que el actor sea el responsable o tenga mando, y antes de escribir; la traducción del id del sujeto en `tipo=viaje` y en las emergencias sigue pendiente (DT-28). `Reclamo.responsable_id` sigue siendo el `sub`; el nombre del responsable no se puede resolver con el contrato actual (hueco de DT-28, sin campos nuevos).
-- Roles por operación (DEC-152): `listarClientes` incluye `administrador`; `listarViajes`, `obtenerViaje`, `obtenerViajeInterno` y `obtenerAsignacion` excluyen `cotizacion`; `resolverIncidencia` la resuelven `supervisor`, `coordinador` y `administrador`; `listarTrabajoBandeja` y `activarEmergencia`/`activarEmergenciaInterno` incluyen `administrador`; `completarFechaHora` solo `jefe_operativo` y `administrador`; `crearIntencionSubidaAdjunto` para `monitorista`, `supervisor`, `coordinador` y `administrador`.
 - `VERSION` y `packages/api-client-ts/package.json` a `0.1.0-tracer.47`. Regenerados los clientes Go y TS (solo cambian comentarios). `info.version` de los YAML no se toca, igual que en las olas anteriores.
 
 **Compatibilidad:** sin cambio de forma. `responsable_destino_id` cambia de significado en `tipo=solicitud` sin cambio de forma; ningún frontend lo usa todavía (DEC-148 #74).
-
-**Aviso, spec contra realidad (DEC-152):** el texto de roles describe lo DECIDIDO. Hasta que lleguen sus tareas de backend, algunas guardas siguen más abiertas o más cerradas que lo documentado y el panel puede recibir `403` o `200` distinto. Ver el PR.
 
 **Aviso al subir el pin del cliente Go (git-workflow §8):** sin enums nuevos ni constantes renombradas.
 
