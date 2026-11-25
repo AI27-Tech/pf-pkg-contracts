@@ -447,6 +447,10 @@ paths:
         cuerpo. Operación no crea solicitudes: sus viajes nacen en `APROBADO`
         (`crearViaje`, DEC-026). El id de la solicitud es el que heredará el
         viaje al aprobarse. Publica `solicitud.creada`.
+        Si trae `fecha_hora_servicio`, debe ser posterior al momento de la
+        solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al
+        instante actual responde `400`, sin `codigo` de máquina propio
+        (DEC-148 #66).
       requestBody:
         required: true
         content:
@@ -559,7 +563,12 @@ paths:
         La vigencia es de 15 días desde esta entrega, contados en
         `America/Mexico_City` (DEC-148 #15, #50). No valida disponibilidad de
         unidades (DEC-148 #23). El cambio de fecha no requiere aceptación del
-        cliente en el sistema (DEC-148 #40).
+        cliente en el sistema (DEC-148 #40). La moneda solo puede ser `MXN` y el
+        monto admite cero pero no negativos: `400` en otro caso (DEC-148 #62).
+        La fecha y hora del servicio debe ser posterior al momento de la
+        solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al
+        instante actual responde `400`, sin `codigo` de máquina propio
+        (DEC-148 #66).
       requestBody:
         required: true
         content:
@@ -593,6 +602,10 @@ paths:
         queda en el histórico con actor, motivo y marca de tiempo. Se hace
         después de acordarlo con el cliente en la conversación de la solicitud
         (DEC-148 #24, #40).
+        La fecha y hora del servicio debe ser posterior al momento de la
+        solicitud, medido en `America/Mexico_City`; una fecha pasada o igual al
+        instante actual responde `400`, sin `codigo` de máquina propio
+        (DEC-148 #66).
       requestBody:
         required: true
         content:
@@ -691,7 +704,9 @@ paths:
         la confirmación (DEC-148 #34, #43). Desde `COTIZADO` pasa a `PAGADO`.
         Desde `VENCIDA` también pasa a `PAGADO`, solo si la fecha del pago cae
         dentro de la vigencia, y queda registrado como excepción (DEC-148 #35).
-        No genera aviso al cliente (#56).
+        Ese pago tardío ocurre una sola vez por solicitud: un segundo
+        `VENCIDA → PAGADO` responde `409` con `codigo` `transicion_no_permitida`
+        y no deja cambios (DEC-148 #64). No genera aviso al cliente (#56).
       requestBody:
         required: true
         content:
@@ -710,7 +725,8 @@ paths:
         "409":
           description: >-
             No se puede confirmar. `codigo` de máquina:
-            `transicion_no_permitida` (estado de origen inválido) o
+            `transicion_no_permitida` (estado de origen inválido, o segundo
+            pago tardío `VENCIDA → PAGADO`; DEC-148 #64) o
             `fecha_pago_fuera_de_vigencia` (la fecha del pago no cae dentro de
             la vigencia de la última cotización).
           content:
@@ -770,6 +786,10 @@ paths:
         las que están en `PAGADO`, `obtenerSolicitud` le responde `404` desde que
         la resuelve. Por la misma razón, una segunda aprobación tras una carrera
         le da `404`; el `409 transicion_no_permitida` lo ve el `administrador`.
+        Si la fecha y hora del servicio ya pasó (no es posterior al instante
+        actual, medido en `America/Mexico_City`) responde `409` con `codigo`
+        `fecha_hora_servicio_pasada`: `cotizacion` la reprograma
+        (`reprogramarSolicitud`) y se vuelve a aprobar (DEC-148 #66, #68).
       responses:
         "200":
           description: Solicitud aprobada; el viaje ya existe con el mismo id.
@@ -782,8 +802,9 @@ paths:
         "409":
           description: >-
             No se puede aprobar. `codigo` de máquina: `transicion_no_permitida`
-            (no está en `PAGADO`) o `fecha_hora_servicio_requerida` (falta la
-            fecha y hora del servicio).
+            (no está en `PAGADO`), `fecha_hora_servicio_requerida` (falta la
+            fecha y hora del servicio) o `fecha_hora_servicio_pasada` (la
+            fecha y hora del servicio ya pasó; DEC-148 #68).
           content:
             application/json:
               schema: {$ref: "_comunes.yaml#/components/schemas/Error"}
@@ -2199,8 +2220,9 @@ components:
       pattern: "^[0-9]+(\\.[0-9]+)?$"
       description: >-
         Importe como decimal en texto, sin signo ni separador de miles (evita
-        errores de punto flotante). Los límites (cero, decimales máximos) siguen
-        pendientes de decisión (DEC-148).
+        errores de punto flotante). El cero se admite (clientes con contrato
+        prepagado) y un monto negativo se rechaza con `400` (DEC-148 #62). El
+        máximo de decimales sigue sin decidirse.
 
     CrearSolicitudEntrada:
       type: object
@@ -2241,8 +2263,10 @@ components:
           type: string
           minLength: 1
           description: >-
-            Código de moneda. `string` y no enum porque el catálogo de monedas
-            sigue pendiente (DEC-148); estrechar a enum después es incompatible.
+            Código de moneda. Solo se acepta `MXN`, exacto (mayúsculas y sin
+            espacios); `operacion` responde `400` con cualquier otra (DEC-148
+            #62). Sigue siendo `string` y no enum: estrechar a enum después es
+            incompatible.
         fecha_hora_servicio:
           type: string
           format: date-time
@@ -2264,7 +2288,9 @@ components:
           minimum: 1
           description: Número de versión; la recotización incrementa.
         monto: {$ref: "#/components/schemas/Monto"}
-        moneda: {type: string}
+        moneda:
+          type: string
+          description: Siempre `MXN` (DEC-148 #62).
         fecha_hora_servicio: {$ref: "_comunes.yaml#/components/schemas/MarcaTiempo"}
         notas:
           type: string
@@ -2370,11 +2396,20 @@ components:
         cotizacion:
           allOf: [{$ref: "#/components/schemas/Cotizacion"}]
           nullable: true
-          description: Cotización vigente; null mientras no se ha cotizado.
+          description: >-
+            Cotización vigente. Para `cliente`, `cotizacion` y `administrador`,
+            `null` significa que aún no se ha cotizado. Para `jefe_operativo`
+            siempre llega `null`, aunque la solicitud esté cotizada y pagada, y
+            significa OCULTO, no "sin cotizar": ese rol no ve nada comercial
+            (DEC-148 #67).
         pago:
           allOf: [{$ref: "#/components/schemas/Pago"}]
           nullable: true
-          description: Pago confirmado; null mientras no lo hay.
+          description: >-
+            Pago confirmado. Para `cliente`, `cotizacion` y `administrador`,
+            `null` significa que no hay pago confirmado. Para `jefe_operativo`
+            siempre llega `null`, aunque la solicitud esté pagada, y significa
+            OCULTO, no "sin pago" (DEC-148 #67).
         marca_penalizacion:
           type: boolean
           description: >-
@@ -2440,11 +2475,21 @@ components:
           allOf: [{$ref: "_comunes.yaml#/components/schemas/Id"}]
           nullable: true
           description: null cuando lo hizo el sistema (el vencimiento).
-        motivo: {type: string, nullable: true}
+        motivo:
+          type: string
+          nullable: true
+          description: >-
+            Motivo de la acción. Para `jefe_operativo` llega `null` en
+            `pago_revertido` (texto libre que puede nombrar montos o
+            referencias); el de `reprogramada` es operativo y sí se muestra
+            (DEC-148 #73).
         cotizacion:
           allOf: [{$ref: "#/components/schemas/Cotizacion"}]
           nullable: true
-          description: Versión completa, solo en `cotizada` y `recotizada` (DEC-148 #42).
+          description: >-
+            Versión completa, solo en `cotizada` y `recotizada` (DEC-148 #42).
+            Para `jefe_operativo` nunca viene: `null` significa oculto, no
+            "sin cotización" (DEC-148 #67, #73).
         marca_penalizacion:
           type: boolean
           nullable: true
