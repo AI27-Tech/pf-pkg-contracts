@@ -2076,12 +2076,19 @@ paths:
         En V1 la hace el responsable vigente (DEC-028 #2) o CUALQUIER
         `supervisor`/`coordinador`, sin verificar el mando (DEC-126, DEC-131; DT-06). Un
         miembro de Reacción que no es el responsable, y cualquier otro rol,
-        recibe `403`. El destino debe tener rol `reaccion` (DEC-130). Cierra el
+        recibe `403`. El destino debe ser de rol `reaccion` (DEC-130), pero `mensajeria` no lo verifica. Cierra el
         reclamo anterior y abre el siguiente en UNA
         transacción; conserva el estado del caso. `responsable_destino_id` es el `sub` del token del destinatario, sin traducción
-        ni validación del sujeto. Traducir el id del sujeto en `identidad` aplica solo a
-        `transferirConversacion` en `tipo=solicitud`; ampliarlo a las emergencias está
-        pendiente (DT-28).
+        del id del sujeto y sin validar su rol ni su pertenencia a Reacción; un `sub`,
+        conocido o no, se acepta. Si el valor resuelve como id de sujeto y no como `sub`
+        conocido, responde `409` con `codigo` `destino_invalido_en_viaje` y el reclamo
+        del llamante no cambia (DEC-148 #77). Esa guarda corre después de verificar el
+        reclamo vigente, la versión esperada y que el actor sea el responsable o tenga
+        mando (quien no lo es recibe `403`) y antes de escribir. El `409` de esta
+        operación trae `conflicto_version_reclamo` o `destino_invalido_en_viaje`. Traducir el id del
+        sujeto en `identidad` aplica solo a `transferirConversacion` en
+        `tipo=solicitud`; ampliarlo a `tipo=viaje` y a las emergencias está pendiente
+        (DT-28).
       requestBody:
         required: true
         content:
@@ -5472,8 +5479,10 @@ components:
             validar su rol; si el valor resuelve como id de sujeto y no como `sub`
             conocido, responde `409` `destino_invalido_en_viaje` (DEC-148 #76). En
             `transferirEmergencia` y `transferirEmergenciaPorId` es el `sub` sin
-            traducción ni validación alguna; ampliar la guarda a las emergencias y la
-            traducción a `tipo=viaje` está pendiente (DT-28). Cambia el significado de
+            traducción y sin validar su rol, con el mismo único rechazo: `409`
+            `destino_invalido_en_viaje` si resuelve como id de sujeto y no como `sub`
+            conocido (DEC-148 #77). Traducir el id del sujeto en `tipo=viaje` y en las
+            emergencias está pendiente (DT-28). Cambia el significado de
             un campo ya publicado en `tipo=solicitud`, no su forma.
         motivo:
           type: string
