@@ -218,7 +218,7 @@ paths:
         `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los
         viajes de sus clientes efectivos ("mis clientes") desde `APROBADO`. Un
         viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben
-        `403` (DEC-149 #16). Para la audiencia Interno el `bff` agrega a cada
+        `403` (DEC-149 #16). `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152). Para la audiencia Interno el `bff` agrega a cada
         fila `cliente` y `unidades`; para el Cliente los omite (DEC-149 #14).
       parameters:
       - name: estado
@@ -328,7 +328,7 @@ paths:
         máquina de estados generada. Audiencia interna. Un viaje inexistente o
         fuera del alcance del llamante (DEC-149) responde 404. `ejecutivo` y
         `reaccion` reciben 403 (DEC-149 #16): Reacción ve el viaje de su caso
-        por `obtenerEmergencia`.
+        por `obtenerEmergencia`. `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152).
       responses:
         "200":
           description: Detalle interno del viaje.
@@ -556,7 +556,8 @@ paths:
         sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la
         solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este
         endpoint la corrige después. No es un cambio de estado; sólo exige que el
-        viaje no esté en un estado terminal.
+        viaje no esté en un estado terminal. Solo `jefe_operativo` y
+        `administrador`; `supervisor` y `coordinador` reciben `403` (DEC-152).
         Devuelve el detalle interno recompuesto para refrescar la vista sin un
         segundo GET.
       requestBody:
@@ -1399,8 +1400,9 @@ paths:
         (cola única e implícita, DEC-103) y reenvía a
         `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja.
         La bandeja única de chat la ven el rol `ejecutivo` (DEC-127) y, solo en
-        lectura, `supervisor`/`coordinador` (DEC-131); otro rol recibe `404`
-        (no tiene bandeja). Sin acotar por el tenant de quien pregunta
+        lectura, `supervisor`/`coordinador` (DEC-131). El `administrador` la ve
+        y escribe como `ejecutivo` (DEC-152). Otro rol recibe `404` (no tiene
+        bandeja). Sin acotar por el tenant de quien pregunta
         (DEC-129).
 
         Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la
@@ -1801,8 +1803,9 @@ paths:
       tags: [emergencias]
       summary: El monitoreo activa una emergencia sobre el viaje (idempotente).
       description: >-
-        Solo audiencia Interno. Activan `monitorista`, `supervisor` y
-        `coordinador` (DEC-045 #9); otro rol interno responde `403`. El `bff`
+        Solo audiencia Interno. Activan `monitorista`, `supervisor`,
+        `coordinador` y `administrador` (DEC-045 #9; el Administrador entra por
+        DEC-152, que enmienda #9); otro rol interno responde `403`. El `bff`
         lee el viaje y, si está en `CERRADO` o `CANCELADO_POR_CLIENTE`,
         responde 409 `viaje_en_estado_terminal` sin
         reenviar (DEC-135 #5; carrera en DT-16). Si no, reenvía a
@@ -2186,7 +2189,8 @@ paths:
       summary: Listar clientes seleccionables para crear un viaje (audiencia interna).
       description: >-
         Reenvía a `catalogos.listarClientes`. Devuelve los clientes `activo`
-        dentro del alcance del `jefe_operativo` (DEC-026 #3): los fuera de
+        dentro del alcance del llamante (DEC-026 #3). Lo leen `jefe_operativo` y
+        `administrador` (el Administrador puede todo, DEC-152): los fuera de
         alcance no se muestran, y asociar uno por `cliente_id` manipulado se
         rechaza al crear el viaje. Paginado por cursor. El frontend sólo consume
         la respuesta y envía el `cliente_id` elegido.
@@ -2260,8 +2264,9 @@ paths:
         vehículo y los custodios legibles de `catalogos`, como `listarUnidades`
         (tracer.38). Es la lectura de la ficha técnica y del detalle del viaje:
         la escolta asignada a ESTE viaje, no el roster completo (DEC-142,
-        E8-T12). La lee cualquier rol interno salvo `ejecutivo` y `reaccion`,
-        que reciben 403 (DEC-149 #16 y #23); un actor Cliente recibe 404.
+        E8-T12). La lee cualquier rol interno salvo `ejecutivo`, `reaccion` y
+        `cotizacion`, que reciben 403 (DEC-149 #16 y #23; DEC-152); un actor
+        Cliente recibe 404.
         `unidades` vacío con 200 si el viaje no tiene asignación vigente.
       responses:
         "200":
@@ -3284,8 +3289,8 @@ paths:
       summary: Resolver una incidencia (audiencia interna).
       description: >-
         Reenvía a `operacion.resolverIncidencia`. Resolver es facultad de
-        Supervisor/Coordinador: un rol sin ella recibe 403 (lo impone el
-        servidor, no el esquema).
+        Supervisor, Coordinador y Administrador (DEC-152): un rol sin ella
+        recibe 403 (lo impone el servidor, no el esquema).
       requestBody:
         required: true
         content:
@@ -3534,7 +3539,8 @@ paths:
         Reenvía a `operacion.crearIntencionSubidaAdjunto`. Los bytes NO pasan
         por el `bff`: el cliente los sube al almacenamiento de objetos con la URL
         devuelta. Un viaje fuera del alcance del llamante responde 404 antes de
-        emitir la intención (DEC-149).
+        emitir la intención (DEC-149). Suben adjuntos `monitorista`,
+        `supervisor`, `coordinador` y `administrador` (DEC-152).
       requestBody:
         required: true
         content:

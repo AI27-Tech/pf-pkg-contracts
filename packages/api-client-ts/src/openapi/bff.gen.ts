@@ -77,7 +77,7 @@ export interface paths {
         };
         /**
          * Listar viajes con filtros, por alcance.
-         * @description Reenvía a `operacion.listarViajes`, que filtra por el alcance del llamante (DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los viajes de sus clientes efectivos ("mis clientes") desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). Para la audiencia Interno el `bff` agrega a cada fila `cliente` y `unidades`; para el Cliente los omite (DEC-149 #14).
+         * @description Reenvía a `operacion.listarViajes`, que filtra por el alcance del llamante (DEC-149): Cliente, su tenant; `jefe_operativo` y `administrador`, todos; `monitorista`, `supervisor` y `coordinador`, los viajes de sus clientes efectivos ("mis clientes") desde `APROBADO`. Un viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben `403` (DEC-149 #16). `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152). Para la audiencia Interno el `bff` agrega a cada fila `cliente` y `unidades`; para el Cliente los omite (DEC-149 #14).
          */
         get: operations["listarViajes"];
         put?: never;
@@ -147,7 +147,7 @@ export interface paths {
         };
         /**
          * Detalle interno del viaje con estado canónico (audiencia interna).
-         * @description Reenvía a `operacion.obtenerViaje`. Devuelve el `estado` canónico (token de `EstadoViaje`, ADR 19) y las condiciones activas como dato separado, para que el frontend interno derive las acciones ofrecidas desde la máquina de estados generada. Audiencia interna. Un viaje inexistente o fuera del alcance del llamante (DEC-149) responde 404. `ejecutivo` y `reaccion` reciben 403 (DEC-149 #16): Reacción ve el viaje de su caso por `obtenerEmergencia`.
+         * @description Reenvía a `operacion.obtenerViaje`. Devuelve el `estado` canónico (token de `EstadoViaje`, ADR 19) y las condiciones activas como dato separado, para que el frontend interno derive las acciones ofrecidas desde la máquina de estados generada. Audiencia interna. Un viaje inexistente o fuera del alcance del llamante (DEC-149) responde 404. `ejecutivo` y `reaccion` reciben 403 (DEC-149 #16): Reacción ve el viaje de su caso por `obtenerEmergencia`. `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152).
          */
         get: operations["obtenerViajeInterno"];
         put?: never;
@@ -267,7 +267,7 @@ export interface paths {
         head?: never;
         /**
          * Completar o editar la fecha/hora del servicio del viaje (audiencia interna).
-         * @description Reenvía a `operacion.completarFechaHora`. Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. No es un cambio de estado; sólo exige que el viaje no esté en un estado terminal. Devuelve el detalle interno recompuesto para refrescar la vista sin un segundo GET.
+         * @description Reenvía a `operacion.completarFechaHora`. Escribe `fecha_hora_servicio` sobre un viaje ya creado. En V2 la fecha la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y el viaje nace con ella; este endpoint la corrige después. No es un cambio de estado; sólo exige que el viaje no esté en un estado terminal. Solo `jefe_operativo` y `administrador`; `supervisor` y `coordinador` reciben `403` (DEC-152). Devuelve el detalle interno recompuesto para refrescar la vista sin un segundo GET.
          */
         patch: operations["completarFechaHora"];
         trace?: never;
@@ -691,7 +691,7 @@ export interface paths {
         };
         /**
          * Listar el trabajo de la bandeja del llamante (bootstrap y catch-up).
-         * @description El `bff` resuelve la bandeja del sujeto desde los claims de la sesión (cola única e implícita, DEC-103) y reenvía a `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja. La bandeja única de chat la ven el rol `ejecutivo` (DEC-127) y, solo en lectura, `supervisor`/`coordinador` (DEC-131); otro rol recibe `404` (no tiene bandeja). Sin acotar por el tenant de quien pregunta (DEC-129).
+         * @description El `bff` resuelve la bandeja del sujeto desde los claims de la sesión (cola única e implícita, DEC-103) y reenvía a `mensajeria.listarTrabajoBandeja`; el frontend no pasa id de bandeja. La bandeja única de chat la ven el rol `ejecutivo` (DEC-127) y, solo en lectura, `supervisor`/`coordinador` (DEC-131). El `administrador` la ve y escribe como `ejecutivo` (DEC-152). Otro rol recibe `404` (no tiene bandeja). Sin acotar por el tenant de quien pregunta (DEC-129).
          *     Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el CATCH-UP: devuelve los cambios de la colección posteriores a esa revisión. Si la revisión pedida quedó fuera de la ventana retenida, responde `409 stream_resync_required` y el cliente repite el bootstrap (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
          *     Solo conversaciones `tipo=viaje`. Las de solicitud se atienden en `listarTrabajoMiBandejaSolicitudes` y no se mezclan con estas (DEC-148 #12, #28).
          */
@@ -913,7 +913,7 @@ export interface paths {
         put?: never;
         /**
          * El monitoreo activa una emergencia sobre el viaje (idempotente).
-         * @description Solo audiencia Interno. Activan `monitorista`, `supervisor` y `coordinador` (DEC-045 #9); otro rol interno responde `403`. El `bff` lee el viaje y, si está en `CERRADO` o `CANCELADO_POR_CLIENTE`, responde 409 `viaje_en_estado_terminal` sin reenviar (DEC-135 #5; carrera en DT-16). Si no, reenvía a `mensajeria.activarEmergencia`, que registra origen `operacion` y deja el caso bajo la empresa del viaje (DEC-133). Idempotente por `activacion_id`: la reentrega devuelve el mismo caso con 200; una pulsación nueva con otro `activacion_id` crea otro caso con 201.
+         * @description Solo audiencia Interno. Activan `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-045 #9; el Administrador entra por DEC-152, que enmienda #9); otro rol interno responde `403`. El `bff` lee el viaje y, si está en `CERRADO` o `CANCELADO_POR_CLIENTE`, responde 409 `viaje_en_estado_terminal` sin reenviar (DEC-135 #5; carrera en DT-16). Si no, reenvía a `mensajeria.activarEmergencia`, que registra origen `operacion` y deja el caso bajo la empresa del viaje (DEC-133). Idempotente por `activacion_id`: la reentrega devuelve el mismo caso con 200; una pulsación nueva con otro `activacion_id` crea otro caso con 201.
          */
         post: operations["activarEmergenciaInterno"];
         delete?: never;
@@ -1139,7 +1139,7 @@ export interface paths {
         };
         /**
          * Listar clientes seleccionables para crear un viaje (audiencia interna).
-         * @description Reenvía a `catalogos.listarClientes`. Devuelve los clientes `activo` dentro del alcance del `jefe_operativo` (DEC-026 #3): los fuera de alcance no se muestran, y asociar uno por `cliente_id` manipulado se rechaza al crear el viaje. Paginado por cursor. El frontend sólo consume la respuesta y envía el `cliente_id` elegido.
+         * @description Reenvía a `catalogos.listarClientes`. Devuelve los clientes `activo` dentro del alcance del llamante (DEC-026 #3). Lo leen `jefe_operativo` y `administrador` (el Administrador puede todo, DEC-152): los fuera de alcance no se muestran, y asociar uno por `cliente_id` manipulado se rechaza al crear el viaje. Paginado por cursor. El frontend sólo consume la respuesta y envía el `cliente_id` elegido.
          */
         get: operations["listarClientes"];
         put?: never;
@@ -1181,7 +1181,7 @@ export interface paths {
         };
         /**
          * Escolta vigente del viaje, con sus unidades legibles (audiencia interna).
-         * @description Reenvía a `operacion.obtenerAsignacion` y compone cada unidad con el vehículo y los custodios legibles de `catalogos`, como `listarUnidades` (tracer.38). Es la lectura de la ficha técnica y del detalle del viaje: la escolta asignada a ESTE viaje, no el roster completo (DEC-142, E8-T12). La lee cualquier rol interno salvo `ejecutivo` y `reaccion`, que reciben 403 (DEC-149 #16 y #23); un actor Cliente recibe 404. `unidades` vacío con 200 si el viaje no tiene asignación vigente.
+         * @description Reenvía a `operacion.obtenerAsignacion` y compone cada unidad con el vehículo y los custodios legibles de `catalogos`, como `listarUnidades` (tracer.38). Es la lectura de la ficha técnica y del detalle del viaje: la escolta asignada a ESTE viaje, no el roster completo (DEC-142, E8-T12). La lee cualquier rol interno salvo `ejecutivo`, `reaccion` y `cotizacion`, que reciben 403 (DEC-149 #16 y #23; DEC-152); un actor Cliente recibe 404. `unidades` vacío con 200 si el viaje no tiene asignación vigente.
          */
         get: operations["obtenerAsignacion"];
         put?: never;
@@ -1685,7 +1685,7 @@ export interface paths {
         head?: never;
         /**
          * Resolver una incidencia (audiencia interna).
-         * @description Reenvía a `operacion.resolverIncidencia`. Resolver es facultad de Supervisor/Coordinador: un rol sin ella recibe 403 (lo impone el servidor, no el esquema).
+         * @description Reenvía a `operacion.resolverIncidencia`. Resolver es facultad de Supervisor, Coordinador y Administrador (DEC-152): un rol sin ella recibe 403 (lo impone el servidor, no el esquema).
          */
         patch: operations["resolverIncidencia"];
         trace?: never;
@@ -1834,7 +1834,7 @@ export interface paths {
         put?: never;
         /**
          * Intención de subida de un adjunto con autorización de vida corta.
-         * @description Reenvía a `operacion.crearIntencionSubidaAdjunto`. Los bytes NO pasan por el `bff`: el cliente los sube al almacenamiento de objetos con la URL devuelta. Un viaje fuera del alcance del llamante responde 404 antes de emitir la intención (DEC-149).
+         * @description Reenvía a `operacion.crearIntencionSubidaAdjunto`. Los bytes NO pasan por el `bff`: el cliente los sube al almacenamiento de objetos con la URL devuelta. Un viaje fuera del alcance del llamante responde 404 antes de emitir la intención (DEC-149). Suben adjuntos `monitorista`, `supervisor`, `coordinador` y `administrador` (DEC-152).
          */
         post: operations["crearIntencionSubidaAdjunto"];
         delete?: never;

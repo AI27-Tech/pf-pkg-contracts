@@ -3,6 +3,24 @@
 Registro de cambios del repositorio. El formato y las reglas están definidos en
 `.kiro/steering/changelog.md`. Entradas en español, las más recientes primero.
 
+## 2026-11-24 [tracer.48] — documentación del contrato: roles por operación (DEC-152 #10)
+
+**EN ESPERA (DEC-148 #78):** no fusionar ni taguear hasta que el backend coincida con DEC-152. Apilada sobre `tracer.47`.
+
+**Para quién:** `pf-web-frontend-internal` (qué rol puede qué operación), `pf-svc-bff`, `pf-svc-operacion` y `pf-svc-mensajeria` (guardas de rol por llevar).
+
+**Resumen:** ola aditiva que SOLO cambia descripciones de `operacion.yaml`, `bff.yaml` y `mensajeria.yaml`. Ninguna forma cambia: ni campos, ni tipos, ni enums, ni `required`. Los textos describen lo DECIDIDO en DEC-152, no lo que el backend hace hoy.
+
+**Cambios:**
+- Roles por operación (DEC-152): `listarClientes` incluye `administrador`; `listarViajes`, `obtenerViaje`, `obtenerViajeInterno` y `obtenerAsignacion` excluyen `cotizacion`; `resolverIncidencia` la resuelven `supervisor`, `coordinador` y `administrador`; `listarTrabajoBandeja` y `activarEmergencia`/`activarEmergenciaInterno` incluyen `administrador`; `completarFechaHora` solo `jefe_operativo` y `administrador`; `crearIntencionSubidaAdjunto` para `monitorista`, `supervisor`, `coordinador` y `administrador`.
+- `VERSION` y `packages/api-client-ts/package.json` a `0.1.0-tracer.48`. Regenerados los clientes TS (solo cambian comentarios; los Go no cambian). `info.version` de los YAML no se toca, igual que en las olas anteriores.
+
+**Compatibilidad:** sin cambio de forma.
+
+**Aviso, spec contra realidad (DEC-152):** hasta que lleguen sus tareas de backend, algunas guardas siguen más abiertas o más cerradas que lo documentado y el panel puede recibir `403`, `404` o `200` distinto. Ver el PR.
+
+**Aviso al subir el pin del cliente Go (git-workflow §8):** sin enums nuevos ni constantes renombradas.
+
 ## 2026-11-24 [tracer.47] — documentación del contrato: fecha pasada, pago tardío, `null` oculto, moneda y destino de transferencia (DEC-148 #62 a #77)
 
 **Para quién:** `pf-web-frontend-internal` y `pf-web-frontend-client` (qué significa cada respuesta), `pf-svc-bff`, `pf-svc-operacion` y `pf-svc-mensajeria` (el texto del contrato describe lo que el backend ya hace).

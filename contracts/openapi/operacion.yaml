@@ -109,8 +109,8 @@ paths:
         todos; `monitorista`, `supervisor` y `coordinador`, los de sus
         clientes efectivos ("mis clientes", DEC-149 #18) desde `APROBADO`. Un
         viaje fuera de alcance no aparece. `ejecutivo` y `reaccion` reciben
-        `403` (DEC-149 #16). El rol se deriva del token; el alcance se resuelve
-        en servidor (DEC-053).
+        `403` (DEC-149 #16). `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152). El rol se deriva del token; el alcance se
+        resuelve en servidor (DEC-053).
       parameters:
       - name: estado
         in: query
@@ -147,7 +147,7 @@ paths:
         recibe `403` (DEC-149 #16). `reaccion` lo lee sin filtro por cliente
         porque el `bff` compone con su token el detalle de su caso
         (`obtenerEmergencia`, DEC-121 #2); el `403` de Reacción en el detalle
-        interno lo aplica el `bff` en `obtenerViajeInterno`.
+        interno lo aplica el `bff` en `obtenerViajeInterno`. `cotizacion` no tiene acceso a los viajes y recibe `403` (DEC-152).
       responses:
         "200":
           description: Viaje con condiciones activas.
@@ -269,7 +269,8 @@ paths:
         su `tipo`, `vehiculo_id` y `custodios_ids` (referencias a `catalogos`).
         Sin asignación vigente (viaje aún no asignado o ya liberado), `unidades`
         va vacío con 200; no responde 404 por eso. Solo audiencia Interno: el
-        Cliente recibe `404` (DEC-132). La consume el `bff` para componer la
+        Cliente recibe `404` (DEC-132). `cotizacion` no entra: recibe `403`
+        (DEC-152). La consume el `bff` para componer la
         escolta del detalle de Reacción (`obtenerEmergencia`, DEC-121 #2); el
         nombre y teléfono de los custodios y las placas del vehículo los
         resuelve el `bff` en `catalogos` (E8-T18).
@@ -396,7 +397,9 @@ paths:
         la exige la aprobación de la solicitud (`aprobarSolicitud`, DEC-010 #2) y
         el viaje nace con ella; este endpoint la corrige después. NO valida contra el
         grafo de transiciones —no es un cambio de estado—; sólo exige que el
-        viaje no esté en un estado terminal, igual que `fijarEta`.
+        viaje no esté en un estado terminal, igual que `fijarEta`. Solo
+        `jefe_operativo` y `administrador`; `supervisor` y `coordinador` reciben
+        `403` (DEC-152).
       requestBody:
         required: true
         content:
@@ -1088,7 +1091,8 @@ paths:
       summary: Resolver una incidencia (cierra la condición).
       description: >-
         Al resolverse, el viaje regresa a su curso normal; el progreso nunca se
-        perdió (§C.2).
+        perdió (§C.2). La resuelven `supervisor`, `coordinador` y
+        `administrador` (DEC-152).
       requestBody:
         required: true
         content:
@@ -1284,7 +1288,8 @@ paths:
         Los bytes NO pasan por el servicio: el cliente los sube al almacenamiento
         de objetos con la URL devuelta. La clave del objeto queda alcanzada por
         tenant/viaje. Un viaje fuera del alcance del llamante responde 404 antes
-        de emitir la intención (DEC-149).
+        de emitir la intención (DEC-149). Suben adjuntos `monitorista`,
+        `supervisor`, `coordinador` y `administrador` (DEC-152).
       requestBody:
         required: true
         content:

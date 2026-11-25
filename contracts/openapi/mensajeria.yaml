@@ -192,8 +192,9 @@ paths:
       description: >-
         Requiere MEMBRESÍA EFECTIVA en el pool de la bandeja. En la bandeja
         única de chat la membresía es el rol `ejecutivo` (DEC-127), y
-        `supervisor`/`coordinador` la leen (DEC-131); en la de emergencias, el
-        rol `reaccion` (DEC-130).
+        `supervisor`/`coordinador` la leen (DEC-131) y el `administrador` la ve
+        y escribe como `ejecutivo` (DEC-152); en la de emergencias, el rol
+        `reaccion` (DEC-130).
 
         Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la
         `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el
@@ -680,8 +681,8 @@ paths:
       description: >-
         Cliente dentro de su organización, o usuario de monitoreo
         (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por
-        cliente (DEC-149 #6), activan el caso (ADR 21 §1, DEC-045 #9); otro rol
-        interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde
+        cliente (DEC-149 #6), o el `administrador` (DEC-152), activan el caso
+        (ADR 21 §1, DEC-045 #9); otro rol interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde
         `APROBADO` (el viaje nace ahí, DEC-148 #5) en estados no terminales;
         denegada en `CERRADO` y `CANCELADO_POR_CLIENTE` con 409
         `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de

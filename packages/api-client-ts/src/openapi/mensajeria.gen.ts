@@ -57,7 +57,7 @@ export interface paths {
         };
         /**
          * Listar el trabajo de una bandeja (bootstrap y catch-up).
-         * @description Requiere MEMBRESÍA EFECTIVA en el pool de la bandeja. En la bandeja única de chat la membresía es el rol `ejecutivo` (DEC-127), y `supervisor`/`coordinador` la leen (DEC-131); en la de emergencias, el rol `reaccion` (DEC-130).
+         * @description Requiere MEMBRESÍA EFECTIVA en el pool de la bandeja. En la bandeja única de chat la membresía es el rol `ejecutivo` (DEC-127), y `supervisor`/`coordinador` la leen (DEC-131) y el `administrador` la ve y escribe como `ejecutivo` (DEC-152); en la de emergencias, el rol `reaccion` (DEC-130).
          *     Sin `desde_revision` es el BOOTSTRAP: devuelve el trabajo actual y la `revision` de la colección (ADR 28 §2, §3). Con `desde_revision` es el CATCH-UP: devuelve los cambios de la colección posteriores a esa revisión. Si la revisión pedida quedó fuera de la ventana retenida, responde `409 stream_resync_required` y el cliente repite el bootstrap (ADR 28 §5). `desde_revision` y `cursor` de paginación son ortogonales.
          *     Solo conversaciones `tipo=viaje`. Las de solicitud se atienden en `listarTrabajoMiBandejaSolicitudes` y no se mezclan con estas (DEC-148 #12, #28).
          */
@@ -370,7 +370,7 @@ export interface paths {
         put?: never;
         /**
          * Activar una emergencia sobre el viaje (idempotente por activacion_id).
-         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por cliente (DEC-149 #6), activan el caso (ADR 21 §1, DEC-045 #9); otro rol interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde `APROBADO` (el viaje nace ahí, DEC-148 #5) en estados no terminales; denegada en `CERRADO` y `CANCELADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje (DT-16).
+         * @description Cliente dentro de su organización, o usuario de monitoreo (Monitorista/Supervisor/Coordinador) sobre un viaje de su alcance por cliente (DEC-149 #6), o el `administrador` (DEC-152), activan el caso (ADR 21 §1, DEC-045 #9); otro rol interno responde `403` y un viaje fuera de alcance, `404`. Habilitada desde `APROBADO` (el viaje nace ahí, DEC-148 #5) en estados no terminales; denegada en `CERRADO` y `CANCELADO_POR_CLIENTE` con 409 `viaje_en_estado_terminal`. Ese 409 lo aplica hoy el `bff` antes de reenviar (DEC-135 #5): `mensajeria` no conoce el estado del viaje (DT-16).
          *     Idempotente por `activacion_id` del llamante (ADR 21 §2, mismo patrón que `enviarMensaje`): reentregar la misma activación devuelve el MISMO caso con 200 y no crea un duplicado; una pulsación nueva con otro `activacion_id` crea OTRO caso con 201, aunque ya exista uno abierto. No crea incidencia ni condición.
          */
         post: operations["activarEmergencia"];
