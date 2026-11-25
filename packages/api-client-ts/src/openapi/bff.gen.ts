@@ -1139,7 +1139,7 @@ export interface paths {
         };
         /**
          * Listar clientes activos para el selector y la bandeja (audiencia interna).
-         * @description Solo audiencia Interno. Reenvía a `catalogos.listarClientes` y devuelve todos los clientes `activo`, paginados por cursor, para el selector de viaje y los nombres de la bandeja (DEC-118 #1, DEC-152 #15). Este listado no filtra por alcance ni autoriza crear o asociar un viaje; esas facultades se comprueban en la operación de escritura.
+         * @description Solo audiencia Interno. Reenvía a `catalogos.listarClientes` y devuelve todos los clientes `activo`, paginados por cursor, para el selector de viaje y los nombres de la bandeja (DEC-118 #1, DEC-152 #15). Este listado no filtra por alcance ni concede permiso para crear viajes; la autorización por rol se comprueba al crear el viaje.
          */
         get: operations["listarClientes"];
         put?: never;
