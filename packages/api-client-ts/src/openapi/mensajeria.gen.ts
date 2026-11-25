@@ -253,7 +253,7 @@ export interface paths {
          * Transferir la responsabilidad a otro miembro del pool.
          * @description Lo hace el responsable; en V1 un `supervisor`/`coordinador` NO transfiere una conversación ajena (DEC-118) y recibe `403` (DEC-131). Cierra el reclamo anterior y abre el siguiente en UNA transacción: no hay ventana sin responsable ni con dos (Addendum §6).
          *     En `tipo=solicitud` el destino debe ser un usuario con rol `cotizacion` (DEC-148 #31; E10-HU-038, escenario 5). Otro destino (por ejemplo un `ejecutivo`) responde `409` con `codigo` `destino_no_es_cotizacion`, y el reclamo del llamante no cambia.
-         *     `responsable_destino_id` depende del tipo de conversación. En `tipo=solicitud` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje` es el `sub` del token del destinatario, sin traducción ni validación; ampliar la traducción a ese caso está pendiente (DT-28).
+         *     `responsable_destino_id` depende del tipo de conversación. En `tipo=solicitud` es el id del sujeto en `identidad` (`UsuarioAdmin.id`), no el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje` es el `sub` del token del destinatario, sin traducción y sin validar su rol; un `sub`, conocido o no, se acepta. Si el valor resuelve como id de sujeto y no como `sub` conocido, responde `409` con `codigo` `destino_invalido_en_viaje` y el reclamo del llamante no cambia (DEC-148 #76). Esa guarda corre después de verificar al responsable y la versión esperada: quien no es el responsable recibe `403`, también el `administrador`, cuyo override es solo de la solicitud. Ampliar la traducción a `tipo=viaje` y a las emergencias está pendiente (DT-28).
          */
         post: operations["transferirConversacion"];
         delete?: never;
@@ -852,7 +852,7 @@ export interface components {
         };
         TransferenciaEntrada: {
             version_esperada: components["schemas"]["VersionReclamo"];
-            /** @description Depende del tipo de conversación. En `transferirConversacion` con `tipo=solicitud` es el id del sujeto en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje`, `transferirEmergencia` y `transferirEmergenciaPorId` es el `sub` del token del destinatario, sin traducción ni validación; ampliar la traducción a esos casos está pendiente (DT-28). Cambia el significado de un campo ya publicado en `tipo=solicitud`, no su forma. */
+            /** @description Depende del tipo de conversación. En `transferirConversacion` con `tipo=solicitud` es el id del sujeto en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje` es el `sub` del token del destinatario, sin traducción y sin validar su rol; si el valor resuelve como id de sujeto y no como `sub` conocido, responde `409` `destino_invalido_en_viaje` (DEC-148 #76). En `transferirEmergencia` y `transferirEmergenciaPorId` es el `sub` sin traducción ni validación alguna; ampliar la guarda a las emergencias y la traducción a `tipo=viaje` está pendiente (DT-28). Cambia el significado de un campo ya publicado en `tipo=solicitud`, no su forma. */
             responsable_destino_id: components["schemas"]["Id"];
             motivo?: string;
         };
@@ -1436,7 +1436,7 @@ export interface operations {
             401: components["responses"]["NoAutorizado"];
             403: components["responses"]["Prohibido"];
             404: components["responses"]["NoEncontrado"];
-            /** @description `codigo` de máquina `conflicto_version_reclamo` (la versión esperada del reclamo no coincide con la vigente) o, en una conversación `tipo=solicitud`, `destino_no_es_cotizacion` (el destino no tiene el rol `cotizacion`; el reclamo del llamante no cambia). */
+            /** @description `codigo` de máquina `conflicto_version_reclamo` (la versión esperada del reclamo no coincide con la vigente), en una conversación `tipo=solicitud`, `destino_no_es_cotizacion` (el destino no tiene el rol `cotizacion`) o, en una conversación `tipo=viaje`, `destino_invalido_en_viaje` (el destino es un id de sujeto y no un `sub` conocido). En los dos últimos el reclamo del llamante no cambia. */
             409: {
                 headers: {
                     [name: string]: unknown;

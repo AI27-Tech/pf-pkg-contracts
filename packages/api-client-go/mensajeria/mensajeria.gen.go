@@ -417,7 +417,7 @@ type TrabajoBandeja struct {
 type TransferenciaEntrada struct {
 	Motivo *string `json:"motivo,omitempty"`
 
-	// ResponsableDestinoId Depende del tipo de conversación. En `transferirConversacion` con `tipo=solicitud` es el id del sujeto en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje`, `transferirEmergencia` y `transferirEmergenciaPorId` es el `sub` del token del destinatario, sin traducción ni validación; ampliar la traducción a esos casos está pendiente (DT-28). Cambia el significado de un campo ya publicado en `tipo=solicitud`, no su forma.
+	// ResponsableDestinoId Depende del tipo de conversación. En `transferirConversacion` con `tipo=solicitud` es el id del sujeto en `identidad` (el `UsuarioAdmin.id` que ya conoce el panel), NO el `sub` del token: `mensajeria` lo traduce a su `idp_subject` y valida el rol `cotizacion` en la misma transacción (DEC-148 #74; E10-HU-038). En `tipo=viaje` es el `sub` del token del destinatario, sin traducción y sin validar su rol; si el valor resuelve como id de sujeto y no como `sub` conocido, responde `409` `destino_invalido_en_viaje` (DEC-148 #76). En `transferirEmergencia` y `transferirEmergenciaPorId` es el `sub` sin traducción ni validación alguna; ampliar la guarda a las emergencias y la traducción a `tipo=viaje` está pendiente (DT-28). Cambia el significado de un campo ya publicado en `tipo=solicitud`, no su forma.
 	ResponsableDestinoId Id `json:"responsable_destino_id"`
 
 	// VersionEsperada Versión del reclamo de la conversación (concurrencia optimista). 0 si nunca se ha reclamado. No es una secuencia de mensaje.
